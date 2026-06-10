@@ -67,7 +67,7 @@ def build_config(args: argparse.Namespace) -> CONFIG:
 
 
 def select_images(args: argparse.Namespace) -> list[Path]:
-    """Resolve the image selector flags to a sorted, de-duplicated path list."""
+    """Resolve the image selector flags to a sorted list of image paths."""
     root = Path(args.root)
     if args.glob:
         return discover_images(root, args.glob)
@@ -123,7 +123,7 @@ def main(argv: list[str] | None = None) -> int:
     sel = ap.add_mutually_exclusive_group()
     sel.add_argument("--glob", help='image glob, e.g. "masp2 3_1_*.jpg"')
     sel.add_argument("--groups", nargs="+", help='A_B groups, e.g. 3_1 10_5')
-    sel.add_argument("--all", action="store_true", help="all masp2 *_*.jpg images")
+    sel.add_argument("--all", action="store_true", help="all discovered images")
     ap.add_argument("--jobs", type=int, default=4, help="parallel processes")
     # CONFIG overrides (None -> keep calibrated default)
     ap.add_argument("--ppu", type=float, default=None)
