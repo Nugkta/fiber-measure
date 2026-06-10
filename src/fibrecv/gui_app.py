@@ -71,15 +71,18 @@ DEFAULTS = CONFIG()  # never mutated; the source of widget defaults + reset targ
 # control). spec = (name, kind, help, step, lo, hi, fmt). ---
 PARAM_SPECS: list[tuple] = [
     ("edge_z", "slider",
-     "STRICTNESS KNOB: boundary level z-units above the wall-local background. "
-     "Higher -> tighter (validated on 3_1: ez4 tracks the true wall; higher gets "
-     "dragged inward by internal reflections).", 0.5, 1.0, 12.0, "%.1f"),
+     "边界松紧（最重要）。调大 → 边界向纤维内侧收紧；调小 → 边界向外放松。"
+     "如果画出的线被拽进纤维内部（比实际细），就调小；"
+     "如果线跑到纤维外面的阴影上（比实际粗），就调大。推荐 3–5，默认 4.0。",
+     0.5, 1.0, 12.0, "%.1f"),
     ("edge_frac", "float",
-     "Relative cap on the edge level for faint/weak walls (keeps the crossing "
-     "on the wall when amplitude A is low).", 0.05, 0.0, 1.0, "%.2f"),
+     "淡纤维保护。纤维颜色很淡、对比度低时防止边界跑飞。"
+     "一般保持默认 0.65 不用动；只有很淡的纤维检测不到边时才微调。",
+     0.05, 0.0, 1.0, "%.2f"),
     ("wcol", "int",
-     "Column-neighbourhood width averaged before edging (>=15 suppresses "
-     "internal iridescence banding).", 1, 1, 201, None),
+     "横向平滑宽度（像素）。边界线抖动、锯齿、毛刺严重时调大（如 31、51），"
+     "线会更平滑稳定；调太大会抹平真实的粗细变化。默认 15。",
+     1, 1, 201, None),
 ]
 
 # names of int-typed visible fields (so widgets return int, not float)
