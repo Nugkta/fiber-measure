@@ -6,15 +6,16 @@ Dependencies
 
 Inputs
 ------
-- A directory of ``masp2 A_B_C.jpg`` microscopy images (2560x1920 RGB) plus
-  sidecar ``*.jpg_metadata.xml`` files that must be ignored.
+- A directory of microscopy images whose stems end in numbers (e.g.
+  ``masp2 A_B_C.jpg``, ``3-1-2.png``, ``IMG_0123.jpg``) plus sidecar
+  ``*.jpg_metadata.xml`` files that must be ignored.
 - Glob / group selectors from the CLI.
 
 Output
 ------
 - ``discover_images(root, glob)`` -> sorted list of ``Path`` to .jpg files.
-- ``parse_name(path)`` -> ``(group, replicate)`` where group is ``"A_B"`` and
-  replicate is the integer ``C``.
+- ``parse_name(path)`` -> ``(group, replicate)`` from the trailing run of
+  numbers in the stem (last number = replicate, the rest = group).
 - ``load_rgb(path)`` -> float32 array in [0, 1], shape (H, W, 3).
 
 Pos
@@ -31,8 +32,15 @@ from pathlib import Path
 import imageio.v3 as iio
 import numpy as np
 
-# "masp2 10_5_2.jpg" -> A=10, B=5, C=2 ; tolerant of extra spaces.
-_NAME_RE = re.compile(r"masp2\s+(\d+)_(\d+)_(\d+)$", re.IGNORECASE)
+# Separators that may appear between name tokens: space _ - . ( ) [ ]
+_SEP_RE = re.compile(r"[\s_\-.()\[\]]+")
+_DIGITS_RE = re.compile(r"(\d+)")
+
+
+def natural_key(text: str):
+    """Sort key interleaving numeric and text runs: '3_1' < '3_3' < '10_5'."""
+    return tuple((0, int(t)) if t.isdigit() else (1, t.lower())
+                 for t in _DIGITS_RE.split(text) if t)
 
 
 def discover_images(root: str | Path, glob: str = "masp2 *_*.jpg") -> list[Path]:
@@ -47,26 +55,44 @@ def discover_images(root: str | Path, glob: str = "masp2 *_*.jpg") -> list[Path]
 
 
 def parse_name(path: str | Path) -> tuple[str, int]:
-    """Parse ``masp2 A_B_C.jpg`` -> (``"A_B"``, ``C``).
+    """Parse an image name into ``(group, replicate)`` via trailing numbers.
 
-    Raises ``ValueError`` if the stem does not match the expected pattern.
+    The stem is split on spaces/underscores/dashes/dots/brackets and the
+    trailing run of integer tokens drives the result:
+
+    - two or more trailing integers: the last is the replicate, the rest
+      joined with ``_`` form the group ('masp2 10_5_2' -> ('10_5', 2),
+      '3-1-2' -> ('3_1', 2), 'sampleA 10_5_2' -> ('10_5', 2));
+    - exactly one trailing integer: it is the replicate and the text prefix
+      is the group ('IMG_0123' -> ('IMG', 123)).
+
+    Raises ``ValueError`` if the stem does not end in an integer token, or a
+    single trailing integer has no text prefix (e.g. '3.jpg').
     """
-    stem = Path(path).stem
-    m = _NAME_RE.match(stem.strip())
-    if not m:
+    stem = Path(path).stem.strip()
+    tokens = [t for t in _SEP_RE.split(stem) if t]
+    i = len(tokens)
+    while i > 0 and tokens[i - 1].isdigit():
+        i -= 1
+    nums = tokens[i:]
+    if not nums:
         raise ValueError(f"unrecognised image name: {path!r}")
-    a, b, c = m.group(1), m.group(2), m.group(3)
-    return f"{a}_{b}", int(c)
+    replicate = int(nums[-1])
+    if len(nums) >= 2:
+        return "_".join(nums[:-1]), replicate
+    prefix = " ".join(tokens[:i])
+    if not prefix:
+        raise ValueError(f"unrecognised image name: {path!r}")
+    return prefix, replicate
 
 
 def _sort_key(path: Path):
-    """Natural sort by (A, B, C) integers so 3_1_2 < 3_1_10 < 10_1_1."""
+    """Sort parseable names by (group, replicate); the rest by filename."""
     try:
         group, rep = parse_name(path)
-        a, b = group.split("_")
-        return (int(a), int(b), rep)
+        return (0, natural_key(group), rep)
     except ValueError:
-        return (1 << 30, 1 << 30, 1 << 30, path.name)
+        return (1, natural_key(Path(path).name), 0)
 
 
 def load_rgb(path: str | Path) -> np.ndarray:
