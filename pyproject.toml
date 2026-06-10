@@ -1,8 +1,10 @@
 [project]
 name = "fibrecv"
 version = "0.1.0"
-description = "Add your description here"
+description = "Fibre diameter measurement from optical microscopy images: per-image boundary detection, QC, and replicate-registered diameter profiles, with a CLI pipeline and a local Streamlit GUI"
 readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
 authors = [
     { name = "stan", email = "pokeyxiao@gmail.com" }
 ]
