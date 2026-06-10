@@ -64,3 +64,42 @@ def test_select_images_groups_filter(tmp_path):
         (tmp_path / n).write_bytes(b"")
     args = argparse.Namespace(root=str(tmp_path), glob=None, groups=["10_5"])
     assert [p.name for p in select_images(args)] == ["sampleA 10_5_1.png"]
+
+
+def test_run_aggregate_non_numeric_group(tmp_path):
+    """run_aggregate.main must not crash on non-numeric group labels (e.g. IMG)."""
+    import json
+
+    import numpy as np
+    import pandas as pd
+
+    from fibrecv import run_aggregate
+
+    # Build the minimal fake output tree that _load_profiles expects:
+    #   per_image/csv/*_profile.csv    (x_px, diameter_px_raw, diameter_px_smooth, valid)
+    #   per_image/diagnostics/*_meta.json  (coverage, band_mismatch)
+    n_cols = 200
+    csv_dir = tmp_path / "per_image" / "csv"
+    meta_dir = tmp_path / "per_image" / "diagnostics"
+    csv_dir.mkdir(parents=True)
+    meta_dir.mkdir(parents=True)
+
+    profile_df = pd.DataFrame({
+        "x_px": np.arange(n_cols, dtype=float),
+        "diameter_px_raw": np.full(n_cols, 100.0),
+        "diameter_px_smooth": np.full(n_cols, 100.0),
+        "valid": np.ones(n_cols, dtype=bool),
+    })
+    meta = {"coverage": 1.0, "band_mismatch": False}
+
+    for rep in (1, 2):
+        base = f"IMG_{rep}"
+        profile_df.to_csv(csv_dir / f"{base}_profile.csv", index=False)
+        with open(meta_dir / f"{base}_meta.json", "w") as fh:
+            json.dump(meta, fh)
+
+    rc = run_aggregate.main(["--out", str(tmp_path), "--groups", "IMG"])
+    assert rc == 0
+    master = tmp_path / "summary" / "master_summary.csv"
+    assert master.exists()
+    assert "IMG" in master.read_text()

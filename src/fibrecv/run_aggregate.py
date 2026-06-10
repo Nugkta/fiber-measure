@@ -41,7 +41,7 @@ import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
 
 from .config import CONFIG  # noqa: E402
-from .io_utils import parse_name  # noqa: E402
+from .io_utils import natural_key, parse_name  # noqa: E402
 from .register import register_sample  # noqa: E402
 
 DEFAULT_OUT = "/net/scratch/j56806hx/spins-cv/output"
@@ -105,7 +105,7 @@ def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description="Aggregate per-image profiles into registered averages.")
     ap.add_argument("--out", default=DEFAULT_OUT, help="output root (holds per_image/)")
     sel = ap.add_mutually_exclusive_group()
-    sel.add_argument("--groups", nargs="+", help="A_B groups, e.g. 3_1 10_5")
+    sel.add_argument("--groups", nargs="+", help="group labels, e.g. 3_1 10_5")
     sel.add_argument("--all", action="store_true", help="aggregate every group found")
     ap.add_argument("--ppu", type=float, default=None)
     ap.add_argument("--max-shift", dest="max_shift", type=int, default=None)
@@ -133,7 +133,7 @@ def main(argv: list[str] | None = None) -> int:
         (out_root / d).mkdir(parents=True, exist_ok=True)
 
     rows = []
-    for group in sorted(groups, key=lambda g: tuple(int(t) for t in g.split("_"))):
+    for group in sorted(groups, key=natural_key):
         profiles = groups[group]
         if not profiles:
             continue
@@ -168,8 +168,7 @@ def main(argv: list[str] | None = None) -> int:
               f"CV={summary['cv']:.3f} reps={summary['n_replicates_used']} "
               f"overlap={summary['overlap_px']}px")
 
-    master = pd.DataFrame(rows).sort_values("group", key=lambda s: s.map(
-        lambda g: tuple(int(t) for t in g.split("_"))))
+    master = pd.DataFrame(rows).sort_values("group", key=lambda s: s.map(natural_key))
     master_path = out_root / "summary" / "master_summary.csv"
     master.to_csv(master_path, index=False)
     print(f"Wrote {len(rows)} sample rows -> {master_path}")
