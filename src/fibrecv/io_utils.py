@@ -13,7 +13,7 @@ Inputs
 
 Output
 ------
-- ``discover_images(root, glob)`` -> sorted list of ``Path`` to .jpg files.
+- ``discover_images(root, glob)`` -> sorted list of ``Path`` to image files.
 - ``parse_name(path)`` -> ``(group, replicate)`` from the trailing run of
   numbers in the stem (last number = replicate, the rest = group).
 - ``load_rgb(path)`` -> float32 array in [0, 1], shape (H, W, 3).
@@ -36,6 +36,10 @@ import numpy as np
 _SEP_RE = re.compile(r"[\s_\-.()\[\]]+")
 _DIGITS_RE = re.compile(r"(\d+)")
 
+# Accepted raster formats; the suffix check also excludes the sidecar
+# "*.jpg_metadata.xml" files, whose suffix is ".xml".
+IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png", ".tif", ".tiff", ".bmp"}
+
 
 def natural_key(text: str):
     """Sort key interleaving numeric and text runs: '3_1' < '3_3' < '10_5'."""
@@ -43,15 +47,15 @@ def natural_key(text: str):
                  for t in _DIGITS_RE.split(text) if t)
 
 
-def discover_images(root: str | Path, glob: str = "masp2 *_*.jpg") -> list[Path]:
-    """Return sorted .jpg images under ``root`` matching ``glob``.
+def discover_images(root: str | Path, glob: str = "*") -> list[Path]:
+    """Return sorted image files under ``root`` matching ``glob``.
 
-    The sidecar ``*.jpg_metadata.xml`` files share the ``masp2 *`` prefix, so we
-    explicitly keep only paths whose suffix is exactly ``.jpg``.
+    Keeps only files whose suffix is in ``IMAGE_SUFFIXES`` (case-insensitive).
     """
     root = Path(root)
-    paths = [p for p in root.glob(glob) if p.suffix.lower() == ".jpg"]
-    return sorted(paths, key=lambda p: _sort_key(p))
+    paths = [p for p in root.glob(glob)
+             if p.is_file() and p.suffix.lower() in IMAGE_SUFFIXES]
+    return sorted(paths, key=_sort_key)
 
 
 def parse_name(path: str | Path) -> tuple[str, int]:

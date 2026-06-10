@@ -34,7 +34,7 @@ from dataclasses import replace
 from pathlib import Path
 
 from .config import CONFIG
-from .io_utils import discover_images
+from .io_utils import discover_images, parse_name
 from .measure import measure_image
 
 DEFAULT_ROOT = "/net/scratch/j56806hx/spins-cv/Images MasP2"
@@ -71,14 +71,20 @@ def select_images(args: argparse.Namespace) -> list[Path]:
     root = Path(args.root)
     if args.glob:
         return discover_images(root, args.glob)
+    paths = discover_images(root)
     if args.groups:
-        seen: dict[str, Path] = {}
-        for g in args.groups:
-            for p in discover_images(root, f"masp2 {g}_*.jpg"):
-                seen[str(p)] = p
-        return sorted(seen.values())
+        wanted = set(args.groups)
+        kept: list[Path] = []
+        for p in paths:
+            try:
+                group, _ = parse_name(p)
+            except ValueError:
+                continue
+            if group in wanted:
+                kept.append(p)
+        return kept
     # default / --all
-    return discover_images(root, "masp2 *_*.jpg")
+    return paths
 
 
 def _worker(path_str: str, cfg: CONFIG, out_root: str) -> dict:
