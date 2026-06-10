@@ -10,9 +10,12 @@ Imports are absolute (``fibrecv.*``) because Streamlit runs this file as a scrip
 
 Inputs
 ------
-- Images from a local folder (auto-grouped by ``A_B`` via ``parse_name``) OR
-  1-3 uploaded files (treated as an ad-hoc, possibly unnamed group).
-- Every ``CONFIG`` parameter, edited in a sidebar form and applied on demand.
+- Images from a local folder OR any number of uploaded files; both are
+  auto-grouped via ``parse_name``'s trailing-numbers rule, with unparseable
+  names collected in an "ungrouped" bucket.
+- The three boundary knobs (``edge_z``/``edge_frac``/``wcol``), edited in a
+  sidebar form and applied on demand; all other ``CONFIG`` fields stay at the
+  validated defaults.
 - An output-folder path for export/batch.
 
 Output
@@ -54,7 +57,7 @@ import streamlit as st  # noqa: E402
 from fibrecv import run_aggregate  # noqa: E402
 from fibrecv.compute import compute_measurement  # noqa: E402
 from fibrecv.config import CONFIG  # noqa: E402
-from fibrecv.io_utils import discover_images, parse_name  # noqa: E402
+from fibrecv.io_utils import discover_images, natural_key, parse_name  # noqa: E402
 from fibrecv.io_utils import load_rgb as _io_load_rgb  # noqa: E402
 from fibrecv.measure import write_measurement  # noqa: E402
 from fibrecv.overlay import render_overlay  # noqa: E402
@@ -146,12 +149,34 @@ def _cached_compute_upload(file_key: str, data: bytes, cfg_items: tuple):
     return mr, rgb
 
 
+UNGROUPED = "ungrouped"
+
+
 def _group_sort_key(group: str):
-    """Natural sort for 'A_B' group labels: 3_1 < 3_3 < 10_5."""
-    try:
-        return tuple(int(t) for t in group.split("_"))
-    except ValueError:
-        return (1 << 30,)
+    """Natural sort for group labels ('3_1' < '3_3' < '10_5'); ungrouped last."""
+    return (group == UNGROUPED, natural_key(group))
+
+
+def _group_by_name(items: list, key) -> dict[str, list]:
+    """Bucket items by their parse_name group; unparseable names -> UNGROUPED."""
+    groups: dict[str, list] = {}
+    for it in items:
+        try:
+            g, _ = parse_name(key(it))
+        except ValueError:
+            g = UNGROUPED
+        groups.setdefault(g, []).append(it)
+    return groups
+
+
+def _sorted_reps(items: list, key) -> list:
+    """Sort one group's items by replicate number; unparseable last, by name."""
+    def _k(it):
+        try:
+            return (0, parse_name(key(it))[1], key(it))
+        except ValueError:
+            return (1, 0, key(it))
+    return sorted(items, key=_k)
 
 
 # --------------------------------------------------------------------------- #
@@ -170,7 +195,8 @@ def export_group(reps: list[dict], out_root: str | Path, cfg: CONFIG) -> str:
     group = next((r["mr"].group for r in reps if r["mr"].group is not None), None)
     if group is None:
         raise ValueError(
-            "Cannot export: image names must follow 'masp2 A_B_C' to derive a group."
+            "Cannot export: image names must end in numbers "
+            "(e.g. 'name 3_1_2.jpg') to derive a group label."
         )
     for rep in reps:
         write_measurement(rep["rgb"], rep["mr"], cfg, out_root)
@@ -347,8 +373,10 @@ def _load_reps(cfg_items: tuple) -> tuple[list[dict], str | None, str | None]:
     """Resolve the data-source controls to a list of replicate dicts.
 
     Returns ``(reps, group_label, folder)``. Each rep is
-    ``{"name", "rgb", "mr", "idx"}``. ``folder`` is the scanned folder path (for
-    batch) or None for the upload source.
+    ``{"name", "rgb", "mr", "idx"}``. ``folder`` is the scanned folder path
+    (for batch) or None for the upload source. Both sources group images with
+    the shared ``parse_name`` rule; unparseable names land in an "ungrouped"
+    bucket instead of being hidden.
     """
     st.sidebar.markdown("### Data source")
     source = st.sidebar.radio("source", ["Local folder", "Upload"],
@@ -365,44 +393,37 @@ def _load_reps(cfg_items: tuple) -> tuple[list[dict], str | None, str | None]:
             st.sidebar.warning("Enter a valid local folder path.")
             return reps, None, None
         paths = discover_images(folder)
-        if paths:
-            groups: dict[str, list[Path]] = {}
-            for p in paths:
-                g, _ = parse_name(p)
-                groups.setdefault(g, []).append(p)
-            keys = sorted(groups, key=_group_sort_key)
-            group_label = st.sidebar.selectbox("Group (A_B)", keys)
-            rep_paths = sorted(groups[group_label], key=lambda p: parse_name(p)[1])
-            st.sidebar.caption(f"{len(paths)} images, {len(keys)} groups")
-            for i, p in enumerate(rep_paths):
-                mtime = Path(p).stat().st_mtime
-                mr = _cached_compute_path(str(p), mtime, cfg_items)
-                rgb = _cached_rgb_from_path(str(p), mtime)
-                reps.append({"name": Path(p).stem, "rgb": rgb, "mr": mr, "idx": i})
-        else:
-            st.sidebar.info("No 'masp2 A_B_C.jpg' names found — listing any *.jpg.")
-            anyjpg = sorted(Path(folder).glob("*.jpg"))
-            chosen = st.sidebar.multiselect(
-                "Pick up to 3 images", anyjpg, max_selections=3,
-                format_func=lambda p: p.name)
-            for i, p in enumerate(chosen):
-                mtime = Path(p).stat().st_mtime
-                mr = _cached_compute_path(str(p), mtime, cfg_items)
-                rgb = _cached_rgb_from_path(str(p), mtime)
-                reps.append({"name": Path(p).stem, "rgb": rgb, "mr": mr, "idx": i})
+        if not paths:
+            st.sidebar.warning("No image files found in this folder.")
+            return reps, None, folder
+        groups = _group_by_name(paths, key=lambda p: p.name)
+        keys = sorted(groups, key=_group_sort_key)
+        group_label = st.sidebar.selectbox("Group", keys)
+        st.sidebar.caption(f"{len(paths)} images, {len(keys)} groups")
+        for i, p in enumerate(_sorted_reps(groups[group_label],
+                                           key=lambda p: p.name)):
+            mtime = Path(p).stat().st_mtime
+            mr = _cached_compute_path(str(p), mtime, cfg_items)
+            rgb = _cached_rgb_from_path(str(p), mtime)
+            reps.append({"name": Path(p).stem, "rgb": rgb, "mr": mr, "idx": i})
     else:
         uploads = st.sidebar.file_uploader(
-            "Upload 1-3 images", type=["jpg", "jpeg", "png"],
+            "Upload images", type=["jpg", "jpeg", "png", "tif", "tiff", "bmp"],
             accept_multiple_files=True)
-        if uploads and len(uploads) > 3:
-            st.sidebar.warning("Using the first 3 uploaded files.")
-            uploads = uploads[:3]
-        for i, up in enumerate(uploads or []):
-            data = up.getvalue()
-            stem = Path(up.name).stem
-            mr, rgb = _cached_compute_upload(stem, data, cfg_items)
-            reps.append({"name": stem, "rgb": rgb, "mr": mr, "idx": i})
-        group_label = next((r["mr"].group for r in reps if r["mr"].group is not None), None)
+        if uploads:
+            groups = _group_by_name(list(uploads), key=lambda u: u.name)
+            keys = sorted(groups, key=_group_sort_key)
+            group_label = (st.sidebar.selectbox("Group", keys)
+                           if len(keys) > 1 else keys[0])
+            st.sidebar.caption(f"{len(uploads)} files, {len(keys)} groups")
+            for i, up in enumerate(_sorted_reps(groups[group_label],
+                                                key=lambda u: u.name)):
+                data = up.getvalue()
+                stem = Path(up.name).stem
+                mr, rgb = _cached_compute_upload(stem, data, cfg_items)
+                reps.append({"name": stem, "rgb": rgb, "mr": mr, "idx": i})
+            if group_label == UNGROUPED:
+                group_label = None  # header falls back to "Replicates (uploaded)"
 
     return reps, group_label, folder
 
@@ -512,7 +533,7 @@ def _render_export_batch(reps: list[dict], cfg: CONFIG, group_label: str | None,
         if st.button("Run batch", disabled=disabled, width="stretch"):
             images = discover_images(folder)
             if not images:
-                st.warning("No 'masp2 A_B_C.jpg' images found in the folder.")
+                st.warning("No image files found in the folder.")
                 return
             prog = st.progress(0.0, text=f"Measuring 0/{len(images)}…")
             n = len(images)
@@ -561,7 +582,7 @@ def main() -> None:
 
     # main area
     if not reps:
-        st.info("Pick a folder + group, or upload 1–3 images, to begin.")
+        st.info("Pick a folder + group, or upload images, to begin.")
         return
 
     st.subheader(f"Replicates — group {group_label}" if group_label else "Replicates (uploaded)")
