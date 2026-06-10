@@ -63,90 +63,24 @@ from fibrecv.run_measure import DEFAULT_ROOT, _lib_versions, _worker  # noqa: E4
 
 DEFAULTS = CONFIG()  # never mutated; the source of widget defaults + reset target
 
-# --- parameter metadata: mirrors CONFIG, grouped per the plan. help == the
-# field's code comment. spec = (name, kind, help, step, lo, hi, fmt). kind is
-# "int", "float" or "slider" (edge_z, the highlighted strictness knob). ---
-PARAM_GROUPS: list[tuple[str, list[tuple]]] = [
-    ("Strictness", [
-        ("edge_z", "slider",
-         "STRICTNESS KNOB: boundary level z-units above the wall-local background. "
-         "Higher -> tighter (validated on 3_1: ez4 tracks the true wall; higher gets "
-         "dragged inward by internal reflections).", 0.5, 1.0, 12.0, "%.1f"),
-        ("edge_frac", "float",
-         "Relative cap on the edge level for faint/weak walls (keeps the crossing "
-         "on the wall when amplitude A is low).", 0.05, 0.0, 1.0, "%.2f"),
-    ]),
-    ("Wall finding", [
-        ("slope_min", "float", "Absolute slope floor (z/px) for a wall candidate.",
-         0.01, 0.0, 2.0, "%.3f"),
-        ("slope_rel", "float", "Wall must reach this fraction of the side's max slope.",
-         0.05, 0.0, 1.0, "%.2f"),
-        ("slope_cap", "float",
-         "Absolute slope that always qualifies (caps the relative gate so a "
-         "defocus-softened true wall is not skipped).", 0.01, 0.0, 2.0, "%.3f"),
-        ("rise_min", "float", "Wall run must rise at least this many z-units.",
-         0.5, 0.0, 20.0, "%.1f"),
-        ("guard", "int", "Px just outside the wall for local bg + recovery checks.",
-         1, 1, 200, None),
-        ("amin", "float", "Minimum band amplitude A (z units) to accept a column.",
-         0.5, 0.0, 30.0, "%.1f"),
-    ]),
-    ("Feature & band", [
-        ("margin", "float", "Top+bottom fraction of rows treated as background.",
-         0.01, 0.01, 0.49, "%.2f"),
-        ("k_band", "float", "D threshold for the coarse band mask (z units).",
-         0.1, 0.1, 30.0, "%.1f"),
-        ("min_width", "float", "Component must span >= this fraction of image width.",
-         0.05, 0.05, 1.0, "%.2f"),
-        ("close_width", "int", "Horizontal morphological closing length (px).",
-         1, 1, 500, None),
-        ("min_object", "int", "remove_small_objects min area (px).",
-         50, 0, 100000, None),
-        ("wcol", "int",
-         "Column-neighbourhood width averaged before edging (>=15 suppresses "
-         "internal iridescence banding).", 1, 1, 201, None),
-        ("sigma_y", "float", "Vertical Gaussian smoothing sigma (px).",
-         0.1, 0.0, 20.0, "%.1f"),
-    ]),
-    ("Window & QC", [
-        ("window_thick_mult", "float",
-         "Half-window = mult*band_half + window_pad + 3*guard.", 0.1, 0.1, 10.0, "%.1f"),
-        ("window_pad", "int", "Additive padding (px) on the vertical search half-window.",
-         1, 0, 500, None),
-        ("reject_dev", "float", "Reject columns whose band center deviates > this (px).",
-         1.0, 0.0, 500.0, "%.1f"),
-        ("band_ratio_min", "float",
-         "median diameter / coarse-band thickness below this -> low_confidence "
-         "(detector likely locked onto an internal feature in a blur band).",
-         0.05, 0.0, 2.0, "%.2f"),
-        ("min_coverage", "float",
-         "Below this fraction of valid columns -> low_confidence.", 0.05, 0.0, 1.0, "%.2f"),
-        ("roll_window", "int", "Rolling-MAD outlier window (odd, px).", 2, 3, 999, None),
-        ("roll_k", "float", "Rolling-MAD outlier threshold.", 0.5, 0.0, 20.0, "%.1f"),
-        ("median_k", "int", "Median-filter kernel for the smoothed profile (odd).",
-         2, 1, 199, None),
-        ("savgol_window", "int", "Savitzky-Golay window (odd).", 2, 3, 999, None),
-        ("savgol_poly", "int", "Savitzky-Golay polynomial order.", 1, 1, 10, None),
-    ]),
-    ("Registration & calibration", [
-        ("ppu", "float", "Pixels per micron; diameter_um = diameter_px / ppu.",
-         0.001, 0.1, 20.0, "%.4f"),
-        ("max_shift", "int", "Bound on cross-correlation lag (px).", 10, 0, 5000, None),
-        ("min_corr", "float",
-         "Normalised corr-peak below this -> registration_uncertain.",
-         0.05, 0.0, 1.0, "%.2f"),
-    ]),
-    ("Advanced (numerical constants)", [
-        ("eps", "float", "Numerical floor.", 1e-6, 0.0, 1.0, "%.7f"),
-        ("mad_scale", "float", "MAD -> sigma conversion for the robust z-map.",
-         0.0001, 0.0, 10.0, "%.4f"),
-    ]),
+# --- visible parameters: the three knobs that move the detected boundary.
+# Everything else in CONFIG stays at the validated defaults (CLI keeps full
+# control). spec = (name, kind, help, step, lo, hi, fmt). ---
+PARAM_SPECS: list[tuple] = [
+    ("edge_z", "slider",
+     "STRICTNESS KNOB: boundary level z-units above the wall-local background. "
+     "Higher -> tighter (validated on 3_1: ez4 tracks the true wall; higher gets "
+     "dragged inward by internal reflections).", 0.5, 1.0, 12.0, "%.1f"),
+    ("edge_frac", "float",
+     "Relative cap on the edge level for faint/weak walls (keeps the crossing "
+     "on the wall when amplitude A is low).", 0.05, 0.0, 1.0, "%.2f"),
+    ("wcol", "int",
+     "Column-neighbourhood width averaged before edging (>=15 suppresses "
+     "internal iridescence banding).", 1, 1, 201, None),
 ]
 
-# names of int-typed CONFIG fields (so widgets return int, not float)
-_INT_FIELDS = {
-    name for _, specs in PARAM_GROUPS for (name, kind, *_rest) in specs if kind == "int"
-}
+# names of int-typed visible fields (so widgets return int, not float)
+_INT_FIELDS = {name for (name, kind, *_rest) in PARAM_SPECS if kind == "int"}
 
 
 # --------------------------------------------------------------------------- #
@@ -367,32 +301,30 @@ def _group_fig(table: dict, group_label: str):
 # Sidebar: parameter form                                                     #
 # --------------------------------------------------------------------------- #
 def _param_form() -> None:
-    """Render the staged parameter form; updates session_state on Apply/Reset."""
+    """Render the 3-knob parameter form; updates session_state on Apply/Reset."""
     applied = st.session_state.cfg_dict
     ver = st.session_state.form_version
 
     with st.sidebar.form("params", clear_on_submit=False):
         st.markdown("**Parameters** — edit, then click **Apply** to re-render.")
         new_vals: dict = {}
-        for title, specs in PARAM_GROUPS:
-            with st.expander(title, expanded=(title == "Strictness")):
-                for (name, kind, help_txt, step, lo, hi, fmt) in specs:
-                    key = f"p_{name}_v{ver}"
-                    cur = applied[name]
-                    if kind == "slider":
-                        new_vals[name] = st.slider(
-                            name, min_value=float(lo), max_value=float(hi),
-                            value=float(cur), step=float(step), help=help_txt, key=key)
-                    elif kind == "int":
-                        new_vals[name] = int(st.number_input(
-                            name, min_value=int(lo), max_value=int(hi),
-                            value=int(cur), step=int(step), help=help_txt, key=key))
-                    else:  # float
-                        kwargs = dict(min_value=float(lo), max_value=float(hi),
-                                      value=float(cur), step=float(step), help=help_txt, key=key)
-                        if fmt:
-                            kwargs["format"] = fmt
-                        new_vals[name] = float(st.number_input(name, **kwargs))
+        for (name, kind, help_txt, step, lo, hi, fmt) in PARAM_SPECS:
+            key = f"p_{name}_v{ver}"
+            cur = applied[name]
+            if kind == "slider":
+                new_vals[name] = st.slider(
+                    name, min_value=float(lo), max_value=float(hi),
+                    value=float(cur), step=float(step), help=help_txt, key=key)
+            elif kind == "int":
+                new_vals[name] = int(st.number_input(
+                    name, min_value=int(lo), max_value=int(hi),
+                    value=int(cur), step=int(step), help=help_txt, key=key))
+            else:  # float
+                kwargs = dict(min_value=float(lo), max_value=float(hi),
+                              value=float(cur), step=float(step), help=help_txt, key=key)
+                if fmt:
+                    kwargs["format"] = fmt
+                new_vals[name] = float(st.number_input(name, **kwargs))
         c1, c2 = st.columns(2)
         apply = c1.form_submit_button("Apply", type="primary", width="stretch")
         reset = c2.form_submit_button("Reset to defaults", width="stretch")
@@ -402,7 +334,9 @@ def _param_form() -> None:
         st.session_state.form_version += 1
         st.rerun()
     if apply:
-        st.session_state.cfg_dict = new_vals
+        # merge: the three knobs override a full defaults dict, so hidden
+        # fields always carry the validated values
+        st.session_state.cfg_dict = {**DEFAULTS.as_dict(), **new_vals}
         st.rerun()  # re-run top-to-bottom so reps recompute with the new params
 
 
