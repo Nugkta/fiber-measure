@@ -37,8 +37,7 @@ from .config import CONFIG
 from .io_utils import discover_images, parse_name
 from .measure import measure_image
 
-DEFAULT_ROOT = "/net/scratch/j56806hx/spins-cv/Images MasP2"
-DEFAULT_OUT = "/net/scratch/j56806hx/spins-cv/output"
+DEFAULT_OUT = "./fibrecv_output"
 
 
 def build_config(args: argparse.Namespace) -> CONFIG:
@@ -118,7 +117,7 @@ def _lib_versions() -> dict:
 
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description="Measure fibre diameter profiles from images.")
-    ap.add_argument("--root", default=DEFAULT_ROOT, help="image directory")
+    ap.add_argument("--root", required=True, help="image directory")
     ap.add_argument("--out", default=DEFAULT_OUT, help="output root directory")
     sel = ap.add_mutually_exclusive_group()
     sel.add_argument("--glob", help='image glob, e.g. "*_1_*.jpg"')

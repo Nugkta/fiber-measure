@@ -62,7 +62,7 @@ from fibrecv.io_utils import load_rgb as _io_load_rgb  # noqa: E402
 from fibrecv.measure import write_measurement  # noqa: E402
 from fibrecv.overlay import render_overlay  # noqa: E402
 from fibrecv.register import register_sample  # noqa: E402
-from fibrecv.run_measure import DEFAULT_ROOT, _lib_versions, _worker  # noqa: E402
+from fibrecv.run_measure import _lib_versions, _worker  # noqa: E402
 
 DEFAULTS = CONFIG()  # never mutated; the source of widget defaults + reset target
 
@@ -393,7 +393,7 @@ def _load_reps(cfg_items: tuple) -> tuple[list[dict], str | None, str | None]:
 
     if source == "Local folder":
         folder = st.sidebar.text_input("Image folder", value=st.session_state.get(
-            "folder", DEFAULT_ROOT))
+            "folder", ""))
         st.session_state.folder = folder
         if not folder or not Path(folder).is_dir():
             st.sidebar.warning("Enter a valid local folder path.")

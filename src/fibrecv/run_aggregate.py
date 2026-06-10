@@ -44,7 +44,7 @@ from .config import CONFIG  # noqa: E402
 from .io_utils import natural_key, parse_name  # noqa: E402
 from .register import register_sample  # noqa: E402
 
-DEFAULT_OUT = "/net/scratch/j56806hx/spins-cv/output"
+DEFAULT_OUT = "./fibrecv_output"
 
 
 def _load_profiles(out_root: Path, cfg: CONFIG) -> dict[str, list[dict]]:
