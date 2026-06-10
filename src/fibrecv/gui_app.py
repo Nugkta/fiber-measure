@@ -71,17 +71,20 @@ DEFAULTS = CONFIG()  # never mutated; the source of widget defaults + reset targ
 # control). spec = (name, kind, help, step, lo, hi, fmt). ---
 PARAM_SPECS: list[tuple] = [
     ("edge_z", "slider",
-     "边界松紧（最重要）。调大 → 边界向纤维内侧收紧；调小 → 边界向外放松。"
-     "如果画出的线被拽进纤维内部（比实际细），就调小；"
-     "如果线跑到纤维外面的阴影上（比实际粗），就调大。推荐 3–5，默认 4.0。",
+     "Boundary tightness (the main knob). Higher pulls the boundary inward, "
+     "lower pushes it outward. If the drawn line gets sucked inside the fibre "
+     "(too thin), lower it; if it sits on the shadow outside the fibre (too "
+     "thick), raise it. Recommended 3-5, default 4.0.",
      0.5, 1.0, 12.0, "%.1f"),
     ("edge_frac", "float",
-     "淡纤维保护。纤维颜色很淡、对比度低时防止边界跑飞。"
-     "一般保持默认 0.65 不用动；只有很淡的纤维检测不到边时才微调。",
+     "Faint-fibre safeguard. Keeps the boundary from drifting away when the "
+     "fibre is pale / low-contrast. Leave at the default 0.65 unless a very "
+     "faint fibre fails to detect.",
      0.05, 0.0, 1.0, "%.2f"),
     ("wcol", "int",
-     "横向平滑宽度（像素）。边界线抖动、锯齿、毛刺严重时调大（如 31、51），"
-     "线会更平滑稳定；调太大会抹平真实的粗细变化。默认 15。",
+     "Horizontal smoothing width (pixels). If the boundary line is jittery or "
+     "ragged, increase it (try 31 or 51) for a smoother, more stable line. Too "
+     "high flattens real thickness variation. Default 15.",
      1, 1, 201, None),
 ]
 
