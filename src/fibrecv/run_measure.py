@@ -18,8 +18,8 @@ provenance snapshot ``<out>/summary/run_config.json`` and ``<out>/summary/run_lo
 
 Pos
 ---
-First entrypoint of the two-stage workflow. Heavy CPU stage -> run via ``srun``
-on the HPC cluster, never on the login node. Its CSVs feed ``run_aggregate.py``.
+First entrypoint of the two-stage workflow. Heavy CPU stage — parallelised
+across processes with ``--jobs``. Its CSVs feed ``run_aggregate.py``.
 """
 
 from __future__ import annotations

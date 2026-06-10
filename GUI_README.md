@@ -13,12 +13,12 @@ The app is a thin front-end over the validated `fibrecv` pipeline — it changes
 
 ## 1. One-time setup
 
-You need **Python 3.12+**. Copy the whole `fibrecv` project folder (and an images
-folder, e.g. `Images MasP2/`) onto your machine.
+You need **Python 3.12+** and the `fibrecv` project folder plus a folder of
+microscopy images on your machine.
 
 Open a terminal **in the `fibrecv` folder** (the one containing `pyproject.toml`):
 
-### Option A — uv (recommended; matches the cluster setup)
+### Option A — uv (recommended)
 ```bash
 # install uv once: https://docs.astral.sh/uv/getting-started/installation/
 uv sync                 # creates .venv and installs everything incl. streamlit
