@@ -66,16 +66,24 @@ are passed straight through to `streamlit run`).
 
 **Sidebar — Data source**
 - **Local folder**: type the path to your images folder. The app scans for
-  `masp2 A_B_C.jpg` names, groups them by `A_B`, and shows a **Group** dropdown
-  (e.g. `3_1`, `10_5`). Picking a group loads its 1–3 replicates. If your files
-  don't match that naming pattern, it falls back to letting you pick any `*.jpg`.
-- **Upload**: drop 1–3 image files for ad-hoc viewing (treated as one group;
-  export needs `masp2 A_B_C`-style names to derive a group label).
+  image files (`.jpg/.jpeg/.png/.tif/.tiff/.bmp`) and groups them by the
+  numbers at the end of each name: the last number is the replicate, the
+  numbers before it form the group (`masp2 3_1_2.jpg` → group `3_1`,
+  replicate 2; `3-1-2.png` and `sampleA 3_1_2.tif` work too). Pick a group
+  from the **Group** dropdown; files whose names don't end in numbers appear
+  under **ungrouped**.
+- **Upload**: drop any number of image files. They are grouped by the same
+  naming rule (a Group dropdown appears if there is more than one group);
+  export needs names ending in numbers to derive a group label.
 
 **Sidebar — Parameters**
-- Every pipeline parameter is exposed, grouped to mirror the config. The main
-  strictness knob **`edge_z`** is a slider at the top (higher → tighter
-  boundaries). Each control's help text is the parameter's description.
+- Three knobs control the detected boundary; everything else uses the
+  validated defaults (the CLI retains full parameter control):
+  - **`edge_z`** (slider) — the main strictness knob: higher → tighter
+    boundaries.
+  - **`edge_frac`** — keeps the boundary on faint/weak walls.
+  - **`wcol`** — column averaging; raise it if internal iridescence banding
+    disturbs the boundary.
 - Edits are **staged**: change what you want, then click **Apply** to re-render
   (a few seconds for a group). **Reset to defaults** restores the calibrated
   values.
