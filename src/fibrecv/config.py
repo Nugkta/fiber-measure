@@ -56,9 +56,13 @@ class CONFIG:
     reject_dev: float = 25.0   # reject columns whose band center deviates > this (px)
 
     # --- per-column edge detection (the shadow-critical recipe) ---
-    wcol: int = 15             # column-neighbourhood width averaged before edging
-    #                            (>=15 suppresses internal iridescence banding)
-    sigma_y: float = 2.0       # vertical Gaussian smoothing sigma (px)
+    wcol: int = 41             # column-neighbourhood width averaged before edging
+    #                            (default 41; >=15 needed to suppress internal
+    #                             iridescence banding)
+    sigma_y: float = 4.0       # vertical Gaussian smoothing sigma (px); 4.0
+    #                            merges the plateau-fragmented ramps of
+    #                            defocused walls (2.0 left them speckled;
+    #                            recalibrated on the full 144-image MasP2 set)
     # STRICTNESS: boundary placed where D crosses level = local_bg + min(edge_z, edge_frac*A).
     # edge_z is the PRIMARY knob (absolute z-units above background): higher -> tighter,
     # and stable because it does not track the per-column specular peak. edge_frac is a
@@ -75,9 +79,15 @@ class CONFIG:
     #                            gate so a defocus-softened true wall is not skipped when
     #                            a sharp internal reflection dominates the side's max)
     rise_min: float = 2.0      # wall run must rise at least this many z-units
+    wall_gap_frac: float = 0.12  # plateau-bridging length inside a wall run, as a
+    #                              fraction of band thickness (clipped 4..16 px in
+    #                              edges.py); heals defocus-fragmented soft walls
+    #                              without merging distinct features
     band_ratio_min: float = 0.5  # median diameter / coarse-band thickness below this
     #                              -> low_confidence (detector likely locked onto an
     #                              internal feature inside a defocused blur band)
+    band_ratio_max: float = 1.6  # ...and above this -> band_mismatch too (boundary
+    #                              likely grabbed a shadow/halo outside the fibre)
     amin: float = 3.0          # minimum band amplitude A (z units) to accept a column
 
     # --- search window sizing (multiples of detected band thickness) ---

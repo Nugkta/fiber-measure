@@ -9,7 +9,7 @@ Inputs
 - ``D``: desaturation z-map (H, W) from ``features``.
 - ``BandResult`` (centerline + band thickness) from ``band``.
 - ``CONFIG`` for ``wcol``, ``sigma_y``, ``edge_frac``, ``guard``, ``amin``,
-  ``k_band`` and window sizing.
+  ``k_band``, ``wall_gap_frac`` and window sizing.
 
 Output
 ------
@@ -37,14 +37,16 @@ The two failure mechanisms this recipe defends against (both observed in the
 
 The discriminator, measured empirically: true fibre walls rise steeply
 (~0.2-0.5 z/px after smoothing) while shadow/vignette ramps are gentle
-(~0.03 z/px). Hence, per column (a ``wcol``>=15 neighbourhood average of ``D``
-to suppress iridescence banding, vertically smoothed):
-  * per side, find the **outermost steep rising wall**: the first contiguous
-    run, scanning inward from the window extreme, whose slope toward the core
+(~0.03 z/px). Hence, per column (a ``wcol`` (default 41, >=15) neighbourhood
+average of ``D`` to suppress iridescence banding, vertically smoothed):
+  * per side, find the **outermost steep rising wall**: the first run,
+    scanning inward from the window extreme, whose slope toward the core
     exceeds ``max(slope_min, slope_rel * side_max_slope)`` and whose total rise
-    is at least ``rise_min`` z-units (so noise blips never qualify). Outermost
-    beats reflection flanks (they are inner); the slope+rise gates exclude
-    shadow ramps (too gentle).
+    is at least ``rise_min`` z-units (so noise blips never qualify). The run
+    may bridge short flat plateaus (``wall_gap_frac`` of band thickness) so a
+    defocus-fragmented soft wall is not rejected piecewise, but a falling
+    stretch still ends it. Outermost beats reflection flanks (they are inner);
+    the slope+rise gates exclude shadow ramps (too gentle).
   * estimate ``base`` = median of ``D`` over the ``guard`` px just *outside*
     that wall (so an adjacent shadow plateau becomes the reference, per the
     strict never-count-shadow rule), and the wall amplitude
@@ -122,15 +124,23 @@ def _outer_crossing(d: np.ndarray, y_core: int, y_outer: int, level: float) -> f
 
 
 def _find_wall(
-    d: np.ndarray, g_in: np.ndarray, outer: int, core: int, step: int, cfg: CONFIG
+    d: np.ndarray, g_in: np.ndarray, outer: int, core: int, step: int, cfg: CONFIG,
+    gap: int = 0,
 ) -> tuple[int, int] | None:
     """Outermost steep rising wall on one side of the core.
 
     ``g_in`` is the profile slope *toward the core* (positive = rising into the
     fibre); we walk from the window extreme ``outer`` toward ``core`` and return
-    the first contiguous run with slope >= max(slope_min, slope_rel*side_max)
-    (sustained above half that) whose total rise is >= ``rise_min`` z-units --
-    noise blips fail the rise test, shadow/vignette ramps fail the slope test.
+    the first run with slope >= max(slope_min, slope_rel*side_max) (sustained
+    above half that) whose total rise is >= ``rise_min`` z-units -- noise blips
+    fail the rise test, shadow/vignette ramps fail the slope test.
+
+    ``gap`` px of flat (not falling) profile may be bridged inside a run: a
+    defocus-softened wall is a long gentle ramp broken by small plateaus, and
+    without bridging each fragment fails ``rise_min`` so the finder hops inward
+    onto internal reflections (observed across the MasP2 set). A falling
+    stretch (slope < -g_lo) still terminates the run, so distinct features are
+    never merged. ``gap=0`` reproduces the strict contiguous behaviour.
     Returns ``(i_outer, i_inner)`` window indices, or None.
     """
     idxs = list(range(outer, core, step))
@@ -149,9 +159,20 @@ def _find_wall(
     while k < n:
         if gvals[k] >= g_hi:
             j = k
-            while j + 1 < n and gvals[j + 1] >= g_lo:
-                j += 1
-            i_outer, i_inner = idxs[k], idxs[j]
+            last_good = k     # last genuinely-rising index of the run
+            pending = 0       # px spent inside the current sub-threshold gap
+            while j + 1 < n:
+                nxt = gvals[j + 1]
+                if nxt >= g_lo:
+                    j += 1
+                    last_good = j
+                    pending = 0
+                elif nxt > -g_lo and pending < gap:
+                    j += 1    # bridge a flat (not falling) stretch
+                    pending += 1
+                else:
+                    break
+            i_outer, i_inner = idxs[k], idxs[last_good]
             if d[i_inner] - d[i_outer] >= cfg.rise_min:
                 return i_outer, i_inner
             k = j + 1
@@ -161,10 +182,11 @@ def _find_wall(
 
 
 def _side_edge(
-    d: np.ndarray, g_in: np.ndarray, outer: int, core_idx: int, step: int, cfg: CONFIG
+    d: np.ndarray, g_in: np.ndarray, outer: int, core_idx: int, step: int, cfg: CONFIG,
+    gap: int = 0,
 ) -> tuple[float, int]:
     """One boundary (top side: step=+1, bottom side: step=-1) -> (edge, flag)."""
-    wall = _find_wall(d, g_in, outer, core_idx, step, cfg)
+    wall = _find_wall(d, g_in, outer, core_idx, step, cfg, gap=gap)
     if wall is None:
         return np.nan, FLAG_BAD_GRAD
     i_outer, i_inner = wall
@@ -196,7 +218,8 @@ def _side_edge(
     return edge, flag
 
 
-def _detect_column(d: np.ndarray, g: np.ndarray, cfg: CONFIG) -> tuple[float, float, float, float, int]:
+def _detect_column(d: np.ndarray, g: np.ndarray, cfg: CONFIG,
+                   gap: int = 0) -> tuple[float, float, float, float, int]:
     """Detect (top, bottom, amp, core_idx, flag) for one windowed column profile.
 
     ``d``/``g`` are the smoothed desaturation profile and its y-gradient over
@@ -214,8 +237,8 @@ def _detect_column(d: np.ndarray, g: np.ndarray, cfg: CONFIG) -> tuple[float, fl
     if A < cfg.amin:
         return np.nan, np.nan, A, float(core_idx), FLAG_NO_CORE
 
-    top, ft = _side_edge(d, g, 0, core_idx, +1, cfg)        # slope toward core = +g
-    bot, fb = _side_edge(d, -g, n - 1, core_idx, -1, cfg)   # slope toward core = -g
+    top, ft = _side_edge(d, g, 0, core_idx, +1, cfg, gap=gap)       # slope toward core = +g
+    bot, fb = _side_edge(d, -g, n - 1, core_idx, -1, cfg, gap=gap)  # slope toward core = -g
     flag = ft | fb
     if np.isnan(top) or np.isnan(bot):
         return np.nan, np.nan, A, float(core_idx), flag | FLAG_BAD_GRAD
@@ -230,6 +253,11 @@ def detect_edges(D: np.ndarray, band: BandResult, cfg: CONFIG) -> EdgeResult:
     """Run the tight-inner-edge recipe over every column in the band span."""
     H, W = D.shape
     hw = half_window_px(band, cfg, H)
+
+    # plateau-bridging length for the wall finder, scaled to the fibre size so
+    # thin fibres never bridge across their own thickness (bounds 4..16 px)
+    bh = band.band_half if np.isfinite(band.band_half) else 0.0
+    gap = int(np.clip(round(cfg.wall_gap_frac * 2.0 * bh), 4, 16))
 
     # column-neighbourhood average, then vertical smoothing + gradient (vectorised)
     Davg = uniform_filter1d(D, size=max(1, cfg.wcol), axis=1, mode="nearest")
@@ -252,7 +280,7 @@ def detect_edges(D: np.ndarray, band: BandResult, cfg: CONFIG) -> EdgeResult:
 
         d = Dsm[y_lo:y_hi + 1, x]
         g = G[y_lo:y_hi + 1, x]
-        top, bot, A, core_idx, flag = _detect_column(d, g, cfg)
+        top, bot, A, core_idx, flag = _detect_column(d, g, cfg, gap=gap)
         flags[x] = flag
         amp[x] = A
         y_core_arr[x] = y_lo + core_idx

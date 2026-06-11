@@ -144,13 +144,15 @@ def run_qc(edges: EdgeResult, band: BandResult, cfg: CONFIG) -> QCResult:
 
     # band-consistency check: a measured diameter far thinner than the coarse
     # desaturation band means the detector likely locked onto a sharp internal
-    # feature inside a defocused blur band -> confident garbage, flag it
+    # feature inside a defocused blur band; far WIDER means it likely grabbed
+    # a shadow/halo outside the fibre -> confident garbage either way, flag it
     band_thickness = 2.0 * band.band_half
     med_diam = float(np.nanmedian(diameter_raw)) if valid.any() else np.nan
     band_mismatch = bool(
         np.isfinite(med_diam)
         and band_thickness > 0
-        and med_diam < cfg.band_ratio_min * band_thickness
+        and (med_diam < cfg.band_ratio_min * band_thickness
+             or med_diam > cfg.band_ratio_max * band_thickness)
     )
 
     low_conf = bool(
