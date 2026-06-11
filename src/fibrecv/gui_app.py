@@ -13,9 +13,9 @@ Inputs
 - Images from a local folder OR any number of uploaded files; both are
   auto-grouped via ``parse_name``'s trailing-numbers rule, with unparseable
   names collected in an "ungrouped" bucket.
-- The three boundary knobs (``edge_z``/``edge_frac``/``wcol``), edited in a
-  sidebar form and applied on demand; all other ``CONFIG`` fields stay at the
-  validated defaults.
+- The three boundary knobs (``edge_z``/``edge_frac``/``wcol``) plus the ``ppu``
+  calibration, edited in a sidebar form and applied on demand; all other
+  ``CONFIG`` fields stay at the validated defaults.
 - An output-folder path for export/batch.
 
 Output
@@ -23,6 +23,13 @@ Output
 - Live, in-memory preview: full-res boundary overlays, per-replicate diameter
   profiles, and a registered mean+/-std group curve -- all redrawn when the user
   changes parameters and clicks Apply (no disk writes for preview).
+- Manual boundary correction: per replicate, the user can click anchor points
+  on a zoomed strip (or nudge a whole line) to redraw the detected top/bottom
+  boundary where detection fails. Points are grouped into independent sets,
+  one per corrected stretch, so two far-apart fixes are never joined across
+  the gap. Corrections (``manual_edit``) re-run QC and flow into the profile
+  plot, group registration and export (drawn in magenta). Batch runs recompute
+  from disk and never see these edits.
 - On request: the standard fibrecv output tree (overlays/, per_image/*,
   per_sample/*, summary/master_summary.csv, run_config.json) written locally for
   the current group or for a whole folder (in-process batch with a progress bar).
@@ -59,33 +66,51 @@ from fibrecv.compute import compute_measurement  # noqa: E402
 from fibrecv.config import CONFIG  # noqa: E402
 from fibrecv.io_utils import discover_images, natural_key, parse_name  # noqa: E402
 from fibrecv.io_utils import load_rgb as _io_load_rgb  # noqa: E402
+from fibrecv.manual_edit import (  # noqa: E402
+    apply_manual_edits, display_to_native, empty_edits, has_edits)
 from fibrecv.measure import write_measurement  # noqa: E402
-from fibrecv.overlay import render_overlay  # noqa: E402
+from fibrecv.overlay import GREY, WHITE, mark_anchors, render_overlay  # noqa: E402
 from fibrecv.register import register_sample  # noqa: E402
 from fibrecv.run_measure import _lib_versions, _worker  # noqa: E402
+from streamlit_image_coordinates import streamlit_image_coordinates  # noqa: E402
 
 DEFAULTS = CONFIG()  # never mutated; the source of widget defaults + reset target
 
-# --- visible parameters: the three knobs that move the detected boundary.
-# Everything else in CONFIG stays at the validated defaults (CLI keeps full
-# control). spec = (name, kind, help, step, lo, hi, fmt). ---
+# --- visible parameters: the three knobs that move the detected boundary,
+# plus the ppu calibration. Everything else in CONFIG stays at the validated
+# defaults (CLI keeps full control). spec = (name, kind, help, step, lo, hi,
+# fmt). ---
 PARAM_SPECS: list[tuple] = [
     ("edge_z", "slider",
-     "Boundary tightness (the main knob). Higher pulls the boundary inward, "
-     "lower pushes it outward. If the drawn line gets sucked inside the fibre "
-     "(too thin), lower it; if it sits on the shadow outside the fibre (too "
-     "thick), raise it. Recommended 3-5, default 4.0.",
+     "Where on the fibre wall the boundary line is drawn (the main knob). The "
+     "detector finds the steep brightness wall at each fibre edge and draws "
+     "the line where the signal has risen edge_z units above the background "
+     "just outside that wall. Higher = the line sits higher up the wall, "
+     "further inside the fibre = thinner reading; lower = further out = "
+     "thicker reading. If the line cuts into the fibre (too thin), lower it; "
+     "if it sits in the shadow outside the fibre (too thick), raise it. "
+     "Recommended 3-5, default 4.0.",
      0.5, 1.0, 12.0, "%.1f"),
     ("edge_frac", "float",
-     "Faint-fibre safeguard. Keeps the boundary from drifting away when the "
-     "fibre is pale / low-contrast. Leave at the default 0.65 unless a very "
-     "faint fibre fails to detect.",
+     "Protection for faint fibres. A pale, low-contrast fibre has a weak wall "
+     "that may never rise edge_z units above background; this caps the "
+     "crossing level at edge_frac of the wall's own height so the line stays "
+     "on the wall instead of drifting outward. It only kicks in when the wall "
+     "is weaker than edge_z. Leave at 0.65 unless a very faint fibre loses "
+     "its boundary — then lower it slightly.",
      0.05, 0.0, 1.0, "%.2f"),
     ("wcol", "int",
      "Horizontal smoothing width (pixels). If the boundary line is jittery or "
-     "ragged, increase it (try 31 or 51) for a smoother, more stable line. Too "
-     "high flattens real thickness variation. Default 15.",
+     "ragged, raise it (61-81) for a smoother, more stable line; lower it "
+     "(15-25) to preserve fine thickness variation. Too high flattens real "
+     "variation. Default 41.",
      1, 1, 201, None),
+    ("ppu", "float",
+     "Calibration: camera pixels per micron. Diameters in µm = pixels / ppu, "
+     "so this scales every µm number in the app and the exports (pixel values "
+     "are unaffected). Measure it with a stage micrometer for your microscope "
+     "+ camera combination. Default 1.3680 (the original calibrated setup).",
+     0.001, 0.1, 10.0, "%.4f"),
 ]
 
 # names of int-typed visible fields (so widgets return int, not float)
@@ -311,19 +336,31 @@ def _profile_fig(mr, rgb, cfg: CONFIG):
     return fig
 
 
-def _group_fig(table: dict, group_label: str):
-    """Registered mean diameter curve with a +/-std shaded band."""
+def _group_fig(table: dict, group_label: str, rep_curves: list[tuple]):
+    """Aligned replicate curves behind the registered mean +/- std band.
+
+    ``rep_curves`` is a list of ``(replicate, x_aligned, diameter_um)`` tuples,
+    one per replicate, drawn thin/faded so the user can see what the mean and
+    std are built from.
+    """
+    fig, ax = plt.subplots(figsize=(9, 3))
+    cmap = plt.get_cmap("tab10")
+    for i, (rep, rx, ry) in enumerate(rep_curves):
+        ax.plot(rx, ry, "-", lw=0.8, alpha=0.45, color=cmap(i % 10),
+                label=f"rep {rep}")
     x = table["x_aligned_px"]
     mean = table["mean_um"]
     std = table["std_um"]
-    fig, ax = plt.subplots(figsize=(9, 3))
-    ax.plot(x, mean, "-", lw=1.5, color="tab:blue", label="mean")
+    ax.plot(x, mean, "-", lw=2.0, color="tab:blue", zorder=5,
+            label="mean of replicates")
     band = np.where(np.isfinite(std), std, 0.0)
-    ax.fill_between(x, mean - band, mean + band, alpha=0.25, color="tab:blue", label="±std")
+    ax.fill_between(x, mean - band, mean + band, alpha=0.25, color="tab:blue",
+                    label="±std across replicates")
     ax.set_xlabel("aligned x position (px)")
     ax.set_ylabel("diameter (µm)")
-    ax.set_title(f"sample {group_label}  (n_reps={int(np.nanmax(table['n']))})")
-    ax.legend(loc="best", fontsize=8)
+    ax.set_title(f"sample {group_label} — replicates aligned and averaged "
+                 f"(n_reps={int(np.nanmax(table['n']))})")
+    ax.legend(loc="best", fontsize=7, ncols=2)
     ax.grid(alpha=0.3)
     fig.tight_layout()
     return fig
@@ -341,6 +378,8 @@ def _param_form() -> None:
         st.markdown("**Parameters** — edit, then click **Apply** to re-render.")
         new_vals: dict = {}
         for (name, kind, help_txt, step, lo, hi, fmt) in PARAM_SPECS:
+            if name == "ppu":
+                st.markdown("**Calibration**")
             key = f"p_{name}_v{ver}"
             cur = applied[name]
             if kind == "slider":
@@ -440,10 +479,14 @@ def _load_reps(cfg_items: tuple) -> tuple[list[dict], str | None, str | None]:
 def _render_replicate(rep: dict, cfg: CONFIG) -> None:
     mr, rgb = rep["mr"], rep["rgb"]
     bnd, edg, res = mr.bnd, mr.edg, mr.res
+    edited_top, edited_bot = rep.get("edited_top"), rep.get("edited_bot")
     overlay = render_overlay(rgb, edg.y_top, edg.y_bot, bnd.c_fit, res.valid,
-                             bnd.x0, bnd.x1, thick=1)
-    st.image(overlay, width="stretch",
-             caption=f"{mr.name} — cyan top / yellow bottom / dashed centerline")
+                             bnd.x0, bnd.x1, thick=1,
+                             edited_top=edited_top, edited_bot=edited_bot)
+    caption = f"{mr.name} — cyan top / yellow bottom / dashed centerline"
+    if edited_top is not None or edited_bot is not None:
+        caption += " / magenta = manual edit"
+    st.image(overlay, width="stretch", caption=caption)
 
     med = mr.meta["median_diameter_um"]
     flags = []
@@ -457,9 +500,157 @@ def _render_replicate(rep: dict, cfg: CONFIG) -> None:
     c[2].metric("tilt slope", f"{bnd.slope:.4f}")
     c[3].metric("flags", ", ".join(flags) if flags else "none")
 
+    _render_edit_expander(rep)
+
     fig = _profile_fig(mr, rgb, cfg)
     st.pyplot(fig)
     plt.close(fig)
+
+
+def _render_edit_expander(rep: dict) -> None:
+    """Manual boundary correction: click anchors on a zoomed strip, or nudge.
+
+    Anchors and nudges live in ``st.session_state.manual_edits[name]`` in
+    native full-image pixel coordinates, so they survive parameter changes;
+    ``main()`` applies them via ``apply_manual_edits`` right after loading, so
+    by the time this renders, ``rep["mr"]`` already reflects the edits.
+    """
+    mr, rgb, name = rep["mr"], rep["rgb"], rep["name"]
+    bnd, edg, res = mr.bnd, mr.edg, mr.res
+    H, W = rgb.shape[:2]
+    edits = st.session_state.manual_edits.get(name) or empty_edits()
+
+    with st.expander("Edit boundaries (manual correction)"):
+        side = st.radio("Line to edit", ["top (cyan)", "bottom (yellow)"],
+                        horizontal=True, key=f"side_{name}")
+        side_key = "top" if side.startswith("top") else "bot"
+        st.caption(
+            "Click 2+ points along the true edge in the zoomed strip below; "
+            "the active set's line is redrawn through its points and blended "
+            "into the detected line at the ends (a single click edits one "
+            "column). Each set corrects one stretch independently — start a "
+            "new set to fix another stretch without the two being joined. "
+            "Corrections are drawn in magenta and feed the profile plot, the "
+            "group statistics and the export. Points outside the detected "
+            "band span stay invalid.")
+
+        # anchor sets of the side being edited; the radio's key carries a
+        # version counter (same pattern as the param form) so 'Start new set'
+        # and deletions can re-default it to the newest set
+        sets_cur = edits[side_key]
+        ver_key = f"setver_{name}"
+        ver = st.session_state.setdefault(ver_key, 0)
+        ctl = st.columns([3, 1])
+        if sets_cur:
+            active = ctl[0].radio(
+                "Set to extend (new clicks are added to it)",
+                options=list(range(len(sets_cur))),
+                format_func=lambda i: f"set {i + 1} ({len(sets_cur[i])} pts)",
+                horizontal=True, index=len(sets_cur) - 1,
+                key=f"actset_{side_key}_{name}_v{ver}")
+        else:
+            active = None
+            ctl[0].caption("No sets yet — the first click starts set 1.")
+        if ctl[1].button("Start new set", key=f"newset_{name}",
+                         disabled=bool(sets_cur) and not sets_cur[-1]):
+            ed = st.session_state.manual_edits.setdefault(name, empty_edits())
+            ed[side_key].append([])
+            st.session_state[ver_key] = ver + 1
+            st.rerun()
+
+        # zoomed strip: full width, vertically cropped around the band so
+        # clicks have much better y-resolution than on the full image
+        span = slice(bnd.x0, bnd.x1 + 1)
+        c_span = bnd.c_fit[span]
+        pad = 12
+        y_lo = max(0, int(np.floor(np.nanmin(c_span) - edg.half_window - pad)))
+        y_hi = min(H, int(np.ceil(np.nanmax(c_span) + edg.half_window + pad)) + 1)
+        overlay_full = render_overlay(
+            rgb, edg.y_top, edg.y_bot, bnd.c_fit, res.valid, bnd.x0, bnd.x1,
+            thick=1, edited_top=rep.get("edited_top"),
+            edited_bot=rep.get("edited_bot"))
+        for i, anchor_set in enumerate(sets_cur):
+            mark_anchors(overlay_full, anchor_set,
+                         color=WHITE if i == active else GREY)
+        crop = overlay_full[y_lo:y_hi]
+
+        value = streamlit_image_coordinates(crop, width=1200, height=360,
+                                            key=f"clk_{name}")
+        # the component re-emits the last click on every rerun -> dedupe on
+        # its unix_time stamp, otherwise anchors would silently duplicate
+        if value and value.get("unix_time") != st.session_state.get(f"last_click_{name}"):
+            st.session_state[f"last_click_{name}"] = value["unix_time"]
+            x_nat, y_nat = display_to_native(
+                value["x"], value["y"], value["width"], value["height"],
+                crop.shape[1], crop.shape[0], y_lo, W, H)
+            ed = st.session_state.manual_edits.setdefault(name, empty_edits())
+            sets_ed = ed[side_key]
+            if not sets_ed:
+                sets_ed.append([])
+            idx = (active if active is not None and active < len(sets_ed)
+                   else len(sets_ed) - 1)
+            sets_ed[idx].append((x_nat, y_nat))
+            st.rerun()
+
+        if sets_cur:
+            parts = []
+            for i, s in enumerate(sets_cur):
+                if s:
+                    xs = [p[0] for p in s]
+                    parts.append(f"set {i + 1}: {len(s)} pts "
+                                 f"(x {min(xs):.0f}–{max(xs):.0f})")
+                else:
+                    parts.append(f"set {i + 1}: empty")
+            st.caption(" · ".join(parts))
+            if active is not None and sets_cur[active]:
+                st.caption(f"set {active + 1} points: " + ", ".join(
+                    f"({ax:.0f}, {ay:.0f})" for ax, ay in sets_cur[active]))
+        b = st.columns(3)
+        has_active_pts = active is not None and bool(sets_cur[active])
+        if b[0].button("Undo last point", key=f"undo_{name}",
+                       disabled=not has_active_pts):
+            ed = st.session_state.manual_edits.get(name)
+            if ed and active is not None and active < len(ed[side_key]):
+                if ed[side_key][active]:
+                    ed[side_key][active].pop()
+                if not ed[side_key][active]:
+                    ed[side_key].pop(active)
+                    st.session_state[ver_key] = ver + 1
+            st.rerun()
+        if b[1].button("Delete set", key=f"delset_{name}",
+                       disabled=active is None):
+            ed = st.session_state.manual_edits.get(name)
+            if ed and active is not None and active < len(ed[side_key]):
+                ed[side_key].pop(active)
+                st.session_state[ver_key] = ver + 1
+            st.rerun()
+        if b[2].button("Clear all edits", key=f"clrall_{name}",
+                       disabled=not has_edits(st.session_state.manual_edits.get(name))):
+            st.session_state.manual_edits.pop(name, None)
+            st.session_state[ver_key] = ver + 1
+            st.rerun()
+
+        n1, n2 = st.columns(2)
+        new_nt = n1.number_input("Nudge top line (px, + = down)",
+                                 value=float(edits["nudge_top"]), step=0.5,
+                                 key=f"nudgetop_{name}")
+        new_nb = n2.number_input("Nudge bottom line (px, + = down)",
+                                 value=float(edits["nudge_bot"]), step=0.5,
+                                 key=f"nudgebot_{name}")
+        if new_nt != edits["nudge_top"] or new_nb != edits["nudge_bot"]:
+            ed = st.session_state.manual_edits.setdefault(name, empty_edits())
+            ed["nudge_top"], ed["nudge_bot"] = float(new_nt), float(new_nb)
+            st.rerun()
+
+        et, eb = rep.get("edited_top"), rep.get("edited_bot")
+        if et is not None or eb is not None:
+            edited_cols = np.zeros(W, dtype=bool)
+            if et is not None:
+                edited_cols |= et
+            if eb is not None:
+                edited_cols |= eb
+            st.caption(f"edited columns: {int(edited_cols.sum())}; "
+                       f"valid after re-QC: {int((edited_cols & res.valid).sum())}")
 
 
 def _render_group(reps: list[dict], cfg: CONFIG, group_label: str | None) -> None:
@@ -489,24 +680,55 @@ def _render_group(reps: list[dict], cfg: CONFIG, group_label: str | None) -> Non
     if not profiles:
         st.warning("No replicate passed QC (coverage / band_mismatch); nothing to register.")
         return
+    # sort with the same key register_sample uses, so zip(profiles, shifts)
+    # below is order-aligned (replicate-keyed dicts would silently collide for
+    # ungrouped uploads that share the idx+1 fallback number)
+    profiles.sort(key=lambda p: p["replicate"])
     try:
         table, shifts, summary = register_sample(profiles, cfg)
     except Exception as exc:  # noqa: BLE001
         st.error(f"Registration failed: {exc}")
         return
+    assert all(s["replicate"] == p["replicate"] for p, s in zip(profiles, shifts))
 
-    fig = _group_fig(table, group_label or "uploaded")
+    rep_curves = [(p["replicate"], p["x"] + s["shift_px"],
+                   p["diameter_px_smooth"] / cfg.ppu)
+                  for p, s in zip(profiles, shifts)]
+    fig = _group_fig(table, group_label or "uploaded", rep_curves)
     st.pyplot(fig)
     plt.close(fig)
 
+    shift_txt = ", ".join(f"rep {s['replicate']}: {s['shift_px']:+.0f} px"
+                          for s in shifts)
+    st.caption(
+        "Each replicate's profile is shifted horizontally (cross-correlation "
+        "against the first replicate) so the same physical stretch of fibre "
+        "lines up before averaging — the photos never frame the fibre "
+        f"identically. Applied shifts: {shift_txt}. Thin lines = individual "
+        "replicates after alignment; bold line = pointwise mean across "
+        "replicates; band = ±1 std.")
+
     cv = summary["cv"]
     c = st.columns(6)
-    c[0].metric("mean Ø", f"{summary['mean_um']:.2f} µm")
-    c[1].metric("std", f"{summary['std_um']:.2f} µm")
-    c[2].metric("CV", f"{cv:.3f}" if np.isfinite(cv) else "—")
+    c[0].metric("group mean Ø", f"{summary['mean_um']:.2f} µm",
+                help="Mean diameter across the replicates of this group, "
+                     "averaged along the aligned overlap region (where all "
+                     "replicates are present after registration).")
+    c[1].metric("between-replicate std", f"{summary['std_um']:.2f} µm",
+                help="At each aligned position, the std of the diameter across "
+                     "replicates; this is its average along the fibre. It "
+                     "measures replicate-to-replicate disagreement, not "
+                     "thickness variation along the fibre.")
+    c[2].metric("CV", f"{cv:.3f}" if np.isfinite(cv) else "—",
+                help="between-replicate std / group mean (dimensionless).")
     c[3].metric("n reps used", f"{summary['n_replicates_used']}")
-    c[4].metric("overlap", f"{summary['overlap_px']} px")
-    c[5].metric("registration", "uncertain" if summary["registration_uncertain"] else "ok")
+    c[4].metric("overlap", f"{summary['overlap_px']} px",
+                help="Number of aligned columns where every replicate has data.")
+    c[5].metric("registration",
+                "uncertain" if summary["registration_uncertain"] else "ok",
+                help="'uncertain' = the cross-correlation peak was below "
+                     "min_corr for at least one replicate, so its shift was "
+                     "reset to 0.")
 
 
 def _render_export_batch(reps: list[dict], cfg: CONFIG, group_label: str | None,
@@ -519,9 +741,15 @@ def _render_export_batch(reps: list[dict], cfg: CONFIG, group_label: str | None,
 
     col_exp, col_batch = st.columns(2)
 
+    edited_names = sorted(n for n, e in st.session_state.get("manual_edits", {}).items()
+                          if has_edits(e))
+
     with col_exp:
         st.markdown("**Export current group**")
         st.caption("Writes overlays/, per_image/* and per_sample/* for the loaded group.")
+        if edited_names:
+            st.info("Manual edits active for: " + ", ".join(edited_names)
+                    + " — they ARE included in this export.")
         if st.button("Export current group", disabled=not reps, width="stretch"):
             try:
                 with st.spinner("Writing output tree…"):
@@ -532,6 +760,9 @@ def _render_export_batch(reps: list[dict], cfg: CONFIG, group_label: str | None,
 
     with col_batch:
         st.markdown("**Run batch (whole folder)**")
+        if edited_names:
+            st.warning("Run batch recomputes every image from disk and "
+                       "IGNORES the manual edits made here.")
         jobs = st.number_input("parallel jobs", min_value=1, max_value=16, value=4, step=1)
         disabled = folder is None or not Path(folder or "").is_dir()
         if disabled:
@@ -574,6 +805,7 @@ def main() -> None:
     st.set_page_config(page_title="fibrecv — fibre diameter GUI", layout="wide")
     st.session_state.setdefault("cfg_dict", DEFAULTS.as_dict())
     st.session_state.setdefault("form_version", 0)
+    st.session_state.setdefault("manual_edits", {})  # image name -> edits dict
 
     st.title("fibrecv — fibre diameter detection")
     st.caption("Local preview / tuning / batch / export over the validated pipeline. "
@@ -585,6 +817,15 @@ def main() -> None:
     # sidebar
     reps, group_label, folder = _load_reps(cfg_items)
     _param_form()
+
+    # apply manual boundary edits once, right here: every downstream consumer
+    # (overlay, profile plot, group registration, export) reads rep["mr"], so
+    # corrections flow everywhere; the cached MeasureResult is never mutated
+    for rep in reps:
+        edits = st.session_state.manual_edits.get(rep["name"])
+        if has_edits(edits):
+            rep["mr"], rep["edited_top"], rep["edited_bot"] = \
+                apply_manual_edits(rep["mr"], edits, cfg)
 
     # main area
     if not reps:

@@ -37,6 +37,8 @@ import numpy as np
 CYAN = np.array([0, 255, 255], dtype=np.uint8)
 YELLOW = np.array([255, 255, 0], dtype=np.uint8)
 GREY = np.array([180, 180, 180], dtype=np.uint8)
+MAGENTA = np.array([255, 0, 255], dtype=np.uint8)  # manually corrected columns
+WHITE = np.array([255, 255, 255], dtype=np.uint8)
 
 
 def _stamp(img: np.ndarray, x: int, y: float, color: np.ndarray, thick: int = 1) -> None:
@@ -58,12 +60,17 @@ def render_overlay(
     x0: int,
     x1: int,
     thick: int = 1,
+    *,
+    edited_top: np.ndarray | None = None,
+    edited_bot: np.ndarray | None = None,
 ) -> np.ndarray:
     """Draw the boundaries onto a copy of ``rgb`` and return the uint8 array.
 
     Pure: no disk I/O. Returns an (H, W, 3) uint8 RGB image with the top boundary
     in cyan, bottom in yellow and a dashed grey centerline, ready for either
-    ``st.image`` (GUI) or ``imwrite`` (CLI via ``draw_overlay``).
+    ``st.image`` (GUI) or ``imwrite`` (CLI via ``draw_overlay``). Columns marked
+    in the optional ``edited_top``/``edited_bot`` bool masks (manual GUI
+    corrections) are drawn in magenta instead.
     """
     img = (np.clip(rgb, 0, 1) * 255).astype(np.uint8).copy()
     W = img.shape[1]
@@ -72,9 +79,29 @@ def render_overlay(
         if (x // 8) % 2 == 0:
             _stamp(img, x, c_fit[x], GREY, thick=0)
         if x < valid.size and valid[x]:
-            _stamp(img, x, y_top[x], CYAN, thick=thick)
-            _stamp(img, x, y_bot[x], YELLOW, thick=thick)
+            top_c = MAGENTA if (edited_top is not None and edited_top[x]) else CYAN
+            bot_c = MAGENTA if (edited_bot is not None and edited_bot[x]) else YELLOW
+            _stamp(img, x, y_top[x], top_c, thick=thick)
+            _stamp(img, x, y_bot[x], bot_c, thick=thick)
     return img
+
+
+def mark_anchors(
+    img: np.ndarray,
+    anchors,
+    color: np.ndarray = WHITE,
+    size: int = 4,
+) -> None:
+    """Stamp a small filled square at each (x, y) anchor, in place, clipped."""
+    H, W = img.shape[:2]
+    for ax, ay in anchors:
+        if not (np.isfinite(ax) and np.isfinite(ay)):
+            continue
+        xc, yc = int(round(ax)), int(round(ay))
+        x_lo, x_hi = max(0, xc - size), min(W, xc + size + 1)
+        y_lo, y_hi = max(0, yc - size), min(H, yc + size + 1)
+        if x_lo < x_hi and y_lo < y_hi:
+            img[y_lo:y_hi, x_lo:x_hi] = color
 
 
 def draw_overlay(

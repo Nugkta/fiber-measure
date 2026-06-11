@@ -77,13 +77,21 @@ are passed straight through to `streamlit run`).
   export needs names ending in numbers to derive a group label.
 
 **Sidebar — Parameters**
-- Three knobs control the detected boundary; everything else uses the
-  validated defaults (the CLI retains full parameter control):
-  - **`edge_z`** (slider) — the main strictness knob: higher → tighter
-    boundaries.
-  - **`edge_frac`** — keeps the boundary on faint/weak walls.
-  - **`wcol`** — column averaging; raise it if internal iridescence banding
-    disturbs the boundary.
+- Four knobs are exposed; everything else uses the validated defaults (the CLI
+  retains full parameter control):
+  - **`edge_z`** (slider) — where on the fibre wall the boundary is drawn:
+    higher = higher up the wall = further inside the fibre = thinner reading;
+    lower = thicker. Line cutting into the fibre → lower it; line sitting in
+    the shadow outside → raise it.
+  - **`edge_frac`** — faint-fibre protection: caps the crossing level at a
+    fraction of the wall's own height so a weak wall keeps its boundary. It
+    only acts when the wall is weaker than `edge_z`.
+  - **`wcol`** — horizontal smoothing width (px): raise it for a smoother,
+    more stable line; lower it to preserve fine thickness variation.
+    Default 41.
+  - **`ppu`** (Calibration) — camera pixels per micron; every µm value is
+    px / ppu. Change it if your images come from a different
+    microscope/magnification.
 - Edits are **staged**: change what you want, then click **Apply** to re-render
   (a few seconds for a group). **Reset to defaults** restores the calibrated
   values.
@@ -92,8 +100,24 @@ are passed straight through to `streamlit run`).
 - One tab per replicate: the full-resolution **overlay** (cyan top edge / yellow
   bottom edge / dashed centerline), the **diameter-vs-position** plot (raw points
   + smoothed line, µm), and scalar metrics (median Ø, coverage, tilt, QC flags).
-- **Group panel**: the replicates registered into a **mean ± std** curve plus a
-  scalar summary (mean, std, CV, replicates used, overlap, registration status).
+- **Edit boundaries (manual correction)**: when detection fails locally, open
+  the expander in a replicate tab, pick the top or bottom line, and click 2+
+  points along the true edge in the zoomed strip — the line is redrawn through
+  your points (blended at the ends) and shown in **magenta**. Points are
+  grouped into **sets**: one set corrects one stretch, and clicking far away
+  inside the same set still connects the points — so use **Start new set** to
+  fix a different stretch independently (the line between sets is left
+  untouched). The set radio picks which set new clicks extend (active set's
+  markers are white, others grey); **Undo last point** / **Delete set** manage
+  them. Whole-line nudge inputs handle uniform offsets. Corrections re-run QC
+  and flow into the profile plot, the group statistics and **Export current
+  group**; they survive parameter changes, but **Run batch** recomputes from
+  disk and ignores them.
+- **Group panel**: every replicate's aligned diameter curve (thin lines) behind
+  the registered **mean ± std** curve, a caption listing the applied alignment
+  shifts, and a scalar summary (group mean, between-replicate std, CV,
+  replicates used, overlap, registration status — hover the ⓘ icons for exact
+  definitions).
 
 **Export & batch**
 - **Output folder**: where results are written (default `./fibrecv_output`).
