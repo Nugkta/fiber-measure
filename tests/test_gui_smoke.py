@@ -44,6 +44,17 @@ def test_full_flow_with_manual_edits(image_folder: Path):
     assert "group mean Ø" in labels
     assert "between-replicate std" in labels
 
+    # per-replicate metric row: each image shows its own mean and spread
+    assert "mean Ø" in labels
+    assert "along-fibre std" in labels
+
+    # group panel: per-image stats table with one row per replicate
+    tables = [df.value for df in at.dataframe]
+    stats = [t for t in tables if "mean Ø (µm)" in t.columns]
+    assert stats, "per-image stats table not rendered"
+    assert len(stats[0]) == 2
+    assert np.isfinite(stats[0]["std (µm)"]).all()
+
     # inject a manual edit (what a click would store) and rerun: the apply
     # choke point in main() must run it through apply_manual_edits cleanly
     at.session_state["manual_edits"] = {

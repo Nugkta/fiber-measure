@@ -489,16 +489,27 @@ def _render_replicate(rep: dict, cfg: CONFIG) -> None:
     st.image(overlay, width="stretch", caption=caption)
 
     med = mr.meta["median_diameter_um"]
+    d = mr.diameter_um
+    have_d = bool(np.isfinite(d).any())
+    mean_um = float(np.nanmean(d)) if have_d else None
+    std_um = float(np.nanstd(d)) if have_d else None
     flags = []
     if res.low_confidence:
         flags.append("low_confidence")
     if res.band_mismatch:
         flags.append("band_mismatch")
-    c = st.columns(4)
-    c[0].metric("median Ø", f"{med:.2f} µm" if med is not None else "—")
-    c[1].metric("coverage", f"{res.coverage:.0%}")
-    c[2].metric("tilt slope", f"{bnd.slope:.4f}")
-    c[3].metric("flags", ", ".join(flags) if flags else "none")
+    c = st.columns(6)
+    c[0].metric("mean Ø", f"{mean_um:.2f} µm" if mean_um is not None else "—",
+                help="Mean diameter of this image, averaged along the fibre "
+                     "(valid columns only).")
+    c[1].metric("median Ø", f"{med:.2f} µm" if med is not None else "—")
+    c[2].metric("along-fibre std", f"{std_um:.2f} µm" if std_um is not None else "—",
+                help="Std of the diameter along this image's fibre — thickness "
+                     "variation within the picture, not disagreement between "
+                     "replicates (that is the group panel's std).")
+    c[3].metric("coverage", f"{res.coverage:.0%}")
+    c[4].metric("tilt slope", f"{bnd.slope:.4f}")
+    c[5].metric("flags", ", ".join(flags) if flags else "none")
 
     _render_edit_expander(rep)
 
@@ -653,6 +664,40 @@ def _render_edit_expander(rep: dict) -> None:
                        f"valid after re-QC: {int((edited_cols & res.valid).sum())}")
 
 
+def _render_per_image_stats(reps: list[dict]) -> None:
+    """Compact per-image table so individual stats sit next to the group stats.
+
+    Stats are taken along each picture's own fibre (valid columns, before
+    registration), so they answer "how thick is this picture's fibre and how
+    much does it vary along its length" — distinct from the group panel's
+    between-replicate numbers.
+    """
+    rows = []
+    for rep in reps:
+        mr = rep["mr"]
+        d = mr.diameter_um
+        ok = bool(np.isfinite(d).any())
+        rows.append({
+            "image": mr.name,
+            "mean Ø (µm)": float(np.nanmean(d)) if ok else np.nan,
+            "std (µm)": float(np.nanstd(d)) if ok else np.nan,
+            "median Ø (µm)": float(np.nanmedian(d)) if ok else np.nan,
+            "coverage": mr.res.coverage,
+        })
+    st.markdown("**Per-image statistics** — each picture's own fibre, before "
+                "registration")
+    st.dataframe(
+        pd.DataFrame(rows), width="stretch", hide_index=True,
+        column_config={
+            "mean Ø (µm)": st.column_config.NumberColumn(format="%.2f"),
+            "std (µm)": st.column_config.NumberColumn(
+                format="%.2f",
+                help="Thickness variation along this picture's fibre."),
+            "median Ø (µm)": st.column_config.NumberColumn(format="%.2f"),
+            "coverage": st.column_config.NumberColumn(format="percent"),
+        })
+
+
 def _render_group(reps: list[dict], cfg: CONFIG, group_label: str | None) -> None:
     st.subheader("Group panel — registered mean ± std")
     profiles, dropped = [], []
@@ -679,6 +724,7 @@ def _render_group(reps: list[dict], cfg: CONFIG, group_label: str | None) -> Non
         st.caption("QC-dropped from registration: " + "; ".join(dropped))
     if not profiles:
         st.warning("No replicate passed QC (coverage / band_mismatch); nothing to register.")
+        _render_per_image_stats(reps)
         return
     # sort with the same key register_sample uses, so zip(profiles, shifts)
     # below is order-aligned (replicate-keyed dicts would silently collide for
@@ -688,6 +734,7 @@ def _render_group(reps: list[dict], cfg: CONFIG, group_label: str | None) -> Non
         table, shifts, summary = register_sample(profiles, cfg)
     except Exception as exc:  # noqa: BLE001
         st.error(f"Registration failed: {exc}")
+        _render_per_image_stats(reps)
         return
     assert all(s["replicate"] == p["replicate"] for p, s in zip(profiles, shifts))
 
@@ -729,6 +776,14 @@ def _render_group(reps: list[dict], cfg: CONFIG, group_label: str | None) -> Non
                 help="'uncertain' = the cross-correlation peak was below "
                      "min_corr for at least one replicate, so its shift was "
                      "reset to 0.")
+
+    _render_per_image_stats(reps)
+    st.caption(
+        "Per-image mean/median/std are computed along each picture's own "
+        "fibre (valid columns, no registration): std there = thickness "
+        "variation within one picture. The group numbers above instead "
+        "average the registered replicates, so their std = disagreement "
+        "between replicates.")
 
 
 def _render_export_batch(reps: list[dict], cfg: CONFIG, group_label: str | None,
