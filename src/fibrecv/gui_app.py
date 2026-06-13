@@ -72,6 +72,9 @@ from fibrecv.measure import write_measurement  # noqa: E402
 from fibrecv.overlay import GREY, WHITE, mark_anchors, render_overlay  # noqa: E402
 from fibrecv.register import register_sample  # noqa: E402
 from fibrecv.run_measure import _lib_versions, _worker  # noqa: E402
+from fibrecv.tensile import (  # noqa: E402
+    build_matrix, compute_tensile, discover_tensile, discover_tensile_files,
+    read_trace)
 from streamlit_image_coordinates import streamlit_image_coordinates  # noqa: E402
 
 DEFAULTS = CONFIG()  # never mutated; the source of widget defaults + reset target
@@ -170,6 +173,12 @@ def _cached_compute_path(path: str, mtime: float, cfg_items: tuple):
     return mr
 
 
+@st.cache_data(show_spinner=False, max_entries=8)
+def _cached_discover_tensile(folder: str) -> dict[str, str]:
+    """``discover_tensile`` keyed by folder string (Path -> str so it caches)."""
+    return {g: str(p) for g, p in discover_tensile(folder).items()}
+
+
 @st.cache_data(show_spinner=False, max_entries=12)
 def _cached_compute_upload(file_key: str, data: bytes, cfg_items: tuple):
     """Compute one uploaded image; returns (mr, rgb) since uploads keep no path."""
@@ -237,6 +246,34 @@ def export_group(reps: list[dict], out_root: str | Path, cfg: CONFIG) -> str:
         "--min-corr", str(cfg.min_corr), "--min-coverage", str(cfg.min_coverage),
     ])
     return group
+
+
+def export_all_groups(grouped_reps: dict[str, list[dict]], out_root: str | Path,
+                      cfg: CONFIG) -> list[str]:
+    """Write the output tree for *every* group in one session, not just the loaded one.
+
+    ``grouped_reps`` maps group label -> its already-computed reps. Writes each
+    image's artifacts via ``write_measurement`` (so manual edits carried on the
+    loaded group's reps are honoured), then runs a single ``run_aggregate`` pass
+    over all of them so ``summary/master_summary.csv`` has one row per group.
+    Returns the list of exported group labels.
+    """
+    out_root = Path(out_root)
+    groups: list[str] = []
+    for reps in grouped_reps.values():
+        group = next((r["mr"].group for r in reps if r["mr"].group is not None), None)
+        if group is None:
+            continue
+        for rep in reps:
+            write_measurement(rep["rgb"], rep["mr"], cfg, out_root)
+        groups.append(group)
+    if groups:
+        run_aggregate.main([
+            "--out", str(out_root), "--groups", *groups,
+            "--ppu", str(cfg.ppu), "--max-shift", str(cfg.max_shift),
+            "--min-corr", str(cfg.min_corr), "--min-coverage", str(cfg.min_coverage),
+        ])
+    return groups
 
 
 def run_batch(
@@ -314,6 +351,89 @@ def run_batch(
     return master, results
 
 
+def _group_mean_um(reps: list[dict], cfg: CONFIG) -> float | None:
+    """Registered mean diameter (µm) for one group's reps, or ``None`` if it
+    cannot be measured. Same profile-building + registration as ``_render_group``,
+    so the matrix matches the on-screen group panel."""
+    profiles = []
+    for rep in reps:
+        mr = rep["mr"]
+        res, bnd = mr.res, mr.bnd
+        if res.band_mismatch or res.coverage < cfg.min_coverage:
+            continue
+        W = rep["rgb"].shape[1]
+        span = slice(bnd.x0, bnd.x1 + 1)
+        profiles.append({
+            "replicate": mr.replicate if mr.replicate is not None else rep["idx"] + 1,
+            "coverage": res.coverage,
+            "x": np.arange(W)[span].astype(float),
+            "diameter_px_raw": res.diameter_raw[span].astype(float),
+            "diameter_px_smooth": res.diameter_smooth[span].astype(float),
+            "valid": res.valid[span].astype(bool),
+        })
+    if not profiles:
+        return None
+    profiles.sort(key=lambda p: p["replicate"])
+    try:
+        _, _, summary = register_sample(profiles, cfg)
+    except Exception:  # noqa: BLE001
+        return None
+    mean_um = summary.get("mean_um")
+    return float(mean_um) if mean_um is not None and np.isfinite(mean_um) else None
+
+
+def _diameters_from_uploads(image_uploads, cfg_items: tuple) -> dict[str, float]:
+    """Measure every uploaded image in-memory -> ``{group: mean diameter µm}``.
+
+    The folder path uses ``run_batch``; this is its upload twin so the tensile
+    matrix works with drag-and-drop images too. Reuses ``_cached_compute_upload``
+    (so the loaded group is not recomputed) and the same registration as the
+    group panel. ``cfg_items`` is the image config (not the tensile one) to keep
+    the cache keys identical to the live view.
+    """
+    cfg = _cfg_from_items(cfg_items)
+    diameters: dict[str, float] = {}
+    groups = _group_by_name(list(image_uploads), key=lambda u: u.name)
+    for g, items in groups.items():
+        if g == UNGROUPED:
+            continue
+        reps = []
+        for i, up in enumerate(_sorted_reps(items, key=lambda u: u.name)):
+            mr, rgb = _cached_compute_upload(Path(up.name).stem, up.getvalue(),
+                                             cfg_items)
+            reps.append({"name": Path(up.name).stem, "rgb": rgb, "mr": mr, "idx": i})
+        mean_um = _group_mean_um(reps, cfg)
+        if mean_um is not None:
+            diameters[g] = mean_um
+    return diameters
+
+
+def _grouped_reps_from_uploads(image_uploads, cfg_items: tuple,
+                               loaded_reps: list[dict] | None,
+                               group_label: str | None) -> dict[str, list[dict]]:
+    """Build ``{group: reps}`` for *every* uploaded group (for an all-groups export).
+
+    Reuses ``_cached_compute_upload`` (so nothing is recomputed needlessly) and
+    keeps the on-screen group's already-loaded reps so its manual edits are
+    preserved; other groups are measured fresh.
+    """
+    grouped = _group_by_name(list(image_uploads), key=lambda u: u.name)
+    out: dict[str, list[dict]] = {}
+    for g, items in grouped.items():
+        if g == UNGROUPED:
+            continue
+        if g == group_label and loaded_reps:
+            out[g] = loaded_reps
+            continue
+        reps = []
+        for i, up in enumerate(_sorted_reps(items, key=lambda u: u.name)):
+            mr, rgb = _cached_compute_upload(Path(up.name).stem, up.getvalue(),
+                                             cfg_items)
+            reps.append({"name": Path(up.name).stem, "rgb": rgb, "mr": mr, "idx": i})
+        out[g] = reps
+    return out
+
+
 # --------------------------------------------------------------------------- #
 # Plot builders                                                               #
 # --------------------------------------------------------------------------- #
@@ -366,6 +486,91 @@ def _group_fig(table: dict, group_label: str, rep_curves: list[tuple]):
     return fig
 
 
+def _tensile_fig(res):
+    """Stress-strain curve with the modulus fit, toughness area and break point.
+
+    Mirrors ``_group_fig``'s style (Agg, 9x3, grid, tight_layout). Plots stress
+    (MPa) vs strain (%) up to fracture as the main line, a faded post-break
+    tail, the shaded toughness area, the steepest-slope modulus fit line over
+    its own segment and the marked break point. When no diameter matched the
+    fibre (all-NaN stress) it falls back to the raw force/displacement trace so
+    the curve is still informative.
+    """
+    fig, ax = plt.subplots(figsize=(9, 3))
+    group = res.group or "fibre"
+    brk = int(res.break_index)
+
+    def _focus(x_used, y_used, has_tail):
+        """Bound the view to the pre-break curve so a post-break recoil spike in
+        the faded tail cannot dominate the axes (a short stub still shows)."""
+        xu = np.asarray(x_used, float); yu = np.asarray(y_used, float)
+        xu = xu[np.isfinite(xu)]; yu = yu[np.isfinite(yu)]
+        if not xu.size or not yu.size:
+            return
+        ymin, ymax = min(0.0, float(yu.min())), float(yu.max())
+        pad = 0.10 * ((ymax - ymin) or 1.0)
+        ax.set_ylim(ymin - 0.3 * pad, ymax + pad)
+        xlo, xhi = min(0.0, float(xu.min())), float(xu.max())
+        if has_tail:
+            xhi += 0.30 * ((xhi - xlo) or 1.0)
+        ax.set_xlim(xlo, xhi)
+
+    # no matched diameter -> stress is all NaN; show force vs displacement instead
+    if not np.isfinite(res.stress_pa).any():
+        x = res.disp_mm
+        y = res.load_n
+        ax.plot(x[:brk + 1], y[:brk + 1], "-", lw=1.6, color="tab:blue",
+                label="load")
+        if brk + 1 < x.size:
+            ax.plot(x[brk:], y[brk:], "-", lw=0.8, alpha=0.35, color="tab:blue")
+        ax.scatter([x[brk]], [y[brk]], s=30, color="tab:red", zorder=6,
+                   label=f"break (Fmax = {res.fmax_n:.3f} N)")
+        _focus(x[:brk + 1], y[:brk + 1], brk + 1 < x.size)
+        ax.set_xlabel("displacement (mm)")
+        ax.set_ylabel("load (N)")
+        ax.set_title(f"{group} — stress–strain "
+                     f"(no matched diameter — force/displacement only)")
+        ax.legend(loc="best", fontsize=8)
+        ax.grid(alpha=0.3)
+        fig.tight_layout()
+        return fig
+
+    x = res.strain * 100.0          # %
+    y = res.stress_pa / 1e6         # MPa
+    ax.plot(x[:brk + 1], y[:brk + 1], "-", lw=1.6, color="tab:blue",
+            label="stress–strain")
+    if brk + 1 < x.size:
+        ax.plot(x[brk:], y[brk:], "-", lw=0.8, alpha=0.35, color="tab:blue",
+                label="post-break (unused)")
+
+    # toughness = area under the curve up to fracture
+    ax.fill_between(x[:brk + 1], 0.0, y[:brk + 1], alpha=0.15,
+                    color="tab:blue", label="toughness (area)")
+
+    # steepest initial slope = Young's modulus, drawn over its fit segment
+    fit = res.modulus_fit or {}
+    if fit and np.isfinite(fit.get("slope", np.nan)):
+        s_lo, s_hi = fit["strain_lo"], fit["strain_hi"]
+        s_line = np.array([s_lo, s_hi], dtype=float)
+        stress_fit = fit["slope"] * s_line + fit["intercept"]
+        ax.plot(s_line * 100.0, stress_fit / 1e6, "--", lw=1.4,
+                color="tab:orange",
+                label=f"E = {res.youngs_modulus_pa / 1e9:.2f} GPa")
+
+    # break point
+    ax.scatter([x[brk]], [y[brk]], s=30, color="tab:red", zorder=6,
+               label=f"break (Fmax = {res.fmax_n:.3f} N)")
+
+    _focus(x[:brk + 1], y[:brk + 1], brk + 1 < x.size)
+    ax.set_xlabel("strain (%)")
+    ax.set_ylabel("stress (MPa)")
+    ax.set_title(f"{group} — stress–strain")
+    ax.legend(loc="best", fontsize=7)
+    ax.grid(alpha=0.3)
+    fig.tight_layout()
+    return fig
+
+
 # --------------------------------------------------------------------------- #
 # Sidebar: parameter form                                                     #
 # --------------------------------------------------------------------------- #
@@ -412,6 +617,67 @@ def _param_form() -> None:
 
 
 # --------------------------------------------------------------------------- #
+# Sidebar: tensile controls                                                   #
+# --------------------------------------------------------------------------- #
+def _tensile_controls() -> dict:
+    """Render the sidebar tensile section; return the fibre→source map + params.
+
+    Like the image data source, tensile data can come from a local folder or
+    drag-and-drop uploads. Either way the result is ``tmap`` = ``{group: source}``
+    (a ``Path`` for the folder, an uploaded file for uploads), both of which feed
+    the polymorphic ``read_trace``. The tester logs only crosshead displacement
+    and force, so the gauge length sets the strain scale and the modulus window
+    the auto-fit width; these feed a tensile-specific config in ``main()`` (the
+    diameter knobs are untouched). Returns
+    ``{"tmap", "folder", "gauge_length_mm", "modulus_window"}``.
+    """
+    st.sidebar.markdown("### Tensile data")
+    source = st.sidebar.radio("tensile source", ["Local folder", "Upload"],
+                              horizontal=True, label_visibility="collapsed",
+                              key="tensile_source")
+    tmap: dict[str, object] = {}
+    folder: str | None = None
+    if source == "Local folder":
+        folder = st.sidebar.text_input(
+            "Tensile data folder", value=st.session_state.get("tensile_folder", ""))
+        st.session_state.tensile_folder = folder
+        if folder and Path(folder).is_dir():
+            try:
+                tmap = {g: Path(p)
+                        for g, p in _cached_discover_tensile(folder).items()}
+            except Exception as exc:  # noqa: BLE001
+                st.sidebar.warning(f"Could not scan tensile folder: {exc}")
+        elif folder:
+            st.sidebar.warning("Enter a valid tensile folder path.")
+    else:
+        ups = st.sidebar.file_uploader(
+            "Upload tensile files", type=["csv", "xls", "xlsx"],
+            accept_multiple_files=True, key="tensile_uploads")
+        if ups:
+            tmap = discover_tensile_files(ups)
+    if tmap:
+        st.sidebar.caption(f"{len(tmap)} tensile fibre(s) matched.")
+
+    gauge_length_mm = float(st.sidebar.number_input(
+        "Gauge length L₀ (mm)", min_value=0.1, value=float(DEFAULTS.gauge_length_mm),
+        step=1.0,
+        help="Grip separation; strain = displacement / L₀. The tester records "
+             "only displacement, so this sets the strain scale."))
+    modulus_window = float(st.sidebar.number_input(
+        "Modulus window (fraction)", min_value=0.02, max_value=0.5,
+        value=float(DEFAULTS.modulus_window), step=0.01,
+        help="Width of the sliding linear fit used to auto-detect the steepest "
+             "initial slope (Young's modulus), as a fraction of the rising "
+             "region."))
+    return {
+        "tmap": tmap,
+        "folder": folder or None,
+        "gauge_length_mm": gauge_length_mm,
+        "modulus_window": modulus_window,
+    }
+
+
+# --------------------------------------------------------------------------- #
 # Sidebar: data source -> list of replicate dicts                             #
 # --------------------------------------------------------------------------- #
 def _load_reps(cfg_items: tuple) -> tuple[list[dict], str | None, str | None]:
@@ -429,6 +695,7 @@ def _load_reps(cfg_items: tuple) -> tuple[list[dict], str | None, str | None]:
     reps: list[dict] = []
     group_label: str | None = None
     folder: str | None = None
+    st.session_state["image_uploads"] = []  # all uploaded images (for matrix export)
 
     if source == "Local folder":
         folder = st.sidebar.text_input("Image folder", value=st.session_state.get(
@@ -456,6 +723,7 @@ def _load_reps(cfg_items: tuple) -> tuple[list[dict], str | None, str | None]:
             "Upload images", type=["jpg", "jpeg", "png", "tif", "tiff", "bmp"],
             accept_multiple_files=True)
         if uploads:
+            st.session_state["image_uploads"] = list(uploads)
             groups = _group_by_name(list(uploads), key=lambda u: u.name)
             keys = sorted(groups, key=_group_sort_key)
             group_label = (st.sidebar.selectbox("Group", keys)
@@ -698,7 +966,8 @@ def _render_per_image_stats(reps: list[dict]) -> None:
         })
 
 
-def _render_group(reps: list[dict], cfg: CONFIG, group_label: str | None) -> None:
+def _render_group(reps: list[dict], cfg: CONFIG, group_label: str | None,
+                  tmap: dict) -> None:
     st.subheader("Group panel — registered mean ± std")
     profiles, dropped = [], []
     for rep in reps:
@@ -785,9 +1054,120 @@ def _render_group(reps: list[dict], cfg: CONFIG, group_label: str | None) -> Non
         "average the registered replicates, so their std = disagreement "
         "between replicates.")
 
+    _render_tensile(group_label, summary["mean_um"], cfg, tmap)
+
+
+def _manual_break_control(df, mean_um, cfg: CONFIG, group_label: str,
+                          auto, breaks: dict) -> object:
+    """Checkbox + strain slider to override the auto-detected fracture.
+
+    Returns the ``TensileResult`` to display: ``auto`` when manual mode is off,
+    or a recompute pinned to the user-chosen sample when on. Records the chosen
+    sample index in ``breaks[group_label]`` (or clears it) so the export matrix
+    honours the same break.
+    """
+    on = st.checkbox(
+        "Set break point manually", key=f"tbreak_on_{group_label}",
+        help="Override the auto-detected fracture; drag to the strain where the "
+             "fibre actually breaks. The export uses this break too.")
+    strain = np.asarray(auto.strain, dtype=float)
+    finite = strain[np.isfinite(strain)] * 100.0
+    lo = round(float(finite.min()), 3) if finite.size else 0.0
+    hi = round(float(finite.max()), 3) if finite.size else 0.0
+    if not on or finite.size < 2 or hi <= lo:
+        breaks.pop(group_label, None)
+        if on:
+            st.caption("Not enough distinct points to set a manual break.")
+        return auto
+
+    auto_pct = float(auto.strain_at_break * 100.0)
+    step = max(round((hi - lo) / 200.0, 3), 0.01)
+    skey = f"tbreak_strain_{group_label}"
+    if skey not in st.session_state or not (lo <= st.session_state[skey] <= hi):
+        st.session_state[skey] = float(min(max(auto_pct, lo), hi))
+    sel = st.slider("break at strain (%)", min_value=lo, max_value=hi,
+                    step=step, key=skey)
+
+    diffs = np.abs(strain - sel / 100.0)
+    diffs[~np.isfinite(diffs)] = np.inf
+    brk = int(np.argmin(diffs))
+    breaks[group_label] = brk
+    st.caption(f"Manual break at {sel:.2f}% strain (auto was {auto_pct:.2f}%). "
+               "Untick to restore automatic detection.")
+    return compute_tensile(df, diameter_um=mean_um,
+                           gauge_length_mm=cfg.gauge_length_mm, cfg=cfg,
+                           break_index=brk)
+
+
+def _render_tensile(group_label: str | None, mean_um: float, cfg: CONFIG,
+                    tmap: dict) -> None:
+    """Stress-strain subsection for the loaded fibre, joined by its group key.
+
+    ``tmap`` is the resolved ``{group: source}`` map from the sidebar (folder or
+    uploads). Uses the group's registered mean diameter for the cross-section,
+    so stress = force / area is tied to this fibre's own measurement. Degrades
+    gracefully: no data -> a hint; no matched fibre -> a caption; any read/parse
+    error -> ``st.error`` rather than a crashed page.
+    """
+    if not tmap or group_label is None:
+        st.caption("Set a tensile data folder or upload tensile files in the "
+                   "sidebar to see stress–strain.")
+        return
+    if group_label not in tmap:
+        st.caption(f"No tensile file matched fibre {group_label}.")
+        return
+
+    try:
+        df = read_trace(tmap[group_label])
+        auto = compute_tensile(df, diameter_um=mean_um,
+                               gauge_length_mm=cfg.gauge_length_mm, cfg=cfg)
+        st.subheader("Tensile (stress–strain)")
+
+        # manual break point: override the auto-detected fracture by dragging it
+        # along the strain axis; the choice is stored per fibre so the export
+        # matrix uses the same break the user picked here.
+        breaks = st.session_state.setdefault("tensile_breaks", {})
+        res = _manual_break_control(df, mean_um, cfg, group_label, auto, breaks)
+
+        fig = _tensile_fig(res)
+        st.pyplot(fig)
+        plt.close(fig)
+
+        c = st.columns(6)
+        c[0].metric("breaking force", f"{res.fmax_n * 1000:.2f} mN",
+                    help="Peak of the load trace (Fmax).")
+        c[1].metric("tensile strength",
+                    f"{res.tensile_strength_pa / 1e6:.1f} MPa"
+                    if np.isfinite(res.tensile_strength_pa) else "—",
+                    help="Fmax / cross-sectional area.")
+        c[2].metric("extension at break",
+                    f"{res.extension_at_break_mm:.3f} mm")
+        c[3].metric("strain at break", f"{res.strain_at_break * 100:.2f} %")
+        c[4].metric("Young's modulus",
+                    f"{res.youngs_modulus_pa / 1e9:.2f} GPa"
+                    if np.isfinite(res.youngs_modulus_pa) else "—")
+        c[5].metric("toughness",
+                    f"{res.toughness_j_m3 / 1e6:.2f} MJ/m³"
+                    if np.isfinite(res.toughness_j_m3) else "—")
+
+        area_um2 = res.area_m2 * 1e12 if np.isfinite(res.area_m2) else np.nan
+        d_txt = (f"{res.diameter_um:.2f} µm" if res.diameter_um is not None
+                 else "—")
+        a_txt = f"{area_um2:.1f} µm²" if np.isfinite(area_um2) else "—"
+        flag_txt = ("; flags: " + ", ".join(res.flags)) if res.flags else ""
+        st.caption(f"Diameter used: {d_txt}; cross-section area: {a_txt}"
+                   f"{flag_txt}.")
+        st.caption(
+            "stress = force / area (area from this fibre's mean measured "
+            "diameter), strain = displacement / L₀, modulus = steepest initial "
+            "slope of the curve, toughness = shaded area under the curve.")
+    except Exception as exc:  # noqa: BLE001
+        st.error(f"Tensile analysis failed for {group_label}: {exc}")
+
 
 def _render_export_batch(reps: list[dict], cfg: CONFIG, group_label: str | None,
-                         folder: str | None) -> None:
+                         folder: str | None, tmap: dict,
+                         cfg_items: tuple) -> None:
     st.divider()
     st.subheader("Export & batch")
     out_folder = st.text_input("Output folder",
@@ -813,32 +1193,53 @@ def _render_export_batch(reps: list[dict], cfg: CONFIG, group_label: str | None,
             except Exception as exc:  # noqa: BLE001
                 st.error(f"Export failed: {exc}")
 
+    image_uploads = st.session_state.get("image_uploads") or []
+    folder_ok = folder is not None and Path(folder or "").is_dir()
+
     with col_batch:
-        st.markdown("**Run batch (whole folder)**")
-        if edited_names:
-            st.warning("Run batch recomputes every image from disk and "
+        st.markdown("**Export all groups**")
+        st.caption("Measures every group in this session — the whole folder, or "
+                   "all uploaded images — and writes the full output tree + "
+                   "master_summary.csv (one row per group).")
+        jobs = (st.number_input("parallel jobs", min_value=1, max_value=16,
+                                 value=4, step=1) if folder_ok else 4)
+        if edited_names and folder_ok:
+            st.warning("Folder export recomputes every image from disk and "
                        "IGNORES the manual edits made here.")
-        jobs = st.number_input("parallel jobs", min_value=1, max_value=16, value=4, step=1)
-        disabled = folder is None or not Path(folder or "").is_dir()
-        if disabled:
-            st.caption("Batch needs the *Local folder* source.")
-        if st.button("Run batch", disabled=disabled, width="stretch"):
-            images = discover_images(folder)
-            if not images:
-                st.warning("No image files found in the folder.")
-                return
-            prog = st.progress(0.0, text=f"Measuring 0/{len(images)}…")
-            n = len(images)
-
-            def _cb(frac: float, _r: dict) -> None:
-                prog.progress(frac, text=f"Measuring {int(round(frac * n))}/{n}…")
-
+        elif edited_names:
+            st.info("Manual edits on the loaded group ARE kept; other groups are "
+                    "measured fresh.")
+        can_all = folder_ok or bool(image_uploads)
+        if not can_all:
+            st.caption("Needs a *Local folder* source or uploaded images.")
+        if st.button("Export all groups", disabled=not can_all, width="stretch"):
             try:
-                with st.spinner("Batch running…"):
-                    master, results = run_batch(images, out_folder, cfg, int(jobs), _cb)
-                prog.empty()
-                n_err = sum(1 for r in results if "error" in r)
-                st.success(f"Batch done: {len(results)} images, {n_err} errors → {out_folder}")
+                if folder_ok:
+                    images = discover_images(folder)
+                    if not images:
+                        st.warning("No image files found in the folder.")
+                        return
+                    n = len(images)
+                    prog = st.progress(0.0, text=f"Measuring 0/{n}…")
+
+                    def _cb(frac: float, _r: dict) -> None:
+                        prog.progress(frac, text=f"Measuring {int(round(frac * n))}/{n}…")
+
+                    with st.spinner("Exporting all groups…"):
+                        master, results = run_batch(images, out_folder, cfg, int(jobs), _cb)
+                    prog.empty()
+                    n_err = sum(1 for r in results if "error" in r)
+                    st.success(f"Exported {len(results)} images, {n_err} errors "
+                               f"→ {out_folder}")
+                else:
+                    grouped = _grouped_reps_from_uploads(image_uploads, cfg_items,
+                                                         reps, group_label)
+                    with st.spinner(f"Exporting {len(grouped)} groups "
+                                    f"({len(image_uploads)} images)…"):
+                        exported = export_all_groups(grouped, out_folder, cfg)
+                    mpath = Path(out_folder) / "summary" / "master_summary.csv"
+                    master = pd.read_csv(mpath) if mpath.exists() else pd.DataFrame()
+                    st.success(f"Exported {len(exported)} groups → {out_folder}")
                 if not master.empty:
                     st.dataframe(master, width="stretch")
                     st.download_button(
@@ -848,9 +1249,64 @@ def _render_export_batch(reps: list[dict], cfg: CONFIG, group_label: str | None,
                 else:
                     st.info("No groups aggregated (check filenames / coverage).")
             except Exception as exc:  # noqa: BLE001
-                prog.empty()
-                st.error(f"Batch failed: {exc}")
+                st.error(f"Export all groups failed: {exc}")
                 st.code(traceback.format_exc())
+
+    st.divider()
+    st.markdown("**Export tensile matrix (all fibres)**")
+    st.caption("Measures every image's diameter and joins each fibre's tensile "
+               "metrics into one row per fibre.")
+    img_ok = folder_ok or bool(image_uploads)
+    tns_ok = bool(tmap)
+    if not (img_ok and tns_ok):
+        st.caption("Needs an image source (Local folder or uploaded images) and "
+                   "tensile data (folder or uploads) set in the sidebar.")
+    if st.button("Build & export tensile matrix",
+                 disabled=not (img_ok and tns_ok), width="stretch"):
+        try:
+            if folder_ok:
+                # disk batch: writes the full output tree + master_summary
+                images = discover_images(folder)
+                if not images:
+                    st.warning("No image files found in the folder.")
+                    return
+                n = len(images)
+                prog = st.progress(0.0, text=f"Measuring 0/{n}…")
+
+                def _mcb(frac: float, _r: dict) -> None:
+                    prog.progress(frac, text=f"Measuring {int(round(frac * n))}/{n}…")
+
+                with st.spinner("Measuring all images…"):
+                    master, _ = run_batch(images, out_folder, cfg, int(jobs), _mcb)
+                prog.empty()
+                if master.empty:
+                    st.info("No groups aggregated (check filenames / coverage).")
+                    return
+                diameters = dict(zip(master["group"].astype(str),
+                                     master["mean_um"].astype(float)))
+            else:
+                # uploaded images: measure in-memory (no disk batch)
+                with st.spinner(f"Measuring {len(image_uploads)} uploaded images…"):
+                    diameters = _diameters_from_uploads(image_uploads, cfg_items)
+                if not diameters:
+                    st.info("No image groups could be measured from the uploads "
+                            "(check filenames / coverage).")
+                    return
+
+            breaks = st.session_state.get("tensile_breaks", {})
+            matrix = build_matrix(diameters, tmap, cfg, breaks=breaks)
+            out_path = Path(out_folder) / "summary" / "tensile_matrix.csv"
+            out_path.parent.mkdir(parents=True, exist_ok=True)
+            matrix.to_csv(out_path, index=False)
+            st.success(f"Wrote {out_path}")
+            st.dataframe(matrix, width="stretch")
+            st.download_button(
+                "Download tensile_matrix.csv",
+                matrix.to_csv(index=False).encode(),
+                file_name="tensile_matrix.csv", mime="text/csv")
+        except Exception as exc:  # noqa: BLE001
+            st.error(f"Tensile matrix export failed: {exc}")
+            st.code(traceback.format_exc())
 
 
 # --------------------------------------------------------------------------- #
@@ -872,6 +1328,12 @@ def main() -> None:
     # sidebar
     reps, group_label, folder = _load_reps(cfg_items)
     _param_form()
+    tensile = _tensile_controls()
+
+    # tensile-specific config: the diameter knobs stay as tuned; only the
+    # strain scale and modulus-fit width come from the tensile controls
+    tcfg = replace(cfg, gauge_length_mm=tensile["gauge_length_mm"],
+                   modulus_window=tensile["modulus_window"])
 
     # apply manual boundary edits once, right here: every downstream consumer
     # (overlay, profile plot, group registration, export) reads rep["mr"], so
@@ -894,8 +1356,8 @@ def main() -> None:
         with tab:
             _render_replicate(rep, cfg)
 
-    _render_group(reps, cfg, group_label)
-    _render_export_batch(reps, cfg, group_label, folder)
+    _render_group(reps, tcfg, group_label, tensile["tmap"])
+    _render_export_batch(reps, tcfg, group_label, folder, tensile["tmap"], cfg_items)
 
 
 if __name__ == "__main__":
