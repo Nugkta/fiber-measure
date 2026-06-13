@@ -106,6 +106,24 @@ class CONFIG:
     max_shift: int = 400       # bound on cross-correlation lag (px)
     min_corr: float = 0.3      # normalised corr-peak below this -> registration_uncertain
 
+    # --- tensile (stress-strain) analysis ---
+    # The tensile tester records only crosshead displacement (ΔL) and force, so
+    # strain = ΔL / gauge_length. Cross-section A = π(d/2)² uses the matched image
+    # group's measured mean diameter, tying the two batches together.
+    gauge_length_mm: float = 10.0  # grip separation L0; strain = disp_mm / this
+    modulus_window: float = 0.03   # sliding-fit width as a fraction of strain-to-peak
+    #                                (auto Young's modulus = steepest well-fit segment)
+    modulus_r2_min: float = 0.98   # min R² for a window to count as "linear"; the
+    #                                steepest qualifying window sets the modulus
+    # Fracture detection works on a median-smoothed load and a *robust* peak P
+    # (99.5th percentile, so a single post-test spike cannot become Fmax). The
+    # rupture is the first sudden collapse: the load falls by >= break_event_frac*P
+    # within break_window_mm of extension (catches brittle snaps even when grip
+    # friction leaves a high residual), OR drops below break_drop_frac*P outright.
+    break_window_mm: float = 0.05  # extension over which a catastrophic drop completes
+    break_event_frac: float = 0.50  # sudden fall (fraction of robust peak) = a snap
+    break_drop_frac: float = 0.20  # absolute collapse: load < this·P also marks fracture
+
     def px_to_um(self, px: float) -> float:
         """Convert a pixel length to microns using the calibration."""
         return px / self.ppu
