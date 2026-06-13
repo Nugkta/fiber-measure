@@ -1180,22 +1180,31 @@ def _render_tensile(group_label: str | None, mean_um: float, cfg: CONFIG,
         st.pyplot(fig)
         plt.close(fig)
 
-        c = st.columns(6)
-        c[0].metric("breaking force", f"{res.fmax_n * 1000:.2f} mN",
-                    help="Peak of the load trace (Fmax).")
-        c[1].metric("tensile strength",
-                    f"{res.tensile_strength_pa / 1e6:.1f} MPa"
-                    if np.isfinite(res.tensile_strength_pa) else "—",
-                    help="Fmax / cross-sectional area.")
-        c[2].metric("extension at break",
-                    f"{res.extension_at_break_mm:.3f} mm")
-        c[3].metric("strain at break", f"{res.strain_at_break * 100:.2f} %")
-        c[4].metric("Young's modulus",
-                    f"{res.youngs_modulus_pa / 1e9:.2f} GPa"
-                    if np.isfinite(res.youngs_modulus_pa) else "—")
-        c[5].metric("toughness",
-                    f"{res.toughness_j_m3 / 1e6:.2f} MJ/m³"
-                    if np.isfinite(res.toughness_j_m3) else "—")
+        # Six metrics in six narrow columns: shrink the value font so figures
+        # like "161.00 mN" are not clipped with an ellipsis. Scoped to this
+        # container's key so the diameter metrics elsewhere keep their size.
+        st.markdown(
+            "<style>.st-key-tensile_metrics [data-testid='stMetricValue']"
+            "{font-size:1.1rem;}.st-key-tensile_metrics "
+            "[data-testid='stMetricLabel']{font-size:0.8rem;}</style>",
+            unsafe_allow_html=True)
+        with st.container(key="tensile_metrics"):
+            c = st.columns(6)
+            c[0].metric("breaking force", f"{res.fmax_n * 1000:.2f} mN",
+                        help="Peak of the load trace (Fmax).")
+            c[1].metric("tensile strength",
+                        f"{res.tensile_strength_pa / 1e6:.1f} MPa"
+                        if np.isfinite(res.tensile_strength_pa) else "—",
+                        help="Fmax / cross-sectional area.")
+            c[2].metric("extension at break",
+                        f"{res.extension_at_break_mm:.3f} mm")
+            c[3].metric("strain at break", f"{res.strain_at_break * 100:.2f} %")
+            c[4].metric("Young's modulus",
+                        f"{res.youngs_modulus_pa / 1e9:.2f} GPa"
+                        if np.isfinite(res.youngs_modulus_pa) else "—")
+            c[5].metric("toughness",
+                        f"{res.toughness_j_m3 / 1e6:.2f} MJ/m³"
+                        if np.isfinite(res.toughness_j_m3) else "—")
 
         area_um2 = res.area_m2 * 1e12 if np.isfinite(res.area_m2) else np.nan
         d_txt = (f"{res.diameter_um:.2f} µm" if res.diameter_um is not None
