@@ -60,11 +60,13 @@ import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
 import imageio.v3 as iio  # noqa: E402
 import streamlit as st  # noqa: E402
+import streamlit.components.v1 as components  # noqa: E402
 
 from fibrecv import run_aggregate  # noqa: E402
 from fibrecv.compute import compute_measurement  # noqa: E402
 from fibrecv.config import CONFIG  # noqa: E402
-from fibrecv.io_utils import discover_images, natural_key, parse_name  # noqa: E402
+from fibrecv.io_utils import (  # noqa: E402
+    IMAGE_SUFFIXES, discover_images, natural_key, parse_name)
 from fibrecv.io_utils import load_rgb as _io_load_rgb  # noqa: E402
 from fibrecv.manual_edit import (  # noqa: E402
     apply_manual_edits, display_to_native, empty_edits, has_edits)
@@ -650,9 +652,15 @@ def _tensile_controls() -> dict:
         elif folder:
             st.sidebar.warning("Enter a valid tensile folder path.")
     else:
+        folder_mode = st.sidebar.checkbox(
+            "📁 upload a whole folder", key="tensile_folder_mode",
+            help="Make Browse open a folder chooser; non-tensile files are ignored.")
         ups = st.sidebar.file_uploader(
-            "Upload tensile files", type=["csv", "xls", "xlsx"],
+            "Upload tensile files",
+            type=None if folder_mode else ["csv", "xls", "xlsx"],
             accept_multiple_files=True, key="tensile_uploads")
+        if folder_mode:
+            _enable_folder_upload("Upload tensile files")
         if ups:
             tmap = discover_tensile_files(ups)
     if tmap:
@@ -680,6 +688,36 @@ def _tensile_controls() -> dict:
 # --------------------------------------------------------------------------- #
 # Sidebar: data source -> list of replicate dicts                             #
 # --------------------------------------------------------------------------- #
+def _enable_folder_upload(label: str) -> None:
+    """Let the ``st.file_uploader`` whose label contains ``label`` take a folder.
+
+    Sets ``webkitdirectory`` on that uploader's hidden ``<input type=file>`` from a
+    zero-height html component (same-origin, reaching the parent document). The
+    Browse button then opens a folder chooser and the browser hands back every
+    file inside; the caller keeps only the ones with the right extension.
+    """
+    js = """
+    <script>
+    const WANT = %s;
+    const doc = window.parent.document;
+    function apply() {
+      doc.querySelectorAll('[data-testid="stFileUploader"]').forEach(u => {
+        if ((u.innerText || "").includes(WANT)) {
+          const inp = u.querySelector('input[type="file"]');
+          if (inp) {
+            inp.setAttribute("webkitdirectory", "");
+            inp.setAttribute("directory", "");
+          }
+        }
+      });
+    }
+    apply(); setTimeout(apply, 150); setTimeout(apply, 500);
+    </script>
+    """ % json.dumps(label)
+    with st.sidebar:
+        components.html(js, height=0, width=0)
+
+
 def _load_reps(cfg_items: tuple) -> tuple[list[dict], str | None, str | None]:
     """Resolve the data-source controls to a list of replicate dicts.
 
@@ -719,9 +757,18 @@ def _load_reps(cfg_items: tuple) -> tuple[list[dict], str | None, str | None]:
             rgb = _cached_rgb_from_path(str(p), mtime)
             reps.append({"name": Path(p).stem, "rgb": rgb, "mr": mr, "idx": i})
     else:
+        folder_mode = st.sidebar.checkbox(
+            "📁 upload a whole folder", key="img_folder_mode",
+            help="Make Browse open a folder chooser and ingest every image inside. "
+                 "You can also drag a folder onto the box either way.")
         uploads = st.sidebar.file_uploader(
-            "Upload images", type=["jpg", "jpeg", "png", "tif", "tiff", "bmp"],
+            "Upload images",
+            type=None if folder_mode else ["jpg", "jpeg", "png", "tif", "tiff", "bmp"],
             accept_multiple_files=True)
+        if folder_mode:
+            _enable_folder_upload("Upload images")
+            uploads = [u for u in (uploads or [])
+                       if Path(u.name).suffix.lower() in IMAGE_SUFFIXES]
         if uploads:
             st.session_state["image_uploads"] = list(uploads)
             groups = _group_by_name(list(uploads), key=lambda u: u.name)
