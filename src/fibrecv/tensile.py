@@ -349,7 +349,7 @@ def compute_tensile(df: pd.DataFrame, diameter_um: float | None,
 
 def _find_fracture(disp: np.ndarray, load: np.ndarray,
                    cfg: CONFIG) -> tuple[int, bool]:
-    """Locate the rupture as the first sudden load collapse; return (index, found).
+    """Locate the rupture's onset (first sudden load collapse); return (index, found).
 
     A single tensile pull ends when the fibre snaps: the load drops sharply over a
     short extension. Two pitfalls make the naive "global max, then first sample
@@ -366,8 +366,12 @@ def _find_fracture(disp: np.ndarray, load: np.ndarray,
     the load has climbed past half of ``P``, then walk forward to the first sample
     where either the load has fallen by ``break_event_frac*P`` within
     ``break_window_mm`` of extension (a sudden collapse, whatever the residual) or
-    it has dropped below ``break_drop_frac*P`` outright. Gradual ductile declines
-    trip neither test, so they return ``(last, False)`` and are flagged upstream.
+    it has dropped below ``break_drop_frac*P`` outright. From that trigger we walk
+    back up the descent to its onset (the last sample before the plunge), so the
+    returned index sits a sliver before the vertical drop -- strain/extension-at-
+    break mark the rupture itself, not a point partway down the cliff. Gradual
+    ductile declines trip neither test, so they return ``(last, False)`` and are
+    flagged upstream.
     """
     n = load.size
     if n == 0:
@@ -391,7 +395,15 @@ def _find_fracture(disp: np.ndarray, load: np.ndarray,
             continue
         local_peak = float(np.nanmax(sm[k:j + 1]))
         if (local_peak - sm[j]) >= event or sm[j] < floor:
-            return j, True
+            # Report the break at the onset of the plunge -- the last sustained
+            # sample, a sliver before the vertical drop -- by walking back up the
+            # collapse to where the smoothed load stops descending. argmax over
+            # the whole trailing window would instead land wherever the plateau
+            # happened to peak, leaving a visible gap before the cliff.
+            top = j
+            while top > k and sm[top - 1] > sm[top]:
+                top -= 1
+            return top, True
     return n - 1, False
 
 
