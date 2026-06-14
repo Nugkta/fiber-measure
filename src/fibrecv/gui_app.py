@@ -526,7 +526,7 @@ def _tensile_fig(res):
         if brk + 1 < x.size:
             ax.plot(x[brk:], y[brk:], "-", lw=0.8, alpha=0.35, color="tab:blue")
         ax.scatter([x[brk]], [y[brk]], s=30, color="tab:red", zorder=6,
-                   label=f"break (Fmax = {res.fmax_n:.3f} N)")
+                   label="break point")
         _focus(x[:brk + 1], y[:brk + 1], brk + 1 < x.size)
         ax.set_xlabel("displacement (mm)")
         ax.set_ylabel("load (N)")
@@ -561,7 +561,7 @@ def _tensile_fig(res):
 
     # break point
     ax.scatter([x[brk]], [y[brk]], s=30, color="tab:red", zorder=6,
-               label=f"break (Fmax = {res.fmax_n:.3f} N)")
+               label="break point")
 
     _focus(x[:brk + 1], y[:brk + 1], brk + 1 < x.size)
     ax.set_xlabel("strain (%)")
@@ -1191,7 +1191,7 @@ def _render_tensile(group_label: str | None, mean_um: float, cfg: CONFIG,
         with st.container(key="tensile_metrics"):
             c = st.columns(6)
             c[0].metric("breaking force", f"{res.fmax_n * 1000:.2f} mN",
-                        help="Peak of the load trace (Fmax).")
+                        help="Maximum load reached before the break (Fmax).")
             c[1].metric("tensile strength",
                         f"{res.tensile_strength_pa / 1e6:.1f} MPa"
                         if np.isfinite(res.tensile_strength_pa) else "—",
