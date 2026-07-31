@@ -172,8 +172,9 @@ def apply_manual_edits(
     Nudges move each whole line first, then each anchor set independently
     redraws its own range (``corrected_segments``). Edited columns where both
     boundaries are finite and the diameter is positive get their flags cleared
-    to ``FLAG_OK`` (user override), then QC is re-run in full so smoothing,
-    coverage and confidence flags refresh.
+    to ``FLAG_OK`` (user override). Diameters are recomputed with the same
+    perpendicular (cos-tilt) definition as the detector, then QC is re-run in
+    full so smoothing, coverage and confidence flags refresh.
 
     Returns ``(new_mr, edited_top, edited_bot)``. ``mr`` is never mutated
     (cache-safe): new ``EdgeResult``/``QCResult``/``meta`` are built via
@@ -202,7 +203,9 @@ def apply_manual_edits(
     y_bot, eb = corrected_segments(y_bot, edits.get("bot", []), ramp)
     edited_bot |= eb
 
-    diameter = y_bot - y_top
+    m = float(mr.bnd.slope) if np.isfinite(mr.bnd.slope) else 0.0
+    cth = float(1.0 / np.sqrt(1.0 + m * m))
+    diameter = (y_bot - y_top) * cth  # perpendicular width, same as detect_edges
     ok = (
         (edited_top | edited_bot)
         & np.isfinite(y_top)

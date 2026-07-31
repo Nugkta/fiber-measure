@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import json
+import math
 from collections import Counter
+from dataclasses import replace
 
 import numpy as np
 import pytest
@@ -249,6 +251,20 @@ def test_one_sided_edit_stays_invalid():
     new_mr, _, _ = apply_manual_edits(mr, edits, cfg)
     assert not new_mr.res.valid[BAD].any()
     assert (new_mr.edg.flags[BAD] == FLAG_BAD_GRAD).all()
+
+
+def test_tilted_band_scales_edited_diameter():
+    """Edited diameters use the perpendicular definition: x cos(tilt)."""
+    cfg = CONFIG()
+    mr = _mr(cfg)
+    mr = replace(mr, bnd=replace(mr.bnd, slope=1.0))  # 45-degree band
+    edits = empty_edits()
+    edits["top"].append([(120.0, 100.0), (160.0, 100.0)])
+    edits["bot"].append([(120.0, 200.0), (160.0, 200.0)])
+    new_mr, _, _ = apply_manual_edits(mr, edits, cfg)
+    cth = 1.0 / math.sqrt(2.0)
+    assert new_mr.res.valid[BAD].all()
+    assert np.allclose(new_mr.res.diameter_raw[BAD], 100.0 * cth)
 
 
 def test_nudge_shifts_diameter():
