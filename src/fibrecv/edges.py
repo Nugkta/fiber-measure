@@ -103,6 +103,34 @@ def half_window_px(band: BandResult, cfg: CONFIG, H: int) -> int:
     return int(np.clip(hw, 8, H // 2))
 
 
+def _axis_average(D: np.ndarray, slope: float, wcol: int) -> np.ndarray:
+    """Column-neighbourhood average taken *along the fibre axis*.
+
+    Equivalent to ``uniform_filter1d(D, size=wcol, axis=1, mode="nearest")``
+    for a horizontal fibre, but on a tilted fibre each neighbour column ``k``
+    is sampled at the row offset ``slope * k`` (bilinear in y, borders
+    clipped), so the window follows the axis instead of cutting across the
+    boundary -- the tilt-smearing that otherwise widens both walls. For
+    ``slope != 0`` the window is the odd size ``2*(wcol//2) + 1``.
+    """
+    if not np.isfinite(slope) or slope == 0.0:
+        return uniform_filter1d(D, size=max(1, wcol), axis=1, mode="nearest")
+    H, W = D.shape
+    hw = max(1, wcol) // 2
+    rows = np.arange(H)[:, None]
+    cols = np.arange(W)[None, :]
+    acc = np.zeros((H, W), dtype=np.float32)
+    for k in range(-hw, hw + 1):
+        xs = np.clip(cols + k, 0, W - 1)
+        dy = slope * k
+        y0 = int(np.floor(dy))
+        f = dy - y0
+        ya = np.clip(rows + y0, 0, H - 1)
+        yb = np.clip(rows + y0 + 1, 0, H - 1)
+        acc += (1.0 - f) * D[ya, xs] + f * D[yb, xs]
+    return acc / float(2 * hw + 1)
+
+
 def _outer_crossing(d: np.ndarray, y_core: int, y_outer: int, level: float) -> float | None:
     """Sub-pixel index of the outermost crossing of ``level``.
 
