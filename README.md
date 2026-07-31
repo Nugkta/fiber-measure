@@ -13,6 +13,10 @@ Detection runs on a per-image *desaturation z-map*: the fibre desaturates the
 background colour, so thresholds are self-normalising per image and robust to
 illumination changes. Boundaries are placed by per-column edge detection with
 wall/shadow discrimination, followed by outlier rejection and smoothing.
+Diameters are measured perpendicular to the fibre axis: the per-column
+neighbourhood average follows the fitted centerline and the vertical chord is
+rescaled by cos(tilt), so inclined fibres (validated to ~45°) are not
+overestimated.
 
 ## Install
 
