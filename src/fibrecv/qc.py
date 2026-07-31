@@ -146,7 +146,11 @@ def run_qc(edges: EdgeResult, band: BandResult, cfg: CONFIG) -> QCResult:
     # desaturation band means the detector likely locked onto a sharp internal
     # feature inside a defocused blur band; far WIDER means it likely grabbed
     # a shadow/halo outside the fibre -> confident garbage either way, flag it
-    band_thickness = 2.0 * band.band_half
+    m = float(band.slope) if np.isfinite(band.slope) else 0.0
+    cth = float(1.0 / np.sqrt(1.0 + m * m))
+    # band_half is a vertical column count; x cos(tilt) converts it to the
+    # perpendicular frame the diameter is now reported in
+    band_thickness = 2.0 * band.band_half * cth
     med_diam = float(np.nanmedian(diameter_raw)) if valid.any() else np.nan
     band_mismatch = bool(
         np.isfinite(med_diam)

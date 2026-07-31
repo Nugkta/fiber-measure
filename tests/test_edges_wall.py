@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import math
+from dataclasses import replace
+
 import numpy as np
 
 from fibrecv.band import BandResult
@@ -94,3 +97,23 @@ def test_qc_accepts_consistent_diameter():
     edg, bnd = _qc_fixture(diameter_px=100.0, band_half=50.0)  # ratio 1.0
     res = run_qc(edg, bnd, cfg)
     assert not res.band_mismatch
+
+
+def test_qc_band_ratio_uses_perpendicular_frame():
+    """band_half is a vertical column count; on a 45-degree fibre it reads
+    1/cos wider than the perpendicular diameter. The ratio check must compare
+    like with like, or a legitimate tilted measurement gets flagged."""
+    cfg = CONFIG()
+    # true width 100 px at 45 deg: vertical band chord = 141.4 px,
+    # perpendicular diameter a bit narrow at 55 px -> ratio 0.55 in the
+    # perpendicular frame (fine), 0.39 uncorrected (false mismatch)
+    edg, bnd = _qc_fixture(diameter_px=55.0, band_half=70.71)
+    bnd = replace(bnd, slope=1.0)
+    res = run_qc(edg, bnd, cfg)
+    assert not res.band_mismatch
+
+    # a genuinely-too-narrow measurement still trips the guard
+    edg2, bnd2 = _qc_fixture(diameter_px=40.0, band_half=70.71)
+    bnd2 = replace(bnd2, slope=1.0)
+    res2 = run_qc(edg2, bnd2, cfg)
+    assert res2.band_mismatch
