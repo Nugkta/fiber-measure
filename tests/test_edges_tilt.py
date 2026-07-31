@@ -66,3 +66,22 @@ def test_axis_average_follows_the_axis():
     hw = wcol // 2
     interior = slice(hw, W - hw)
     assert np.allclose(A[:, interior], D[:, interior], atol=1e-6)
+
+
+def test_tilt_invariance_and_absolute_width():
+    """Median measured width must not drift with tilt (validated to 40 deg).
+
+    Tolerances: pairwise spread <= 2 % relative (widen to at most 3 % only if
+    the 0-degree reference itself sits within the absolute band below).
+    The absolute band is wide because the boundary level intentionally sits
+    partway down the smoothed wall (edge_z above local background), which on
+    this fixture reads systematically wide -- the property under test is
+    *invariance*, not absolute accuracy.
+    """
+    cfg = CONFIG()
+    meds = {a: _median_diameter_px(_inclined_fibre(float(a)), cfg)
+            for a in (0, 10, 20, 30, 40)}
+    ref = meds[0]
+    for a, v in meds.items():
+        assert v == pytest.approx(ref, rel=0.02), f"angle {a}: {v:.2f} vs {ref:.2f}"
+    assert TRUE_W * 0.95 <= ref <= TRUE_W * 1.35
