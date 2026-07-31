@@ -253,18 +253,33 @@ def test_one_sided_edit_stays_invalid():
     assert (new_mr.edg.flags[BAD] == FLAG_BAD_GRAD).all()
 
 
-def test_tilted_band_scales_edited_diameter():
-    """Edited diameters use the perpendicular definition: x cos(tilt)."""
+def test_tilted_edit_uses_edited_boundaries_not_stale_band_slope():
+    """cos(tilt) must come from the redrawn boundaries, not the failed band fit.
+
+    The band fit reports slope 0 (e.g. latched onto a horizontal reflection)
+    while the true fibre axis, redrawn by the user, runs at 45 degrees. The
+    reported diameter must be the perpendicular width from the *edited*
+    geometry: vertical chord 100 px x cos(45 deg).
+    """
     cfg = CONFIG()
     mr = _mr(cfg)
-    mr = replace(mr, bnd=replace(mr.bnd, slope=1.0))  # 45-degree band
+    x = np.arange(W, dtype=np.float32)
+    # true 45-degree geometry: vertical chord 100 px everywhere, NaN in BAD
+    y_top = 100.0 + x
+    y_bot = 200.0 + x
+    y_top[BAD] = np.nan
+    y_bot[BAD] = np.nan
+    mr = replace(mr, edg=replace(mr.edg, y_top=y_top, y_bot=y_bot,
+                                 diameter=y_bot - y_top))
+    # band fit is stale/wrong: slope 0 (the failure manual editing exists for)
+    assert mr.bnd.slope == 0.0
     edits = empty_edits()
-    edits["top"].append([(120.0, 100.0), (160.0, 100.0)])
-    edits["bot"].append([(120.0, 200.0), (160.0, 200.0)])
+    edits["top"].append([(120.0, 100.0 + 120.0), (160.0, 100.0 + 160.0)])
+    edits["bot"].append([(120.0, 200.0 + 120.0), (160.0, 200.0 + 160.0)])
     new_mr, _, _ = apply_manual_edits(mr, edits, cfg)
     cth = 1.0 / math.sqrt(2.0)
     assert new_mr.res.valid[BAD].all()
-    assert np.allclose(new_mr.res.diameter_raw[BAD], 100.0 * cth)
+    assert np.allclose(new_mr.res.diameter_raw[BAD], 100.0 * cth, atol=0.05)
 
 
 def test_nudge_shifts_diameter():
