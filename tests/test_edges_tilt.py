@@ -8,6 +8,7 @@ import numpy as np
 import pytest
 from scipy.ndimage import uniform_filter1d
 
+from fibrecv.band import tilt_geometry
 from fibrecv.compute import compute_measurement
 from fibrecv.config import CONFIG
 from fibrecv.edges import _axis_average
@@ -54,18 +55,42 @@ def test_axis_average_follows_the_axis():
     """A pattern constant along a 45-degree axis must survive axis-averaging.
 
     D[r, c] = 1 exactly on the line r = 10 + c. With slope=1 every sample in
-    the sheared window lands back on the line, so interior columns are
-    reproduced exactly; a straight column average would dilute the line to
-    ~1/wcol.
+    the sheared window lands back on the line, so ALL columns -- including
+    the image borders, where the window must extend along the axis rather
+    than smear vertically -- are reproduced exactly; a straight column
+    average would dilute the line to ~1/wcol.
     """
     H, W, wcol = 60, 41, 11
     D = np.zeros((H, W), dtype=np.float32)
     c = np.arange(W)
     D[10 + c, c] = 1.0
     A = _axis_average(D, 1.0, wcol)
-    hw = wcol // 2
-    interior = slice(hw, W - hw)
-    assert np.allclose(A[:, interior], D[:, interior], atol=1e-6)
+    assert np.allclose(A, D, atol=1e-6)
+
+
+def test_axis_average_even_wcol_keeps_exact_width():
+    """An even wcol must mean the same window in both branches (the sheared
+    path must not silently widen a user-configured even width to odd)."""
+    rng = np.random.default_rng(2)
+    D = rng.normal(size=(50, 80)).astype(np.float32)
+    ref = uniform_filter1d(D, size=40, axis=1, mode="nearest")
+    # a vanishingly small tilt takes the sheared path but is numerically
+    # indistinguishable from horizontal -- the result must match size=40
+    assert np.allclose(_axis_average(D, 1e-12, 40), ref, atol=1e-4)
+
+
+def test_tilt_geometry_clamps_and_handles_nan():
+    m, cth = tilt_geometry(float("nan"))
+    assert m == 0.0 and cth == 1.0
+    m, cth = tilt_geometry(0.3)
+    assert m == 0.3 and cth == pytest.approx(1.0 / math.sqrt(1.09))
+    # pathological band fits are clamped to 60 degrees, bounding every
+    # 1/cos(tilt) compensation at 2x
+    m, cth = tilt_geometry(1e9)
+    assert m == pytest.approx(math.tan(math.radians(60.0)))
+    assert cth == pytest.approx(0.5)
+    m, cth = tilt_geometry(-1e9)
+    assert m < 0.0 and cth == pytest.approx(0.5)
 
 
 def test_tilt_invariance_and_absolute_width():
@@ -80,7 +105,7 @@ def test_tilt_invariance_and_absolute_width():
     """
     cfg = CONFIG()
     meds = {a: _median_diameter_px(_inclined_fibre(float(a)), cfg)
-            for a in (0, 10, 20, 30, 40)}
+            for a in (0, 10, 20, 30, 40, 45)}
     ref = meds[0]
     for a, v in meds.items():
         assert v == pytest.approx(ref, rel=0.02), f"angle {a}: {v:.2f} vs {ref:.2f}"
