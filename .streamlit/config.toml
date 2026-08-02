@@ -17,7 +17,7 @@ showSidebarBorder = true
 baseRadius = "0.75rem"
 buttonRadius = "0.5rem"
 metricValueFontSize = "1.65rem"
-metricValueFontWeight = "600"
+metricValueFontWeight = 600
 
 [theme.sidebar]
 backgroundColor = "#FFFFFF"

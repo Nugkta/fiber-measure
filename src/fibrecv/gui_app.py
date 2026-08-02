@@ -766,23 +766,47 @@ def _enable_folder_upload(label: str) -> None:
     zero-height html component (same-origin, reaching the parent document). The
     Browse button then opens a folder chooser and the browser hands back every
     file inside; the caller keeps only the ones with the right extension.
+
+    A collapsed sidebar expander re-mounts the uploader's DOM on re-expand, which
+    drops the one-shot attribute. A ``MutationObserver`` on the parent document
+    re-applies it whenever a matching uploader (re)appears, so it survives both
+    client-side expander toggles (no Python rerun) and Streamlit reruns. The
+    observer is created once per label (guarded by a flag on ``window.parent``)
+    and cleaned up on iframe unload so a later re-creation of this component
+    (e.g. the folder-mode checkbox toggled off then on) gets a fresh observer
+    instead of being silently blocked by a stale flag.
     """
     js = """
     <script>
-    const WANT = %s;
-    const doc = window.parent.document;
-    function apply() {
-      doc.querySelectorAll('[data-testid="stFileUploader"]').forEach(u => {
-        if ((u.innerText || "").includes(WANT)) {
-          const inp = u.querySelector('input[type="file"]');
-          if (inp) {
-            inp.setAttribute("webkitdirectory", "");
-            inp.setAttribute("directory", "");
+    (function () {
+      const WANT = %s;
+      const doc = window.parent.document;
+      const FLAG = "__fcv_folder_observer_" + WANT;
+
+      function apply() {
+        doc.querySelectorAll('[data-testid="stFileUploader"]').forEach(u => {
+          if ((u.innerText || "").includes(WANT)) {
+            const inp = u.querySelector('input[type="file"]');
+            if (inp && !inp.hasAttribute("webkitdirectory")) {
+              inp.setAttribute("webkitdirectory", "");
+              inp.setAttribute("directory", "");
+            }
           }
-        }
-      });
-    }
-    apply(); setTimeout(apply, 150); setTimeout(apply, 500);
+        });
+      }
+
+      apply(); setTimeout(apply, 150); setTimeout(apply, 500);
+
+      if (!window.parent[FLAG]) {
+        window.parent[FLAG] = true;
+        const observer = new MutationObserver(apply);
+        observer.observe(doc.body, {childList: true, subtree: true});
+        window.addEventListener("unload", function () {
+          observer.disconnect();
+          window.parent[FLAG] = false;
+        });
+      }
+    })();
     </script>
     """ % json.dumps(label)
     with st.sidebar:
