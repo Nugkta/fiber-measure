@@ -46,6 +46,7 @@ from __future__ import annotations
 
 import io
 import json
+import re
 import traceback
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from dataclasses import replace
@@ -135,6 +136,53 @@ def _cfg_from_items(cfg_items: tuple) -> CONFIG:
         if k in d:
             d[k] = int(round(d[k]))
     return replace(CONFIG(), **d)
+
+
+# kind -> (format spec, unit suffix); the single source of display precision
+# for every metric/caption number in the app, so the same quantity is never
+# shown at two different precisions.
+_FMT_KINDS: dict[str, tuple[str, str]] = {
+    "um":     ("{:.2f}", " µm"),
+    "um2":    ("{:.1f}", " µm²"),
+    "cv":     ("{:.3f}", ""),
+    "coverage": ("{:.0%}", ""),
+    "px":     ("{:.0f}", " px"),
+    "ppu":    ("{:.4f}", ""),
+    "tilt":   ("{:.4f}", ""),
+    "mm":     ("{:.3f}", " mm"),
+    "mN":     ("{:.2f}", " mN"),
+    "GPa":    ("{:.2f}", " GPa"),
+    "MJ/m3":  ("{:.2f}", " MJ/m³"),
+    "MPa":    ("{:.1f}", " MPa"),
+    "one_dp": ("{:.1f}", ""),
+}
+
+
+def _fmt(value, kind: str, dash: str = "—") -> str:
+    """Format ``value`` per ``kind``'s entry in ``_FMT_KINDS``; ``None``/NaN -> ``dash``.
+
+    Centralises the precision + unit suffix used across metric cards, table
+    captions and the header chip, so a missing value always renders as the
+    same em-dash instead of "nan" or an inconsistent decimal count.
+    """
+    if value is None:
+        return dash
+    try:
+        fval = float(value)
+    except (TypeError, ValueError):
+        return dash
+    if not np.isfinite(fval):
+        return dash
+    fmt, suffix = _FMT_KINDS[kind]
+    return fmt.format(fval) + suffix
+
+
+def _safe_key(name: str) -> str:
+    """Sanitise a free-text name (e.g. an image filename) into a valid
+    Streamlit container key: alphanumerics, ``_`` and ``-`` only. Only used to
+    build container keys — never changes ``rep["name"]`` or any session-state
+    key derived from it."""
+    return re.sub(r"[^A-Za-z0-9_-]", "_", name)
 
 
 def _rgb_from_bytes(data: bytes) -> np.ndarray:
@@ -864,6 +912,43 @@ _CSS = """
 .st-key-tensile_metrics [data-testid="stMetricValue"] { font-size: 1.1rem; }
 .st-key-tensile_metrics [data-testid="stMetricLabel"] { font-size: 0.8rem; }
 
+/* ---- metric cards: st.container(key="metrics_rep_<name>"/"metrics_group")
+   -> class st-key-metrics_<name>; matched by prefix so this one rule covers
+   both. Each real st.metric widget inside becomes a bordered white card;
+   label is small/uppercase/grey, value is tabular-nums and contained
+   (min-width:0 + ellipsis) so a long number never grows or clips its column. */
+[class*="st-key-metrics_"] [data-testid="stMetric"] {
+    background: #FFFFFF;
+    border: 1px solid #E2E8F0;
+    border-radius: 0.6rem;
+    padding: 0.6rem 0.8rem;
+    min-width: 0;
+    overflow: hidden;
+}
+[class*="st-key-metrics_"] [data-testid="stMetricLabel"] {
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: #64748B;
+}
+[class*="st-key-metrics_"] [data-testid="stMetricValue"] {
+    font-variant-numeric: tabular-nums;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+/* primary metric (first column of the row) reads as the headline number */
+[class*="st-key-metrics_"] [data-testid="stColumn"]:first-of-type
+    [data-testid="stMetricValue"] { color: #660099; }
+
+/* ---- flags / registration status: the single metric wrapped in
+   st.container(key="status_ok_*"/"status_warn_*") gets its value coloured
+   green (good: no flags / registration ok) or amber (needs attention) ---- */
+[class*="st-key-status_ok"] [data-testid="stMetricValue"] { color: #15803D; }
+[class*="st-key-status_warn"] [data-testid="stMetricValue"] { color: #B45309; }
+
 /* ---- ellipsis containment: let any metric value wrap instead of being
    silently clipped when its column is narrow ---- */
 [data-testid="stMetricValue"] {
@@ -919,9 +1004,10 @@ def _render_header(group_label: str | None, n_reps: int, edge_z: float) -> None:
         chip = "no data loaded"
     else:
         reps_txt = f"{n_reps} replicate" + ("" if n_reps == 1 else "s")
-        chip = (f"group {group_label} · {reps_txt} · edge_z {edge_z:.1f}"
+        edge_z_txt = _fmt(edge_z, "one_dp")
+        chip = (f"group {group_label} · {reps_txt} · edge_z {edge_z_txt}"
                 if group_label else
-                f"{reps_txt} (ungrouped) · edge_z {edge_z:.1f}")
+                f"{reps_txt} (ungrouped) · edge_z {edge_z_txt}")
     st.markdown(
         '<div class="fcv-header">'
         '<h1>fibrecv — fibre diameter detection</h1>'
@@ -974,18 +1060,25 @@ def _render_replicate(rep: dict, cfg: CONFIG) -> None:
         flags.append("low_confidence")
     if res.band_mismatch:
         flags.append("band_mismatch")
-    c = st.columns(6)
-    c[0].metric("mean Ø", f"{mean_um:.2f} µm" if mean_um is not None else "—",
-                help="Mean diameter of this image, averaged along the fibre "
-                     "(valid columns only).")
-    c[1].metric("median Ø", f"{med:.2f} µm" if med is not None else "—")
-    c[2].metric("along-fibre std", f"{std_um:.2f} µm" if std_um is not None else "—",
-                help="Std of the diameter along this image's fibre — thickness "
-                     "variation within the picture, not disagreement between "
-                     "replicates (that is the group panel's std).")
-    c[3].metric("coverage", f"{res.coverage:.0%}")
-    c[4].metric("tilt slope", f"{bnd.slope:.4f}")
-    c[5].metric("flags", ", ".join(flags) if flags else "none")
+    flags_txt = ", ".join(flags) if flags else "none"
+    safe_name = _safe_key(rep["name"])
+    with st.container(key=f"metrics_rep_{safe_name}"):
+        c = st.columns(6)
+        c[0].metric("mean Ø", _fmt(mean_um, "um"),
+                    help="Mean diameter of this image, averaged along the fibre "
+                         "(valid columns only).")
+        c[1].metric("median Ø", _fmt(med, "um"))
+        c[2].metric("along-fibre std", _fmt(std_um, "um"),
+                    help="Std of the diameter along this image's fibre — thickness "
+                         "variation within the picture, not disagreement between "
+                         "replicates (that is the group panel's std).")
+        c[3].metric("coverage", _fmt(res.coverage, "coverage"))
+        c[4].metric("tilt slope", _fmt(bnd.slope, "tilt"))
+        status_key = (f"status_ok_flags_{safe_name}" if not flags
+                      else f"status_warn_flags_{safe_name}")
+        with c[5]:
+            with st.container(key=status_key):
+                st.metric("flags", flags_txt, help=f"Full flags: {flags_txt}")
 
     _render_edit_expander(rep)
 
@@ -1119,11 +1212,13 @@ def _render_edit_expander(rep: dict) -> None:
 
         n1, n2 = st.columns(2)
         new_nt = n1.number_input("Nudge top line (px, + = down)",
+                                 min_value=-200.0, max_value=200.0,
                                  value=float(edits["nudge_top"]), step=0.5,
-                                 key=f"nudgetop_{name}")
+                                 format="%.1f", key=f"nudgetop_{name}")
         new_nb = n2.number_input("Nudge bottom line (px, + = down)",
+                                 min_value=-200.0, max_value=200.0,
                                  value=float(edits["nudge_bot"]), step=0.5,
-                                 key=f"nudgebot_{name}")
+                                 format="%.1f", key=f"nudgebot_{name}")
         if new_nt != edits["nudge_top"] or new_nb != edits["nudge_bot"]:
             ed = st.session_state.manual_edits.setdefault(name, empty_edits())
             ed["nudge_top"], ed["nudge_bot"] = float(new_nt), float(new_nb)
@@ -1158,7 +1253,7 @@ def _render_per_image_stats(reps: list[dict]) -> None:
             "mean Ø (µm)": float(np.nanmean(d)) if ok else np.nan,
             "std (µm)": float(np.nanstd(d)) if ok else np.nan,
             "median Ø (µm)": float(np.nanmedian(d)) if ok else np.nan,
-            "coverage": mr.res.coverage,
+            "coverage (%)": mr.res.coverage * 100.0,
         })
     st.markdown("**Per-image statistics** — each picture's own fibre, before "
                 "registration")
@@ -1170,7 +1265,7 @@ def _render_per_image_stats(reps: list[dict]) -> None:
                 format="%.2f",
                 help="Thickness variation along this picture's fibre."),
             "median Ø (µm)": st.column_config.NumberColumn(format="%.2f"),
-            "coverage": st.column_config.NumberColumn(format="percent"),
+            "coverage (%)": st.column_config.NumberColumn(format="%.1f%%"),
         })
 
 
@@ -1193,7 +1288,8 @@ def _render_group(reps: list[dict], cfg: CONFIG,
             dropped.append(f"{mr.name} (band_mismatch)")
             continue
         if res.coverage < cfg.min_coverage:
-            dropped.append(f"{mr.name} (coverage {res.coverage:.0%} < {cfg.min_coverage:.0%})")
+            dropped.append(f"{mr.name} (coverage {_fmt(res.coverage, 'coverage')} "
+                           f"< {_fmt(cfg.min_coverage, 'coverage')})")
             continue
         W = rep["rgb"].shape[1]
         span = slice(bnd.x0, bnd.x1 + 1)
@@ -1241,26 +1337,31 @@ def _render_group(reps: list[dict], cfg: CONFIG,
         "replicates; band = ±1 std.")
 
     cv = summary["cv"]
-    c = st.columns(6)
-    c[0].metric("group mean Ø", f"{summary['mean_um']:.2f} µm",
-                help="Mean diameter across the replicates of this group, "
-                     "averaged along the aligned overlap region (where all "
-                     "replicates are present after registration).")
-    c[1].metric("between-replicate std", f"{summary['std_um']:.2f} µm",
-                help="At each aligned position, the std of the diameter across "
-                     "replicates; this is its average along the fibre. It "
-                     "measures replicate-to-replicate disagreement, not "
-                     "thickness variation along the fibre.")
-    c[2].metric("CV", f"{cv:.3f}" if np.isfinite(cv) else "—",
-                help="between-replicate std / group mean (dimensionless).")
-    c[3].metric("n reps used", f"{summary['n_replicates_used']}")
-    c[4].metric("overlap", f"{summary['overlap_px']} px",
-                help="Number of aligned columns where every replicate has data.")
-    c[5].metric("registration",
-                "uncertain" if summary["registration_uncertain"] else "ok",
-                help="'uncertain' = the cross-correlation peak was below "
-                     "min_corr for at least one replicate, so its shift was "
-                     "reset to 0.")
+    reg_uncertain = summary["registration_uncertain"]
+    with st.container(key="metrics_group"):
+        c = st.columns(6)
+        c[0].metric("group mean Ø", _fmt(summary["mean_um"], "um"),
+                    help="Mean diameter across the replicates of this group, "
+                         "averaged along the aligned overlap region (where all "
+                         "replicates are present after registration).")
+        c[1].metric("between-replicate std", _fmt(summary["std_um"], "um"),
+                    help="At each aligned position, the std of the diameter across "
+                         "replicates; this is its average along the fibre. It "
+                         "measures replicate-to-replicate disagreement, not "
+                         "thickness variation along the fibre.")
+        c[2].metric("CV", _fmt(cv, "cv"),
+                    help="between-replicate std / group mean (dimensionless).")
+        c[3].metric("reps used", f"{summary['n_replicates_used']}")
+        c[4].metric("overlap", _fmt(summary["overlap_px"], "px"),
+                    help="Number of aligned columns where every replicate has data.")
+        status_key = ("status_warn_registration" if reg_uncertain
+                      else "status_ok_registration")
+        with c[5]:
+            with st.container(key=status_key):
+                st.metric("registration", "uncertain" if reg_uncertain else "ok",
+                          help="'uncertain' = the cross-correlation peak was below "
+                               "min_corr for at least one replicate, so its shift "
+                               "was reset to 0.")
 
     _render_per_image_stats(reps)
     st.caption(
@@ -1354,26 +1455,22 @@ def _render_tensile(group_label: str | None, mean_um: float, cfg: CONFIG,
         # so figures like "161.00 mN" are not clipped with an ellipsis.
         with st.container(key="tensile_metrics"):
             c = st.columns(6)
-            c[0].metric("breaking force", f"{res.fmax_n * 1000:.2f} mN",
+            c[0].metric("breaking force", _fmt(res.fmax_n * 1000, "mN"),
                         help="Maximum load reached before the break (Fmax).")
             c[1].metric("tensile strength",
-                        f"{res.tensile_strength_pa / 1e6:.1f} MPa"
-                        if np.isfinite(res.tensile_strength_pa) else "—",
+                        _fmt(res.tensile_strength_pa / 1e6, "MPa"),
                         help="Fmax / cross-sectional area.")
             c[2].metric("extension at break",
-                        f"{res.extension_at_break_mm:.3f} mm")
+                        _fmt(res.extension_at_break_mm, "mm"))
             c[3].metric("strain at break", f"{res.strain_at_break * 100:.2f} %")
             c[4].metric("Young's modulus",
-                        f"{res.youngs_modulus_pa / 1e9:.2f} GPa"
-                        if np.isfinite(res.youngs_modulus_pa) else "—")
+                        _fmt(res.youngs_modulus_pa / 1e9, "GPa"))
             c[5].metric("toughness",
-                        f"{res.toughness_j_m3 / 1e6:.2f} MJ/m³"
-                        if np.isfinite(res.toughness_j_m3) else "—")
+                        _fmt(res.toughness_j_m3 / 1e6, "MJ/m3"))
 
         area_um2 = res.area_m2 * 1e12 if np.isfinite(res.area_m2) else np.nan
-        d_txt = (f"{res.diameter_um:.2f} µm" if res.diameter_um is not None
-                 else "—")
-        a_txt = f"{area_um2:.1f} µm²" if np.isfinite(area_um2) else "—"
+        d_txt = _fmt(res.diameter_um, "um")
+        a_txt = _fmt(area_um2, "um2")
         flag_txt = ("; flags: " + ", ".join(res.flags)) if res.flags else ""
         st.caption(f"Diameter used: {d_txt}; cross-section area: {a_txt}"
                    f"{flag_txt}.")
