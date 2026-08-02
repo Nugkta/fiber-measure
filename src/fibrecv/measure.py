@@ -98,7 +98,7 @@ def write_measurement(rgb, mr, cfg: CONFIG, out_root: str | Path) -> dict:
     # --- overlay PNG ---
     draw_overlay(
         rgb, edg.y_top, edg.y_bot, bnd.c_fit, res.valid,
-        paths["overlay"], bnd.x0, bnd.x1, thick=1,
+        paths["overlay"], bnd.x0, bnd.x1, thick=1, slope=bnd.slope,
     )
 
     # --- profile plot ---

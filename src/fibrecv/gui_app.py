@@ -797,8 +797,10 @@ def _render_replicate(rep: dict, cfg: CONFIG) -> None:
     edited_top, edited_bot = rep.get("edited_top"), rep.get("edited_bot")
     overlay = render_overlay(rgb, edg.y_top, edg.y_bot, bnd.c_fit, res.valid,
                              bnd.x0, bnd.x1, thick=1,
-                             edited_top=edited_top, edited_bot=edited_bot)
-    caption = f"{mr.name} — cyan top / yellow bottom / dashed centerline"
+                             edited_top=edited_top, edited_bot=edited_bot,
+                             slope=bnd.slope)
+    caption = (f"{mr.name} — cyan top / yellow bottom / dashed centerline / "
+               f"green = measured perpendicular diameter")
     if edited_top is not None or edited_bot is not None:
         caption += " / magenta = manual edit"
     st.image(overlay, width="stretch", caption=caption)
@@ -894,7 +896,7 @@ def _render_edit_expander(rep: dict) -> None:
         overlay_full = render_overlay(
             rgb, edg.y_top, edg.y_bot, bnd.c_fit, res.valid, bnd.x0, bnd.x1,
             thick=1, edited_top=rep.get("edited_top"),
-            edited_bot=rep.get("edited_bot"))
+            edited_bot=rep.get("edited_bot"), slope=bnd.slope)
         for i, anchor_set in enumerate(sets_cur):
             mark_anchors(overlay_full, anchor_set,
                          color=WHITE if i == active else GREY)

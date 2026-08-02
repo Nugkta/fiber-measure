@@ -16,9 +16,14 @@ Output
 - ``render_overlay(...)`` -> the full-resolution (H, W, 3) uint8 RGB array with
   the boundaries drawn on (pure; the GUI shows it directly via ``st.image``).
 - ``draw_overlay(...)`` renders that array and writes it as a lossless PNG.
+- ``draw_perp_chords(...)`` -> green measurement chords (used by the above).
 Boundaries: top in cyan, bottom in yellow, fitted centerline as a dashed grey
 line, drawn directly onto the pixel grid (no matplotlib rescaling) so edges can
-be checked pixel-for-pixel.
+be checked pixel-for-pixel. When a tilt ``slope`` is given, a few green chords
+show the exact perpendicular diameter being reported: each starts on the top
+boundary and runs perpendicular to the fibre axis for
+``(y_bot - y_top) * cos(theta)`` px, so its far end must land on the bottom
+boundary — a gap, overshoot or wrong angle exposes a tilt bug at a glance.
 
 Pos
 ---
@@ -34,11 +39,14 @@ from pathlib import Path
 import imageio.v3 as iio
 import numpy as np
 
+from .band import tilt_geometry
+
 CYAN = np.array([0, 255, 255], dtype=np.uint8)
 YELLOW = np.array([255, 255, 0], dtype=np.uint8)
 GREY = np.array([180, 180, 180], dtype=np.uint8)
 MAGENTA = np.array([255, 0, 255], dtype=np.uint8)  # manually corrected columns
 WHITE = np.array([255, 255, 255], dtype=np.uint8)
+GREEN = np.array([0, 230, 60], dtype=np.uint8)  # measured perpendicular chords
 
 
 def _stamp(img: np.ndarray, x: int, y: float, color: np.ndarray, thick: int = 1) -> None:
@@ -49,6 +57,80 @@ def _stamp(img: np.ndarray, x: int, y: float, color: np.ndarray, thick: int = 1)
     yc = int(round(y))
     lo, hi = max(0, yc - thick), min(H, yc + thick + 1)
     img[lo:hi, x] = color
+
+
+def _draw_segment(
+    img: np.ndarray,
+    xa: float,
+    ya: float,
+    xb: float,
+    yb: float,
+    color: np.ndarray,
+    brush: int = 2,
+) -> None:
+    """Stamp the straight segment (xa, ya)->(xb, yb), clipped to the image.
+
+    Dense point sampling with a square brush of side ``2*brush - 1`` px — no
+    matplotlib, so the overlay stays pixel-exact.
+    """
+    H, W = img.shape[:2]
+    n = int(2 * max(abs(xb - xa), abs(yb - ya))) + 2
+    xs = np.rint(np.linspace(xa, xb, n)).astype(int)
+    ys = np.rint(np.linspace(ya, yb, n)).astype(int)
+    for dy in range(-brush + 1, brush):
+        for dx in range(-brush + 1, brush):
+            xk, yk = xs + dx, ys + dy
+            ok = (xk >= 0) & (xk < W) & (yk >= 0) & (yk < H)
+            img[yk[ok], xk[ok]] = color
+
+
+def draw_perp_chords(
+    img: np.ndarray,
+    y_top: np.ndarray,
+    y_bot: np.ndarray,
+    valid: np.ndarray,
+    slope: float,
+    x0: int,
+    x1: int,
+    n_chords: int = 7,
+    color: np.ndarray = GREEN,
+    tick: int = 6,
+) -> None:
+    """Draw the measured perpendicular diameter at a few columns, in place.
+
+    At ``n_chords`` evenly spaced valid columns, a chord starts on the top
+    boundary and runs perpendicular to the (clamped) fibre axis for exactly the
+    reported length ``(y_bot - y_top) * cos(theta)``. Geometry check by eye:
+    the far end must land on the bottom boundary and the chord must cross the
+    fibre at a right angle — a gap, overshoot or skewed angle means the tilt
+    correction is wrong. ``tick``-px end bars run along the wall direction so
+    the touch-down points are easy to judge. Chords use the automatic band
+    tilt; manually edited columns re-fit their own slope for the number they
+    report, so a small end-gap on heavily edited stretches is expected.
+    """
+    if n_chords <= 0:
+        return
+    m, cth = tilt_geometry(slope)
+    sth = m * cth  # sin(theta), signed
+    hi = min(img.shape[1], x1 + 1, valid.size, y_top.size, y_bot.size)
+    xs = np.arange(max(0, x0), hi)
+    if xs.size == 0:
+        return
+    cand = xs[valid[xs] & np.isfinite(y_top[xs]) & np.isfinite(y_bot[xs])]
+    if cand.size == 0:
+        return
+    # interior sample positions: n_chords picks strictly between the span ends
+    idx = np.unique(np.round(np.linspace(0, cand.size - 1, n_chords + 2)
+                             ).astype(int)[1:-1])
+    for x in cand[idx]:
+        length = (y_bot[x] - y_top[x]) * cth
+        xa, ya = float(x), float(y_top[x])
+        xb, yb = xa - length * sth, ya + length * cth
+        _draw_segment(img, xa, ya, xb, yb, color)
+        if tick > 0:
+            for px, py in ((xa, ya), (xb, yb)):
+                _draw_segment(img, px - tick * cth, py - tick * sth,
+                              px + tick * cth, py + tick * sth, color)
 
 
 def render_overlay(
@@ -63,6 +145,8 @@ def render_overlay(
     *,
     edited_top: np.ndarray | None = None,
     edited_bot: np.ndarray | None = None,
+    slope: float | None = None,
+    n_chords: int = 7,
 ) -> np.ndarray:
     """Draw the boundaries onto a copy of ``rgb`` and return the uint8 array.
 
@@ -70,7 +154,9 @@ def render_overlay(
     in cyan, bottom in yellow and a dashed grey centerline, ready for either
     ``st.image`` (GUI) or ``imwrite`` (CLI via ``draw_overlay``). Columns marked
     in the optional ``edited_top``/``edited_bot`` bool masks (manual GUI
-    corrections) are drawn in magenta instead.
+    corrections) are drawn in magenta instead. When ``slope`` is given,
+    ``n_chords`` green perpendicular chords show the measured diameter
+    (``draw_perp_chords``).
     """
     img = (np.clip(rgb, 0, 1) * 255).astype(np.uint8).copy()
     W = img.shape[1]
@@ -83,6 +169,9 @@ def render_overlay(
             bot_c = MAGENTA if (edited_bot is not None and edited_bot[x]) else YELLOW
             _stamp(img, x, y_top[x], top_c, thick=thick)
             _stamp(img, x, y_bot[x], bot_c, thick=thick)
+    if slope is not None:
+        draw_perp_chords(img, y_top, y_bot, valid, slope, x0, x1,
+                         n_chords=n_chords)
     return img
 
 
@@ -114,9 +203,11 @@ def draw_overlay(
     x0: int,
     x1: int,
     thick: int = 1,
+    slope: float | None = None,
 ) -> None:
     """Render the boundary overlay and save it as a lossless PNG."""
-    img = render_overlay(rgb, y_top, y_bot, c_fit, valid, x0, x1, thick=thick)
+    img = render_overlay(rgb, y_top, y_bot, c_fit, valid, x0, x1, thick=thick,
+                         slope=slope)
     out_path = Path(out_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     iio.imwrite(out_path, img)

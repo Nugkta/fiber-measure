@@ -14,8 +14,9 @@ Inputs
 Output
 ------
 ``EdgeResult`` with float arrays ``y_top``, ``y_bot`` (sub-pixel boundary rows,
-NaN where invalid), ``diameter`` = ``y_bot - y_top``, plus per-column ``amp``
-(band amplitude A), ``y_core`` and integer ``flags`` for QC.
+NaN where invalid), ``diameter`` = ``(y_bot - y_top) * cos(tilt)`` -- the width
+perpendicular to the fibre axis -- plus per-column ``amp`` (band amplitude A),
+``y_core`` and integer ``flags`` for QC.
 
 Signal model & strictness logic
 -------------------------------
@@ -61,6 +62,20 @@ average of ``D`` to suppress iridescence banding, vertically smoothed):
 -> the crossing sits higher up the wall -> tighter. ``edge_frac`` caps the
 level for weak walls so the crossing stays on them.
 
+Tilt handling
+-------------
+The fibre may be inclined (validated to ~45 deg; slope from the robust
+centerline fit, clamped via ``band.tilt_geometry`` so a pathological fit
+cannot drive the compensations to extremes). Detection still scans vertical
+columns, but every tilt-sensitive quantity is compensated: the ``wcol``
+neighbourhood average follows the fibre axis (shear -> box filter ->
+unshear, so it never smears the boundary and extends along the axis at the
+image borders); ``sigma_y``, the wall slope gates and the ``guard`` row
+counts are rescaled by 1/cos(tilt) so smoothing, thresholds and the
+wall-local background zone stay calibrated in the perpendicular frame; and
+the vertical chord is multiplied by cos(tilt) to give the perpendicular
+diameter. All compensations are exact identities for a horizontal fibre.
+
 Pos
 ---
 Fourth stage of the per-image pipeline. Consumes ``features`` + ``band``,
@@ -69,12 +84,12 @@ produces the raw diameter profile that ``qc`` cleans and ``register`` aggregates
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 import numpy as np
 from scipy.ndimage import gaussian_filter1d, uniform_filter1d
 
-from .band import BandResult
+from .band import BandResult, tilt_geometry
 from .config import CONFIG
 
 # bit flags recorded per column (0 == clean)
@@ -90,7 +105,7 @@ FLAG_BAD_GRAD = 16      # could not find a usable crossing
 class EdgeResult:
     y_top: np.ndarray     # float (W,) sub-pixel top boundary, NaN if invalid
     y_bot: np.ndarray     # float (W,) sub-pixel bottom boundary, NaN if invalid
-    diameter: np.ndarray  # float (W,) y_bot - y_top, NaN if invalid
+    diameter: np.ndarray  # float (W,) perpendicular width = (y_bot-y_top)*cos(tilt), NaN if invalid
     amp: np.ndarray       # float (W,) band amplitude A (z units)
     y_core: np.ndarray    # float (W,) core row (argmax of smoothed D)
     flags: np.ndarray     # int   (W,) per-column QC bit flags
@@ -101,6 +116,42 @@ def half_window_px(band: BandResult, cfg: CONFIG, H: int) -> int:
     """Vertical search half-window from band thickness (clamped to image)."""
     hw = int(cfg.window_thick_mult * 2.0 * band.band_half + cfg.window_pad + 3 * cfg.guard)
     return int(np.clip(hw, 8, H // 2))
+
+
+def _vshift(D: np.ndarray, dy: np.ndarray) -> np.ndarray:
+    """Sample each column at rows ``r + dy[x]`` (bilinear in y, edge rows
+    replicated). One vectorised gather -- no per-offset Python loop."""
+    H, W = D.shape
+    ys = np.arange(H, dtype=np.float32)[:, None] + dy[None, :]
+    y0 = np.floor(ys).astype(np.int32)
+    f = (ys - y0).astype(np.float32)
+    ya = np.clip(y0, 0, H - 1)
+    yb = np.clip(y0 + 1, 0, H - 1)
+    cols = np.arange(W, dtype=np.int32)[None, :]
+    return (1.0 - f) * D[ya, cols] + f * D[yb, cols]
+
+
+def _axis_average(D: np.ndarray, slope: float, wcol: int) -> np.ndarray:
+    """Column-neighbourhood average taken *along the fibre axis*.
+
+    Equivalent to ``uniform_filter1d(D, size=wcol, axis=1, mode="nearest")``
+    for a horizontal fibre, but on a tilted fibre the neighbourhood follows
+    the axis instead of cutting across the boundary -- the tilt-smearing that
+    otherwise widens both walls. Implemented as shear -> horizontal box
+    filter -> unshear (three vectorised passes, cost independent of
+    ``wcol``): the shear samples each column at the row offset
+    ``slope * (x - xc)``, so the box filter's "nearest" padding extends the
+    profile *along the axis* at the left/right image borders rather than
+    smearing vertically, and an even ``wcol`` keeps its exact width.
+    """
+    if not np.isfinite(slope) or slope == 0.0:
+        return uniform_filter1d(D, size=max(1, wcol), axis=1, mode="nearest")
+    H, W = D.shape
+    xc = 0.5 * (W - 1)
+    dy = ((np.arange(W, dtype=np.float32) - xc) * slope).astype(np.float32)
+    sheared = _vshift(D, dy)
+    avg = uniform_filter1d(sheared, size=max(1, wcol), axis=1, mode="nearest")
+    return _vshift(avg, -dy).astype(np.float32)
 
 
 def _outer_crossing(d: np.ndarray, y_core: int, y_outer: int, level: float) -> float | None:
@@ -252,6 +303,19 @@ def _detect_column(d: np.ndarray, g: np.ndarray, cfg: CONFIG,
 def detect_edges(D: np.ndarray, band: BandResult, cfg: CONFIG) -> EdgeResult:
     """Run the tight-inner-edge recipe over every column in the band span."""
     H, W = D.shape
+
+    # tilt geometry: report the width perpendicular to the fibre axis and
+    # keep the calibrated recipe stable in the perpendicular frame (slope
+    # from the robust centerline fit, clamped by tilt_geometry so a
+    # pathological fit cannot drive the compensations to extremes; the
+    # vertical scan itself is unchanged)
+    m, cth = tilt_geometry(band.slope)
+
+    # guard is a vertical row count (wall-local background zone + scan
+    # extension); stretch it by 1/cos(tilt) like every other vertical length
+    # so it keeps its calibrated *perpendicular* size on a tilted fibre
+    cfg = replace(cfg, guard=max(1, round(cfg.guard / cth)))
+
     hw = half_window_px(band, cfg, H)
 
     # plateau-bridging length for the wall finder, scaled to the fibre size so
@@ -259,10 +323,13 @@ def detect_edges(D: np.ndarray, band: BandResult, cfg: CONFIG) -> EdgeResult:
     bh = band.band_half if np.isfinite(band.band_half) else 0.0
     gap = int(np.clip(round(cfg.wall_gap_frac * 2.0 * bh), 4, 16))
 
-    # column-neighbourhood average, then vertical smoothing + gradient (vectorised)
-    Davg = uniform_filter1d(D, size=max(1, cfg.wcol), axis=1, mode="nearest")
-    Dsm = gaussian_filter1d(Davg, sigma=cfg.sigma_y, axis=0, mode="nearest")
-    G = np.gradient(Dsm, axis=0)
+    # column-neighbourhood average along the fibre axis, then vertical
+    # smoothing + gradient; sigma and slopes are rescaled by 1/cos(tilt) so
+    # smoothing width and the wall slope gates keep their calibrated
+    # *perpendicular* values on a tilted fibre (identities at zero tilt)
+    Davg = _axis_average(D, m, max(1, cfg.wcol))
+    Dsm = gaussian_filter1d(Davg, sigma=cfg.sigma_y / cth, axis=0, mode="nearest")
+    G = np.gradient(Dsm, axis=0) / cth
 
     y_top = np.full(W, np.nan, dtype=np.float32)
     y_bot = np.full(W, np.nan, dtype=np.float32)
@@ -289,7 +356,7 @@ def detect_edges(D: np.ndarray, band: BandResult, cfg: CONFIG) -> EdgeResult:
         y_top[x] = y_lo + top
         y_bot[x] = y_lo + bot
 
-    diameter = y_bot - y_top
+    diameter = (y_bot - y_top) * cth
     return EdgeResult(
         y_top=y_top,
         y_bot=y_bot,

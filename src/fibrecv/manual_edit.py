@@ -38,8 +38,10 @@ from dataclasses import replace
 from typing import TYPE_CHECKING, Sequence
 
 import numpy as np
+from scipy.stats import theilslopes
 
 from . import qc as qc_mod
+from .band import tilt_geometry
 from .config import CONFIG
 from .edges import FLAG_OK
 
@@ -172,8 +174,11 @@ def apply_manual_edits(
     Nudges move each whole line first, then each anchor set independently
     redraws its own range (``corrected_segments``). Edited columns where both
     boundaries are finite and the diameter is positive get their flags cleared
-    to ``FLAG_OK`` (user override), then QC is re-run in full so smoothing,
-    coverage and confidence flags refresh.
+    to ``FLAG_OK`` (user override). Diameters are recomputed with the same
+    perpendicular (cos-tilt) definition as the detector, with the tilt
+    refitted from the edited boundaries themselves (the automatic band fit
+    cannot be trusted on images that needed manual correction), then QC is
+    re-run in full so smoothing, coverage and confidence flags refresh.
 
     Returns ``(new_mr, edited_top, edited_bot)``. ``mr`` is never mutated
     (cache-safe): new ``EdgeResult``/``QCResult``/``meta`` are built via
@@ -202,7 +207,17 @@ def apply_manual_edits(
     y_bot, eb = corrected_segments(y_bot, edits.get("bot", []), ramp)
     edited_bot |= eb
 
-    diameter = y_bot - y_top
+    # tilt from the *edited* boundaries themselves: manual editing exists for
+    # images where the automatic band fit failed, so its slope cannot be
+    # trusted here; the redrawn centerline carries the true axis
+    center = (y_top + y_bot) / 2.0
+    fin = np.where(np.isfinite(center))[0]
+    if fin.size >= 10:
+        slope_est, _, _, _ = theilslopes(center[fin], fin)
+    else:
+        slope_est = mr.bnd.slope
+    _, cth = tilt_geometry(slope_est)
+    diameter = (y_bot - y_top) * cth  # perpendicular width, same definition as detect_edges
     ok = (
         (edited_top | edited_bot)
         & np.isfinite(y_top)

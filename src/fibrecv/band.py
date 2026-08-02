@@ -50,6 +50,25 @@ class BandResult:
     n_components: int         # labelled components in the coarse mask (diagnostic)
 
 
+# clamp for the tilt compensations: beyond ~45 deg the vertical-scan recipe
+# is out of its validated range, so cap the geometry at 60 deg rather than
+# letting a pathological slope fit drive the sigma/gradient/diameter scaling
+# in ``edges``/``qc``/``manual_edit`` to extremes
+TAN_TILT_MAX = 1.7320508075688772  # tan(60 deg)
+
+
+def tilt_geometry(slope: float) -> tuple[float, float]:
+    """(clamped slope, cos(tilt)) for the perpendicular-frame compensations.
+
+    Single source of the tilt maths used by ``edges``, ``qc`` and
+    ``manual_edit`` so the three consumers cannot drift apart. Non-finite
+    slopes count as horizontal; |slope| is clamped to ``TAN_TILT_MAX``.
+    """
+    m = float(slope) if np.isfinite(slope) else 0.0
+    m = float(np.clip(m, -TAN_TILT_MAX, TAN_TILT_MAX))
+    return m, float(1.0 / np.sqrt(1.0 + m * m))
+
+
 def coarse_mask(D: np.ndarray, cfg: CONFIG) -> np.ndarray:
     """Threshold ``D > k_band``, bridge specular gaps, drop small objects."""
     raw = D > cfg.k_band
