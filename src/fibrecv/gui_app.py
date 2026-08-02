@@ -789,6 +789,143 @@ def _load_reps(cfg_items: tuple) -> tuple[list[dict], str | None, str | None]:
 
 
 # --------------------------------------------------------------------------- #
+# Theme: CSS, slim header, jump menu                                          #
+# --------------------------------------------------------------------------- #
+# Most colours/radii live in .streamlit/config.toml (Streamlit's own theme
+# engine); this constant covers what that engine cannot reach: the custom
+# header/chip markup, section-card framing around the existing
+# st.container(key=...) pattern, the fixed jump nav, and a chrome backstop.
+_CSS = """
+<style>
+/* ---- chrome backstop: config.toml's toolbarMode="minimal" hides most of
+   this already; kept as a belt-and-braces override ---- */
+#MainMenu, footer, [data-testid="stDecoration"],
+[data-testid="stAppDeployButton"] { display: none !important; }
+
+/* ---- slim header + state chip (see _render_header) ---- */
+.fcv-header {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 0.6rem 1rem;
+    padding-bottom: 0.6rem;
+    margin-bottom: 1rem;
+    border-bottom: 1px solid #E2E8F0;
+}
+.fcv-header h1 {
+    font-size: 1.4rem;
+    font-weight: 700;
+    color: #0F172A;
+    margin: 0;
+}
+.fcv-header .fcv-sub {
+    font-size: 0.85rem;
+    color: #64748B;
+}
+.fcv-chip {
+    margin-left: auto;
+    padding: 0.2rem 0.7rem;
+    border-radius: 999px;
+    background: #F3E8FF;
+    color: #660099;
+    font-size: 0.8rem;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+/* ---- section cards: st.container(key="card_...") -> class st-key-card_NN */
+[class*="st-key-card_"] {
+    background: #FFFFFF;
+    border: 1px solid #E2E8F0;
+    border-radius: 0.75rem;
+    padding: 1.1rem 1.4rem 1.4rem;
+    margin-bottom: 1.2rem;
+}
+
+/* ---- tensile metrics: shrink the value font so figures like "161.00 mN"
+   don't ellipsis in six narrow columns (moved from the inline <style> that
+   used to sit next to st.container(key="tensile_metrics")) ---- */
+.st-key-tensile_metrics [data-testid="stMetricValue"] { font-size: 1.1rem; }
+.st-key-tensile_metrics [data-testid="stMetricLabel"] { font-size: 0.8rem; }
+
+/* ---- ellipsis containment: let any metric value wrap instead of being
+   silently clipped when its column is narrow ---- */
+[data-testid="stMetricValue"] {
+    overflow: visible;
+    white-space: normal;
+    text-overflow: clip;
+}
+
+/* ---- jump menu: fixed right-hand nav, hidden below 1200px ---- */
+.fcv-jump {
+    position: fixed;
+    top: 5.5rem;
+    right: 1rem;
+    z-index: 999;
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+    padding: 0.6rem 0.9rem;
+    background: #FFFFFF;
+    border: 1px solid #E2E8F0;
+    border-radius: 0.75rem;
+    font-size: 0.8rem;
+}
+.fcv-jump a { color: #660099; text-decoration: none; }
+.fcv-jump a:hover { text-decoration: underline; }
+@media (max-width: 1200px) {
+    .fcv-jump { display: none; }
+}
+
+/* anchored headings (card subheaders) land below the fixed header on jump */
+h1, h2, h3 { scroll-margin-top: 4.5rem; }
+</style>
+"""
+
+
+def _inject_css() -> None:
+    """Emit ``_CSS`` once per run; called first thing in ``main()``."""
+    st.markdown(_CSS, unsafe_allow_html=True)
+
+
+def _render_header(group_label: str | None, n_reps: int, edge_z: float) -> None:
+    """Slim header + state chip, replacing ``st.title``/``st.caption``.
+
+    Must run after the sidebar builders (``_load_reps`` etc.) since the chip
+    needs group state. Contains the literal "fibrecv" the external
+    screenshot harness waits on (``text=fibrecv``).
+    """
+    if group_label:
+        reps_txt = f"{n_reps} replicate" + ("" if n_reps == 1 else "s")
+        chip = f"group {group_label} · {reps_txt} · edge_z {edge_z:.1f}"
+    else:
+        chip = "no data loaded"
+    st.markdown(
+        '<div class="fcv-header">'
+        '<h1>fibrecv — fibre diameter detection</h1>'
+        '<span class="fcv-sub">Local preview / tuning / batch / export over '
+        'the validated pipeline.</span>'
+        f'<span class="fcv-chip">{chip}</span>'
+        '</div>',
+        unsafe_allow_html=True)
+
+
+def _render_jump_menu() -> None:
+    """Fixed right-hand nav to the four card anchors; only called once data
+    is loaded. If a target anchor did not render (e.g. card 03 is skipped
+    because no group mean is available), its link is simply inert — the
+    nav itself still degrades gracefully rather than erroring."""
+    st.markdown(
+        '<nav class="fcv-jump">'
+        '<a href="#replicates">01 Replicates</a>'
+        '<a href="#group-panel">02 Group panel</a>'
+        '<a href="#tensile">03 Tensile</a>'
+        '<a href="#export">04 Export &amp; batch</a>'
+        '</nav>',
+        unsafe_allow_html=True)
+
+
+# --------------------------------------------------------------------------- #
 # Main-area renderers                                                         #
 # --------------------------------------------------------------------------- #
 def _render_replicate(rep: dict, cfg: CONFIG) -> None:
@@ -1015,9 +1152,17 @@ def _render_per_image_stats(reps: list[dict]) -> None:
         })
 
 
-def _render_group(reps: list[dict], cfg: CONFIG, group_label: str | None,
-                  tmap: dict) -> None:
-    st.subheader("Group panel — registered mean ± std")
+def _render_group(reps: list[dict], cfg: CONFIG,
+                  group_label: str | None) -> float | None:
+    """Registered mean ± std group panel; renders inside card 02.
+
+    Returns the group's registered mean diameter (µm) so ``main()`` can gate
+    card 03 (Tensile) on it — ``None`` on either early-return path (no
+    replicate passed QC, or registration raised), matching exactly what used
+    to gate the inline ``_render_tensile`` call this function made itself.
+    The "Group panel" heading now lives in main()'s card-02 subheader; this
+    function no longer renders its own.
+    """
     profiles, dropped = [], []
     for rep in reps:
         mr = rep["mr"]
@@ -1043,7 +1188,7 @@ def _render_group(reps: list[dict], cfg: CONFIG, group_label: str | None,
     if not profiles:
         st.warning("No replicate passed QC (coverage / band_mismatch); nothing to register.")
         _render_per_image_stats(reps)
-        return
+        return None
     # sort with the same key register_sample uses, so zip(profiles, shifts)
     # below is order-aligned (replicate-keyed dicts would silently collide for
     # ungrouped uploads that share the idx+1 fallback number)
@@ -1053,7 +1198,7 @@ def _render_group(reps: list[dict], cfg: CONFIG, group_label: str | None,
     except Exception as exc:  # noqa: BLE001
         st.error(f"Registration failed: {exc}")
         _render_per_image_stats(reps)
-        return
+        return None
     assert all(s["replicate"] == p["replicate"] for p, s in zip(profiles, shifts))
 
     rep_curves = [(p["replicate"], p["x"] + s["shift_px"],
@@ -1103,7 +1248,7 @@ def _render_group(reps: list[dict], cfg: CONFIG, group_label: str | None,
         "average the registered replicates, so their std = disagreement "
         "between replicates.")
 
-    _render_tensile(group_label, summary["mean_um"], cfg, tmap)
+    return summary["mean_um"]
 
 
 def _manual_break_control(df, mean_um, cfg: CONFIG, group_label: str,
@@ -1182,14 +1327,9 @@ def _render_tensile(group_label: str | None, mean_um: float, cfg: CONFIG,
         st.pyplot(fig)
         plt.close(fig)
 
-        # Six metrics in six narrow columns: shrink the value font so figures
-        # like "161.00 mN" are not clipped with an ellipsis. Scoped to this
-        # container's key so the diameter metrics elsewhere keep their size.
-        st.markdown(
-            "<style>.st-key-tensile_metrics [data-testid='stMetricValue']"
-            "{font-size:1.1rem;}.st-key-tensile_metrics "
-            "[data-testid='stMetricLabel']{font-size:0.8rem;}</style>",
-            unsafe_allow_html=True)
+        # Six metrics in six narrow columns: the value font is shrunk (scoped
+        # to this container's key, see _CSS's ".st-key-tensile_metrics" rules)
+        # so figures like "161.00 mN" are not clipped with an ellipsis.
         with st.container(key="tensile_metrics"):
             c = st.columns(6)
             c[0].metric("breaking force", f"{res.fmax_n * 1000:.2f} mN",
@@ -1226,8 +1366,9 @@ def _render_tensile(group_label: str | None, mean_um: float, cfg: CONFIG,
 def _render_export_batch(reps: list[dict], cfg: CONFIG, group_label: str | None,
                          folder: str | None, tmap: dict,
                          cfg_items: tuple) -> None:
-    st.divider()
-    st.subheader("Export & batch")
+    """Export/batch subsection; renders inside card 04 (main() owns the
+    "04 Export & batch" heading, so the leading divider + subheader this
+    function used to render itself are gone)."""
     out_folder = st.text_input("Output folder",
                                value=st.session_state.get("out_folder", "./fibrecv_output"))
     st.session_state.out_folder = out_folder
@@ -1376,17 +1517,20 @@ def main() -> None:
     st.session_state.setdefault("form_version", 0)
     st.session_state.setdefault("manual_edits", {})  # image name -> edits dict
 
-    st.title("fibrecv — fibre diameter detection")
-    st.caption("Local preview / tuning / batch / export over the validated pipeline. "
-               f"Strictness knob edge_z = {st.session_state.cfg_dict['edge_z']}.")
+    _inject_css()
 
     cfg_items = _cfg_items(st.session_state.cfg_dict)
     cfg = _cfg_from_items(cfg_items)
 
-    # sidebar
+    # sidebar — _load_reps must run first: the smoke test's
+    # at.sidebar.text_input[0] is the "Image folder" field it renders
     reps, group_label, folder = _load_reps(cfg_items)
     _param_form()
     tensile = _tensile_controls()
+
+    # header renders after the sidebar builders since its state chip needs
+    # the group/replicate state they just produced
+    _render_header(group_label, len(reps), cfg.edge_z)
 
     # tensile-specific config: the diameter knobs stay as tuned; only the
     # strain scale and modulus-fit width come from the tensile controls
@@ -1407,15 +1551,34 @@ def main() -> None:
         st.info("Pick a folder + group, or upload images, to begin.")
         return
 
-    st.subheader(f"Replicates — group {group_label}" if group_label else "Replicates (uploaded)")
-    tabs = st.tabs([f"_{r['mr'].replicate}" if r["mr"].replicate is not None else r["name"]
-                    for r in reps])
-    for tab, rep in zip(tabs, reps):
-        with tab:
-            _render_replicate(rep, cfg)
+    _render_jump_menu()
 
-    _render_group(reps, tcfg, group_label, tensile["tmap"])
-    _render_export_batch(reps, tcfg, group_label, folder, tensile["tmap"], cfg_items)
+    with st.container(key="card_01"):
+        st.subheader(
+            f"01 Replicates — group {group_label}" if group_label
+            else "01 Replicates (uploaded)", anchor="replicates")
+        tabs = st.tabs([f"Rep {r['mr'].replicate}" if r["mr"].replicate is not None
+                        else r["name"] for r in reps])
+        for tab, rep in zip(tabs, reps):
+            with tab:
+                _render_replicate(rep, cfg)
+
+    with st.container(key="card_02"):
+        st.subheader("02 Group panel", anchor="group-panel")
+        st.caption("Registered mean ± std across the group's aligned replicates.")
+        mean_um = _render_group(reps, tcfg, group_label)
+
+    # card 03 (Tensile) only when the group panel produced a mean — identical
+    # gating to the pre-redesign code, where _render_tensile was called from
+    # inside _render_group only on its non-early-return path
+    if mean_um is not None:
+        with st.container(key="card_03"):
+            st.subheader("03 Tensile", anchor="tensile")
+            _render_tensile(group_label, mean_um, tcfg, tensile["tmap"])
+
+    with st.container(key="card_04"):
+        st.subheader("04 Export & batch", anchor="export")
+        _render_export_batch(reps, tcfg, group_label, folder, tensile["tmap"], cfg_items)
 
 
 if __name__ == "__main__":

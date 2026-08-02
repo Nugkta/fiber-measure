@@ -1,0 +1,24 @@
+# "Clean lab" light theme + minimal stock chrome. See gui_app.py's _CSS
+# constant for the rest of the visual redesign (header, section cards, jump
+# menu) — this file only sets what Streamlit's own theming engine controls.
+
+[client]
+toolbarMode = "minimal"
+
+[theme]
+base = "light"
+primaryColor = "#660099"
+backgroundColor = "#F8FAFC"
+secondaryBackgroundColor = "#FFFFFF"
+textColor = "#0F172A"
+borderColor = "#E2E8F0"
+showWidgetBorder = true
+showSidebarBorder = true
+baseRadius = "0.75rem"
+buttonRadius = "0.5rem"
+metricValueFontSize = "1.65rem"
+metricValueFontWeight = "600"
+
+[theme.sidebar]
+backgroundColor = "#FFFFFF"
+borderColor = "#E2E8F0"
