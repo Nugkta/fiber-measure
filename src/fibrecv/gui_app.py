@@ -487,6 +487,34 @@ def _grouped_reps_from_uploads(image_uploads, cfg_items: tuple,
 # --------------------------------------------------------------------------- #
 # Plot builders                                                               #
 # --------------------------------------------------------------------------- #
+_ACCENT = "#660099"
+_REP_CYCLE = ("#A78BFA", "#F9A8D4", "#93C5FD", "#FCD34D")
+_MUTED = "#64748B"
+_GRID = "#E2E8F0"
+
+
+def _styled_fig(figsize: tuple[float, float] = (9, 3)):
+    """Build a Figure/Axes pair sharing the app's muted, transparent plot style.
+
+    Top/right spines are dropped; the remaining spines, ticks and axis labels
+    use the muted slate (``_MUTED``); the grid is a faint slate (``_GRID``);
+    the figure and axes backgrounds are transparent so the plot sits directly
+    on the surrounding section card instead of a white rectangle.
+    """
+    fig, ax = plt.subplots(figsize=figsize)
+    fig.patch.set_alpha(0.0)
+    ax.set_facecolor("none")
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+    ax.spines["left"].set_color(_MUTED)
+    ax.spines["bottom"].set_color(_MUTED)
+    ax.tick_params(colors=_MUTED)
+    ax.xaxis.label.set_color(_MUTED)
+    ax.yaxis.label.set_color(_MUTED)
+    ax.grid(color=_GRID, lw=0.8, alpha=0.3)
+    return fig, ax
+
+
 def _profile_fig(mr, rgb, cfg: CONFIG):
     """Per-replicate diameter-vs-position figure (raw points + smoothed line, µm)."""
     bnd, res = mr.bnd, mr.res
@@ -494,12 +522,11 @@ def _profile_fig(mr, rgb, cfg: CONFIG):
     x = np.arange(rgb.shape[1])[span]
     raw_um = mr.diameter_um[span]
     sm_um = res.diameter_smooth[span] / cfg.ppu
-    fig, ax = plt.subplots(figsize=(9, 3))
-    ax.plot(x, raw_um, ".", ms=2, alpha=0.4, color="tab:gray", label="raw")
-    ax.plot(x, sm_um, "-", lw=1.3, color="tab:blue", label="smooth")
+    fig, ax = _styled_fig()
+    ax.plot(x, raw_um, ".", ms=2, alpha=0.4, color="#94A3B8", label="raw")
+    ax.plot(x, sm_um, "-", lw=1.3, color=_ACCENT, label="smooth")
     ax.set_xlabel("x position (px)")
     ax.set_ylabel("diameter (µm)")
-    ax.set_title(f"{mr.name}   coverage={res.coverage:.0%}")
     ax.legend(loc="best", fontsize=8)
     ax.grid(alpha=0.3)
     fig.tight_layout()
@@ -513,23 +540,20 @@ def _group_fig(table: dict, group_label: str, rep_curves: list[tuple]):
     one per replicate, drawn thin/faded so the user can see what the mean and
     std are built from.
     """
-    fig, ax = plt.subplots(figsize=(9, 3))
-    cmap = plt.get_cmap("tab10")
+    fig, ax = _styled_fig()
     for i, (rep, rx, ry) in enumerate(rep_curves):
-        ax.plot(rx, ry, "-", lw=0.8, alpha=0.45, color=cmap(i % 10),
+        ax.plot(rx, ry, "-", lw=0.8, alpha=0.45, color=_REP_CYCLE[i % 4],
                 label=f"rep {rep}")
     x = table["x_aligned_px"]
     mean = table["mean_um"]
     std = table["std_um"]
-    ax.plot(x, mean, "-", lw=2.0, color="tab:blue", zorder=5,
+    ax.plot(x, mean, "-", lw=2.0, color=_ACCENT, zorder=5,
             label="mean of replicates")
     band = np.where(np.isfinite(std), std, 0.0)
-    ax.fill_between(x, mean - band, mean + band, alpha=0.25, color="tab:blue",
+    ax.fill_between(x, mean - band, mean + band, alpha=0.25, color=_ACCENT,
                     label="±std across replicates")
     ax.set_xlabel("aligned x position (px)")
     ax.set_ylabel("diameter (µm)")
-    ax.set_title(f"sample {group_label} — replicates aligned and averaged "
-                 f"(n_reps={int(np.nanmax(table['n']))})")
     ax.legend(loc="best", fontsize=7, ncols=2)
     ax.grid(alpha=0.3)
     fig.tight_layout()
@@ -546,8 +570,7 @@ def _tensile_fig(res):
     fibre (all-NaN stress) it falls back to the raw force/displacement trace so
     the curve is still informative.
     """
-    fig, ax = plt.subplots(figsize=(9, 3))
-    group = res.group or "fibre"
+    fig, ax = _styled_fig()
     brk = int(res.break_index)
 
     def _focus(x_used, y_used, has_tail):
@@ -569,17 +592,15 @@ def _tensile_fig(res):
     if not np.isfinite(res.stress_pa).any():
         x = res.disp_mm
         y = res.load_n
-        ax.plot(x[:brk + 1], y[:brk + 1], "-", lw=1.6, color="tab:blue",
+        ax.plot(x[:brk + 1], y[:brk + 1], "-", lw=1.6, color=_ACCENT,
                 label="load")
         if brk + 1 < x.size:
-            ax.plot(x[brk:], y[brk:], "-", lw=0.8, alpha=0.35, color="tab:blue")
-        ax.scatter([x[brk]], [y[brk]], s=30, color="tab:red", zorder=6,
+            ax.plot(x[brk:], y[brk:], "-", lw=0.8, alpha=0.35, color=_ACCENT)
+        ax.scatter([x[brk]], [y[brk]], s=30, color="#DC2626", zorder=6,
                    label="break point")
         _focus(x[:brk + 1], y[:brk + 1], brk + 1 < x.size)
         ax.set_xlabel("displacement (mm)")
         ax.set_ylabel("load (N)")
-        ax.set_title(f"{group} — stress–strain "
-                     f"(no matched diameter — force/displacement only)")
         ax.legend(loc="best", fontsize=8)
         ax.grid(alpha=0.3)
         fig.tight_layout()
@@ -587,15 +608,15 @@ def _tensile_fig(res):
 
     x = res.strain * 100.0          # %
     y = res.stress_pa / 1e6         # MPa
-    ax.plot(x[:brk + 1], y[:brk + 1], "-", lw=1.6, color="tab:blue",
+    ax.plot(x[:brk + 1], y[:brk + 1], "-", lw=1.6, color=_ACCENT,
             label="stress–strain")
     if brk + 1 < x.size:
-        ax.plot(x[brk:], y[brk:], "-", lw=0.8, alpha=0.35, color="tab:blue",
+        ax.plot(x[brk:], y[brk:], "-", lw=0.8, alpha=0.35, color=_ACCENT,
                 label="post-break (unused)")
 
     # toughness = area under the curve up to fracture
     ax.fill_between(x[:brk + 1], 0.0, y[:brk + 1], alpha=0.15,
-                    color="tab:blue", label="toughness (area)")
+                    color=_ACCENT, label="toughness (area)")
 
     # steepest initial slope = Young's modulus, drawn over its fit segment
     fit = res.modulus_fit or {}
@@ -604,17 +625,16 @@ def _tensile_fig(res):
         s_line = np.array([s_lo, s_hi], dtype=float)
         stress_fit = fit["slope"] * s_line + fit["intercept"]
         ax.plot(s_line * 100.0, stress_fit / 1e6, "--", lw=1.4,
-                color="tab:orange",
-                label=f"E = {res.youngs_modulus_pa / 1e9:.2f} GPa")
+                color="#D97706",
+                label=f"E = {_fmt(res.youngs_modulus_pa / 1e9, 'GPa')}")
 
     # break point
-    ax.scatter([x[brk]], [y[brk]], s=30, color="tab:red", zorder=6,
+    ax.scatter([x[brk]], [y[brk]], s=30, color="#DC2626", zorder=6,
                label="break point")
 
     _focus(x[:brk + 1], y[:brk + 1], brk + 1 < x.size)
     ax.set_xlabel("strain (%)")
     ax.set_ylabel("stress (MPa)")
-    ax.set_title(f"{group} — stress–strain")
     ax.legend(loc="best", fontsize=7)
     ax.grid(alpha=0.3)
     fig.tight_layout()
@@ -1451,6 +1471,9 @@ def _render_tensile(group_label: str | None, mean_um: float, cfg: CONFIG,
         fig = _tensile_fig(res)
         st.pyplot(fig)
         plt.close(fig)
+        fallback = not np.isfinite(res.stress_pa).any()
+        if fallback:
+            st.caption("No matched diameter — showing force vs displacement.")
 
         # Six metrics in six narrow columns: the value font is shrunk (scoped
         # to this container's key, see _CSS's ".st-key-tensile_metrics" rules)
