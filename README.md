@@ -16,7 +16,8 @@ wall/shadow discrimination, followed by outlier rejection and smoothing.
 Diameters are measured perpendicular to the fibre axis: the per-column
 neighbourhood average follows the fitted centerline and the vertical chord is
 rescaled by cos(tilt), so inclined fibres (validated to ~45°) are not
-overestimated.
+overestimated — see
+[docs/features/01_tilt_corrected_diameter.md](docs/features/01_tilt_corrected_diameter.md).
 
 ## Install
 
