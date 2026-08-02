@@ -83,43 +83,41 @@ DEFAULTS = CONFIG()  # never mutated; the source of widget defaults + reset targ
 
 # --- visible parameters: the three knobs that move the detected boundary,
 # plus the ppu calibration. Everything else in CONFIG stays at the validated
-# defaults (CLI keeps full control). spec = (name, kind, help, step, lo, hi,
-# fmt). ---
+# defaults (CLI keeps full control). spec = (name, label, kind, help, step,
+# lo, hi, fmt); ``name`` stays the CONFIG field key, ``label`` is the display
+# text only. ---
 PARAM_SPECS: list[tuple] = [
-    ("edge_z", "slider",
-     "Where on the fibre wall the boundary line is drawn (the main knob). The "
-     "detector finds the steep brightness wall at each fibre edge and draws "
-     "the line where the signal has risen edge_z units above the background "
-     "just outside that wall. Higher = the line sits higher up the wall, "
-     "further inside the fibre = thinner reading; lower = further out = "
-     "thicker reading. If the line cuts into the fibre (too thin), lower it; "
-     "if it sits in the shadow outside the fibre (too thick), raise it. "
+    ("edge_z", "Boundary tightness (edge_z)", "slider",
+     "Where on the fibre wall the boundary line is drawn (the main knob): "
+     "higher sits further inside the fibre (thinner reading), lower sits "
+     "further outside (thicker reading). If the line cuts into the fibre, "
+     "lower it; if it sits in the shadow outside the fibre, raise it. "
      "Recommended 3-5, default 4.0.",
      0.5, 1.0, 12.0, "%.1f"),
-    ("edge_frac", "float",
-     "Protection for faint fibres. A pale, low-contrast fibre has a weak wall "
-     "that may never rise edge_z units above background; this caps the "
-     "crossing level at edge_frac of the wall's own height so the line stays "
-     "on the wall instead of drifting outward. It only kicks in when the wall "
-     "is weaker than edge_z. Leave at 0.65 unless a very faint fibre loses "
-     "its boundary — then lower it slightly.",
+    ("edge_frac", "Faint-fibre guard (edge_frac)", "float",
+     "Protection for faint fibres: caps the crossing level at edge_frac of a "
+     "weak wall's own height, so the line stays on the wall instead of "
+     "drifting outward when the wall never reaches edge_z above background. "
+     "It only kicks in when the wall is weaker than edge_z. Leave at 0.65 "
+     "unless a very faint fibre loses its boundary — then lower it slightly.",
      0.05, 0.0, 1.0, "%.2f"),
-    ("wcol", "int",
-     "Horizontal smoothing width (pixels). If the boundary line is jittery or "
-     "ragged, raise it (61-81) for a smoother, more stable line; lower it "
-     "(15-25) to preserve fine thickness variation. Too high flattens real "
-     "variation. Default 41.",
+    ("wcol", "Smoothing width (wcol)", "int",
+     "Horizontal smoothing width in pixels. If the boundary line is jittery "
+     "or ragged, raise it (61-81) for a smoother line; lower it (15-25) to "
+     "preserve fine thickness variation — too high flattens real variation. "
+     "Default 41.",
      1, 1, 201, None),
-    ("ppu", "float",
-     "Calibration: camera pixels per micron. Diameters in µm = pixels / ppu, "
-     "so this scales every µm number in the app and the exports (pixel values "
-     "are unaffected). Measure it with a stage micrometer for your microscope "
-     "+ camera combination. Default 1.3680 (the original calibrated setup).",
+    ("ppu", "Pixels per micron (ppu)", "float",
+     "Calibration: camera pixels per micron; diameters in µm = pixels / ppu, "
+     "so this scales every µm number in the app and exports (pixel values "
+     "are unaffected). Measure it with a stage micrometer for your "
+     "microscope + camera combination. Default 1.3680 (the original "
+     "calibrated setup).",
      0.001, 0.1, 10.0, "%.4f"),
 ]
 
 # names of int-typed visible fields (so widgets return int, not float)
-_INT_FIELDS = {name for (name, kind, *_rest) in PARAM_SPECS if kind == "int"}
+_INT_FIELDS = {name for (name, label, kind, *_rest) in PARAM_SPECS if kind == "int"}
 
 
 # --------------------------------------------------------------------------- #
@@ -581,28 +579,30 @@ def _param_form() -> None:
     applied = st.session_state.cfg_dict
     ver = st.session_state.form_version
 
+    st.sidebar.markdown('<div class="fcv-side-label">Detection</div>',
+                        unsafe_allow_html=True)
     with st.sidebar.form("params", clear_on_submit=False):
         st.markdown("**Parameters** — edit, then click **Apply** to re-render.")
         new_vals: dict = {}
-        for (name, kind, help_txt, step, lo, hi, fmt) in PARAM_SPECS:
+        for (name, label, kind, help_txt, step, lo, hi, fmt) in PARAM_SPECS:
             if name == "ppu":
                 st.markdown("**Calibration**")
             key = f"p_{name}_v{ver}"
             cur = applied[name]
             if kind == "slider":
                 new_vals[name] = st.slider(
-                    name, min_value=float(lo), max_value=float(hi),
+                    label, min_value=float(lo), max_value=float(hi),
                     value=float(cur), step=float(step), help=help_txt, key=key)
             elif kind == "int":
                 new_vals[name] = int(st.number_input(
-                    name, min_value=int(lo), max_value=int(hi),
+                    label, min_value=int(lo), max_value=int(hi),
                     value=int(cur), step=int(step), help=help_txt, key=key))
             else:  # float
                 kwargs = dict(min_value=float(lo), max_value=float(hi),
                               value=float(cur), step=float(step), help=help_txt, key=key)
                 if fmt:
                     kwargs["format"] = fmt
-                new_vals[name] = float(st.number_input(name, **kwargs))
+                new_vals[name] = float(st.number_input(label, **kwargs))
         c1, c2 = st.columns(2)
         apply = c1.form_submit_button("Apply", type="primary", width="stretch")
         reset = c2.form_submit_button("Reset to defaults", width="stretch")
@@ -633,50 +633,51 @@ def _tensile_controls() -> dict:
     diameter knobs are untouched). Returns
     ``{"tmap", "folder", "gauge_length_mm", "modulus_window"}``.
     """
-    st.sidebar.markdown("### Tensile data")
-    source = st.sidebar.radio("tensile source", ["Local folder", "Upload"],
-                              horizontal=True, label_visibility="collapsed",
-                              key="tensile_source")
-    tmap: dict[str, object] = {}
-    folder: str | None = None
-    if source == "Local folder":
-        folder = st.sidebar.text_input(
-            "Tensile data folder", value=st.session_state.get("tensile_folder", ""))
-        st.session_state.tensile_folder = folder
-        if folder and Path(folder).is_dir():
-            try:
-                tmap = {g: Path(p)
-                        for g, p in _cached_discover_tensile(folder).items()}
-            except Exception as exc:  # noqa: BLE001
-                st.sidebar.warning(f"Could not scan tensile folder: {exc}")
-        elif folder:
-            st.sidebar.warning("Enter a valid tensile folder path.")
-    else:
-        folder_mode = st.sidebar.checkbox(
-            "📁 upload a whole folder", key="tensile_folder_mode",
-            help="Make Browse open a folder chooser; non-tensile files are ignored.")
-        ups = st.sidebar.file_uploader(
-            "Upload tensile files",
-            type=None if folder_mode else ["csv", "xls", "xlsx"],
-            accept_multiple_files=True, key="tensile_uploads")
-        if folder_mode:
-            _enable_folder_upload("Upload tensile files")
-        if ups:
-            tmap = discover_tensile_files(ups)
-    if tmap:
-        st.sidebar.caption(f"{len(tmap)} tensile fibre(s) matched.")
+    with st.sidebar.expander("Tensile", expanded=False):
+        source = st.radio("tensile source", ["Local folder", "Upload"],
+                          horizontal=True, label_visibility="collapsed",
+                          key="tensile_source")
+        tmap: dict[str, object] = {}
+        folder: str | None = None
+        if source == "Local folder":
+            folder = st.text_input(
+                "Tensile data folder", value=st.session_state.get("tensile_folder", ""))
+            st.session_state.tensile_folder = folder
+            if folder and Path(folder).is_dir():
+                try:
+                    tmap = {g: Path(p)
+                            for g, p in _cached_discover_tensile(folder).items()}
+                except Exception as exc:  # noqa: BLE001
+                    st.warning(f"Could not scan tensile folder: {exc}")
+            elif folder:
+                st.warning("Enter a valid tensile folder path.")
+        else:
+            folder_mode = st.checkbox(
+                "📁 upload a whole folder", key="tensile_folder_mode",
+                help="Make Browse open a folder chooser; non-tensile files are ignored.")
+            ups = st.file_uploader(
+                "Upload tensile files",
+                type=None if folder_mode else ["csv", "xls", "xlsx"],
+                accept_multiple_files=True, key="tensile_uploads")
+            if folder_mode:
+                _enable_folder_upload("Upload tensile files")
+            if ups:
+                tmap = discover_tensile_files(ups)
+        if tmap:
+            st.caption(f"{len(tmap)} tensile fibre(s) matched.")
 
-    gauge_length_mm = float(st.sidebar.number_input(
-        "Gauge length L₀ (mm)", min_value=0.1, value=float(DEFAULTS.gauge_length_mm),
-        step=1.0,
-        help="Grip separation; strain = displacement / L₀. The tester records "
-             "only displacement, so this sets the strain scale."))
-    modulus_window = float(st.sidebar.number_input(
-        "Modulus window (fraction)", min_value=0.02, max_value=0.5,
-        value=float(DEFAULTS.modulus_window), step=0.01,
-        help="Width of the sliding linear fit used to auto-detect the steepest "
-             "initial slope (Young's modulus), as a fraction of the rising "
-             "region."))
+        gauge_length_mm = float(st.number_input(
+            "Gauge length L₀ (mm)", min_value=0.1, max_value=1000.0,
+            value=float(DEFAULTS.gauge_length_mm),
+            step=1.0, format="%.1f",
+            help="Grip separation; strain = displacement / L₀. The tester records "
+                 "only displacement, so this sets the strain scale."))
+        modulus_window = float(st.number_input(
+            "Modulus window (fraction)", min_value=0.02, max_value=0.5,
+            value=float(DEFAULTS.modulus_window), step=0.01, format="%.2f",
+            help="Width of the sliding linear fit used to auto-detect the steepest "
+                 "initial slope (Young's modulus), as a fraction of the rising "
+                 "region."))
     return {
         "tmap": tmap,
         "folder": folder or None,
@@ -727,7 +728,8 @@ def _load_reps(cfg_items: tuple) -> tuple[list[dict], str | None, str | None]:
     the shared ``parse_name`` rule; unparseable names land in an "ungrouped"
     bucket instead of being hidden.
     """
-    st.sidebar.markdown("### Data source")
+    st.sidebar.markdown('<div class="fcv-side-label">Data</div>',
+                        unsafe_allow_html=True)
     source = st.sidebar.radio("source", ["Local folder", "Upload"],
                               horizontal=True, label_visibility="collapsed")
     reps: list[dict] = []
@@ -831,6 +833,18 @@ _CSS = """
     font-size: 0.8rem;
     font-weight: 600;
     white-space: nowrap;
+}
+
+/* ---- sidebar group captions (DATA / DETECTION), rendered via
+   st.sidebar.markdown('<div class="fcv-side-label">...</div>'); the Tensile
+   group uses a native st.sidebar.expander instead, so it needs no caption ---- */
+.fcv-side-label {
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #64748B;
+    margin: 0.2rem 0 0.35rem;
 }
 
 /* ---- section cards: st.container(key="card_replicates"/"card_group"/
