@@ -54,7 +54,10 @@ uv run fibrecv-gui
 Opens at http://localhost:8501. Point it at an image folder (or drag in any
 number of files), pick a group, and tune the three boundary knobs — `edge_z`
 (tightness), `edge_frac` (faint-fibre safeguard), `wcol` (anti-jitter
-smoothing) — then export results or batch-process the whole folder. See
+smoothing) — then export results or batch-process the whole folder. The app
+is a violet-accented "clean lab" light theme with numbered card sections and
+a jump menu (see
+[docs/features/02_gui-redesign.md](docs/features/02_gui-redesign.md)). See
 [GUI_README.md](GUI_README.md) for the full guide.
 
 ## CLI pipeline

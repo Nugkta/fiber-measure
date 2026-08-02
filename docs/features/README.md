@@ -12,3 +12,7 @@ What it does / Design choices / Algorithm details / Caveats (see CLAUDE.md).
 - `01_tilt_corrected_diameter.md` — current — perpendicular (tilt-corrected)
   diameter measurement: why the vertical chord over-read, the four
   compensations, design decisions and caveats.
+- `02_gui-redesign.md` — current — "clean lab" visual redesign of the
+  Streamlit GUI: violet-accent theme, numbered card sections + jump menu,
+  shared `_fmt`/`_styled_fig` formatting/plot policy; detection logic and
+  exports unchanged.

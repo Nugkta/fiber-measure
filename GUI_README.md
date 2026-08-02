@@ -9,6 +9,12 @@ access is needed at runtime.
 The app is a thin front-end over the validated `fibrecv` pipeline — it changes
 **no** detection logic and uses the same calibrated defaults as the CLI.
 
+It uses a "clean lab" light theme (violet accent, slim header with a
+one-line status chip, four numbered sections with a jump menu on the right)
+defined by `.streamlit/config.toml` plus the app's own styling code — purely
+visual, see
+[docs/features/02_gui-redesign.md](docs/features/02_gui-redesign.md).
+
 ---
 
 ## 1. One-time setup
@@ -64,7 +70,12 @@ are passed straight through to `streamlit run`).
 
 ## 3. Using the app
 
-**Sidebar — Data source**
+The main area is split into four numbered sections — 01 Replicates,
+02 Group panel, 03 Tensile, 04 Export & batch — described below in order;
+a fixed jump menu on the right (hidden on narrow windows) links straight to
+each one once data is loaded.
+
+**Sidebar — Data** (source)
 - **Local folder**: type the path to your images folder. The app scans for
   image files (`.jpg/.jpeg/.png/.tif/.tiff/.bmp`) and groups them by the
   numbers at the end of each name: the last number is the replicate, the
@@ -76,7 +87,7 @@ are passed straight through to `streamlit run`).
   naming rule (a Group dropdown appears if there is more than one group);
   export needs names ending in numbers to derive a group label.
 
-**Sidebar — Parameters**
+**Sidebar — Detection** (parameters)
 - Four knobs are exposed; everything else uses the validated defaults (the CLI
   retains full parameter control):
   - **`edge_z`** (slider) — where on the fibre wall the boundary is drawn:
@@ -95,8 +106,11 @@ are passed straight through to `streamlit run`).
 - Edits are **staged**: change what you want, then click **Apply** to re-render
   (a few seconds for a group). **Reset to defaults** restores the calibrated
   values.
+- Below Data/Detection, a collapsible **Tensile** expander holds the tensile
+  data source (folder or upload, same pattern as the image source), the
+  gauge length and the modulus-fit window — see **03 Tensile** below.
 
-**Main area**
+**01 Replicates**
 - One tab per replicate: the full-resolution **overlay** (cyan top edge / yellow
   bottom edge / dashed centerline / green perpendicular measurement chords —
   each green line is the exact diameter being reported at that column, so its
@@ -116,13 +130,21 @@ are passed straight through to `streamlit run`).
   and flow into the profile plot, the group statistics and **Export current
   group**; they survive parameter changes, but **Run batch** recomputes from
   disk and ignores them.
-- **Group panel**: every replicate's aligned diameter curve (thin lines) behind
+
+**02 Group panel**
+- Every replicate's aligned diameter curve (thin lines) behind
   the registered **mean ± std** curve, a caption listing the applied alignment
   shifts, and a scalar summary (group mean, between-replicate std, CV,
   replicates used, overlap, registration status — hover the ⓘ icons for exact
   definitions).
 
-**Export & batch**
+**03 Tensile**
+- Shown once the group panel produces a mean diameter and tensile data was
+  matched in the sidebar's Tensile expander: the stress-strain curve for the
+  group (fitted Young's modulus segment, toughness as the area under the
+  curve, and the detected break point) plus the derived scalar metrics.
+
+**04 Export & batch**
 - **Output folder**: where results are written (default `./fibrecv_output`).
 - **Export current group**: writes the standard output tree for the loaded group
   (`overlays/`, `per_image/{csv,plots,diagnostics}/`,

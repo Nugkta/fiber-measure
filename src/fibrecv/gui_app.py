@@ -7,6 +7,10 @@ reused ``fibrecv`` package: ``compute`` (pure detection core), ``config``,
 ``io_utils``, ``overlay`` (``render_overlay``), ``register``, ``measure``
 (``write_measurement``) and ``run_measure``/``run_aggregate`` (batch + aggregate).
 Imports are absolute (``fibrecv.*``) because Streamlit runs this file as a script.
+The sibling ``.streamlit/config.toml`` supplies the Streamlit-engine half of the
+theme (base colours, radii, ``toolbarMode``); this file's own ``_CSS`` constant
+covers what that engine cannot reach (header/chip markup, section cards, the
+jump menu) -- the two are one visual design and must be read together.
 
 Inputs
 ------
@@ -33,6 +37,11 @@ Output
 - On request: the standard fibrecv output tree (overlays/, per_image/*,
   per_sample/*, summary/master_summary.csv, run_config.json) written locally for
   the current group or for a whole folder (in-process batch with a progress bar).
+- A "clean lab" light UI over that data: a slim violet-accent header + state
+  chip (``_render_header``), four numbered card sections -- 01 Replicates,
+  02 Group panel, 03 Tensile, 04 Export & batch -- each an
+  ``st.container(key="card_...")`` framed by ``_CSS``, with a fixed jump menu
+  (``_render_jump_menu``, hidden below 1200px) linking to their anchors.
 
 Pos
 ---
@@ -40,6 +49,17 @@ Thin front-end over the validated pipeline; adds no detection logic. Designed to
 run on the user's local Mac/Windows machine (``fibrecv-gui`` or
 ``streamlit run src/fibrecv/gui_app.py``), reading a copied images folder. The
 heavy compute reuses ``compute.compute_measurement`` so preview == CLI output.
+The styling layer is self-contained and additive over that data path: ``_CSS``
+(injected once via ``_inject_css()`` at the top of ``main()``) styles the
+header/chip, section cards and jump menu by targeting ``data-testid``/
+``.st-key-*`` hooks on ordinary widgets rather than replacing them (metric
+cards are real ``st.metric`` underneath, kept AppTest-inspectable); ``_fmt``
+centralises the one value-formatting policy (precision + unit suffix per
+``kind``, ``None``/NaN -> "—") used by every metric, caption and the header
+chip; ``_styled_fig``/``_ACCENT``/``_REP_CYCLE`` give every matplotlib figure
+the same muted, transparent-background look. None of this touches
+``CONFIG``, session-state keys, ``compute_measurement`` or the export/batch
+code paths.
 """
 
 from __future__ import annotations
