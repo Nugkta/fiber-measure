@@ -155,6 +155,8 @@ _FMT_KINDS: dict[str, tuple[str, str]] = {
     "MJ/m3":  ("{:.2f}", " MJ/m³"),
     "MPa":    ("{:.1f}", " MPa"),
     "one_dp": ("{:.1f}", ""),
+    "pct100": ("{:.2f}", " %"),
+    "int":    ("{:.0f}", ""),
 }
 
 
@@ -1351,7 +1353,7 @@ def _render_group(reps: list[dict], cfg: CONFIG,
                          "thickness variation along the fibre.")
         c[2].metric("CV", _fmt(cv, "cv"),
                     help="between-replicate std / group mean (dimensionless).")
-        c[3].metric("reps used", f"{summary['n_replicates_used']}")
+        c[3].metric("reps used", _fmt(summary["n_replicates_used"], "int"))
         c[4].metric("overlap", _fmt(summary["overlap_px"], "px"),
                     help="Number of aligned columns where every replicate has data.")
         status_key = ("status_warn_registration" if reg_uncertain
@@ -1462,7 +1464,8 @@ def _render_tensile(group_label: str | None, mean_um: float, cfg: CONFIG,
                         help="Fmax / cross-sectional area.")
             c[2].metric("extension at break",
                         _fmt(res.extension_at_break_mm, "mm"))
-            c[3].metric("strain at break", f"{res.strain_at_break * 100:.2f} %")
+            c[3].metric("strain at break",
+                        _fmt(res.strain_at_break * 100, "pct100"))
             c[4].metric("Young's modulus",
                         _fmt(res.youngs_modulus_pa / 1e9, "GPa"))
             c[5].metric("toughness",
