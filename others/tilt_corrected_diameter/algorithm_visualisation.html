@@ -1,0 +1,593 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>How the tilt-corrected fibre diameter is measured</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=IBM+Plex+Mono:wght@400;600&display=swap');
+
+  :root {
+    --paper:  #fcfcfb;
+    --ink:    #141310;
+    --ink2:   #52514e;
+    --line:   #e4e3df;
+    --pink:   #f273a6;   /* synthetic micrograph background  */
+    --fibre:  #ebe6e8;   /* pale desaturated fibre           */
+    --blue:   #2a78d6;   /* perpendicular / fixed            */
+    --orange: #eb6834;   /* vertical chord / old             */
+    --display: "Space Grotesk", system-ui, sans-serif;
+    --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+    --body: system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+
+  body {
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--body);
+    font-size: 16px;
+    line-height: 1.55;
+  }
+  main { max-width: 860px; margin: 0 auto; padding: 0 24px 96px; }
+
+  /* ---------- header ------------------------------------------------ */
+  header { padding: 56px 0 8px; }
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: 12.5px;
+    letter-spacing: 0.06em;
+    color: var(--ink2);
+  }
+  .eyebrow b { color: var(--ink); font-weight: 600; }
+  h1 {
+    font-family: var(--display);
+    font-weight: 700;
+    font-size: clamp(28px, 5vw, 44px);
+    line-height: 1.1;
+    letter-spacing: -0.02em;
+    margin: 14px 0 16px;
+    max-width: 15em;
+  }
+  .standfirst { font-size: 18px; color: var(--ink2); max-width: 38em; }
+  .standfirst b.blue { color: var(--blue); }
+  .standfirst b.orange { color: var(--orange); }
+
+  /* ---------- sections ---------------------------------------------- */
+  section { margin-top: 72px; }
+  .sec-label {
+    font-family: var(--mono);
+    font-size: 12.5px;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--ink2);
+    border-top: 1px solid var(--line);
+    padding-top: 14px;
+  }
+  h2 {
+    font-family: var(--display);
+    font-weight: 700;
+    font-size: clamp(21px, 3vw, 27px);
+    letter-spacing: -0.015em;
+    margin: 8px 0 14px;
+  }
+  p { margin-bottom: 12px; max-width: 44em; }
+  p code, li code {
+    font-family: var(--mono);
+    font-size: 0.86em;
+    background: #f1f0ec;
+    border-radius: 4px;
+    padding: 1px 5px;
+  }
+  .old  { color: var(--orange); font-weight: 600; }
+  .new  { color: var(--blue);  font-weight: 600; }
+
+  /* ---------- interactive demo -------------------------------------- */
+  .demo {
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    overflow: hidden;
+    background: #fff;
+  }
+  .demo-canvas { display: block; width: 100%; height: auto; }
+  .demo-canvas text {
+    paint-order: stroke;
+    stroke: #fff;
+    stroke-width: 3px;
+    stroke-linejoin: round;
+  }
+  .demo-controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px 28px;
+    align-items: center;
+    padding: 14px 18px;
+    border-top: 1px solid var(--line);
+    font-family: var(--mono);
+    font-size: 13.5px;
+  }
+  .demo-controls label { display: flex; align-items: center; gap: 10px; }
+  input[type="range"] { width: 200px; accent-color: var(--ink); }
+  input[type="checkbox"] { accent-color: var(--ink); width: 15px; height: 15px; }
+  input:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+  .theta-val { font-weight: 600; min-width: 3.2em; display: inline-block; }
+
+  .readouts {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 1px;
+    background: var(--line);
+    border-top: 1px solid var(--line);
+  }
+  .readout { background: #fff; padding: 12px 18px 14px; }
+  .readout .k {
+    font-family: var(--mono);
+    font-size: 11.5px;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--ink2);
+  }
+  .readout .v {
+    font-family: var(--mono);
+    font-size: 20px;
+    font-weight: 600;
+    margin-top: 2px;
+  }
+  .readout .v small { font-size: 13px; font-weight: 400; color: var(--ink2); }
+  .readout.orange .v { color: var(--orange); }
+  .readout.blue   .v { color: var(--blue); }
+
+  /* ---------- figures ----------------------------------------------- */
+  figure { margin: 22px 0 6px; }
+  figure img {
+    width: 100%;
+    height: auto;
+    display: block;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: #fff;
+  }
+  figcaption {
+    font-size: 14px;
+    color: var(--ink2);
+    margin-top: 10px;
+    max-width: 46em;
+  }
+
+  /* ---------- recipe steps ------------------------------------------ */
+  ol.recipe { list-style: none; counter-reset: step; margin-top: 20px; }
+  ol.recipe > li {
+    counter-increment: step;
+    position: relative;
+    padding: 0 0 22px 58px;
+    border-left: 1px solid var(--line);
+    margin-left: 19px;
+  }
+  ol.recipe > li:last-child { border-left-color: transparent; padding-bottom: 0; }
+  ol.recipe > li::before {
+    content: counter(step);
+    position: absolute;
+    left: -20px; top: -2px;
+    width: 38px; height: 38px;
+    border: 1px solid var(--line);
+    border-radius: 50%;
+    background: var(--paper);
+    font-family: var(--mono);
+    font-size: 15px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  ol.recipe h3 {
+    font-family: var(--display);
+    font-size: 17px;
+    font-weight: 700;
+    margin-bottom: 4px;
+  }
+  ol.recipe .src {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--ink2);
+    margin-left: 8px;
+    font-weight: 400;
+  }
+  ol.recipe p { font-size: 15px; color: #3a3936; }
+
+  /* ---------- guard-rail cards -------------------------------------- */
+  .cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 14px;
+    margin-top: 18px;
+  }
+  .card {
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 16px 18px;
+    background: #fff;
+    font-size: 14.5px;
+  }
+  .card b { display: block; font-family: var(--display); margin-bottom: 5px; }
+
+  footer {
+    margin-top: 88px;
+    border-top: 1px solid var(--line);
+    padding-top: 16px;
+    font-family: var(--mono);
+    font-size: 12.5px;
+    color: var(--ink2);
+  }
+</style>
+</head>
+<body>
+<main>
+
+<header>
+  <div class="eyebrow"><b>fibrecv</b> · feat/tilt-corrected-diameter · synthetic fixture: 60&nbsp;px fibre, validated 0–45°</div>
+  <h1>Measuring the diameter of a tilted fibre</h1>
+  <p class="standfirst">
+    The pipeline used to report <b class="orange">y_bot&nbsp;−&nbsp;y_top</b> — a vertical
+    slice through the image. On an inclined fibre that number is wrong twice over.
+    The fix reports the width <b class="blue">perpendicular to the fibre axis</b> and
+    makes the edge detection itself tilt-invariant.
+  </p>
+</header>
+
+<!-- ================= problem ======================================== -->
+<section>
+  <div class="sec-label">The problem</div>
+  <h2>One measurement, two tilt errors</h2>
+  <p>
+    Edge detection scans the image column by column, finding the top and bottom wall
+    of the fibre in each column. Two things go wrong once the fibre is inclined
+    at an angle θ:
+  </p>
+  <p>
+    <span class="old">Chord direction.</span> The vertical distance between the walls
+    is a slanted chord, not the diameter — it is inflated by 1/cos&nbsp;θ
+    (+15.5&nbsp;% at 30°).
+  </p>
+  <p>
+    <span class="old">Cross-column smearing</span> — found during investigation, and
+    roughly twice as large. Before detecting walls, each column is averaged with its
+    41 neighbours to suppress iridescence. On a tilted fibre the wall row drifts
+    41·tan&nbsp;θ pixels across that window (23.7&nbsp;px at 30° — a third of the
+    fibre width), smearing the sharp wall into a long ramp; the level-crossing
+    boundary then lands too far out on <em>both</em> sides. Together the two errors
+    read a 60&nbsp;px fibre as +37&nbsp;% too wide at 30°.
+  </p>
+</section>
+
+<!-- ================= interactive demo =============================== -->
+<section>
+  <div class="sec-label">Try it</div>
+  <h2>Drag the tilt — watch the chord over-read</h2>
+  <p>
+    This is the synthetic test fibre from the pipeline's own test suite: a pale
+    60&nbsp;px band on the saturated pink background. The
+    <span class="old">vertical chord</span> stretches with 1/cos&nbsp;θ; the
+    <span class="new">perpendicular width</span> is the same 60&nbsp;px at every angle.
+  </p>
+
+  <div class="demo">
+    <svg id="demo-svg" class="demo-canvas" viewBox="0 0 720 400" role="img"
+         aria-label="Synthetic micrograph of a tilted fibre showing the vertical chord and the perpendicular width">
+      <defs>
+        <clipPath id="frame"><rect x="0" y="0" width="720" height="400"/></clipPath>
+        <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5"
+                markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M 0 1 L 8 5 L 0 9" fill="none" stroke="#3a3936" stroke-width="1.6"/>
+        </marker>
+      </defs>
+      <g clip-path="url(#frame)">
+        <rect x="0" y="0" width="720" height="400" fill="var(--pink)"/>
+        <polygon id="band" fill="var(--fibre)"/>
+        <line id="wall-top" stroke="#3a3936" stroke-width="1" stroke-dasharray="2 4" opacity="0.75"/>
+        <line id="wall-bot" stroke="#3a3936" stroke-width="1" stroke-dasharray="2 4" opacity="0.75"/>
+
+        <!-- fibre axis -->
+        <line id="axis" stroke="#3a3936" stroke-width="1.4" marker-end="url(#arrow)"/>
+        <text id="axis-label" font-size="13" fill="#3a3936"
+              font-family="IBM Plex Mono, monospace">fibre axis</text>
+
+        <!-- averaging-window sample points (fix 2 overlay) -->
+        <g id="samples" style="display:none">
+          <g id="samples-old"></g>
+          <g id="samples-new"></g>
+        </g>
+
+        <!-- old vertical chord -->
+        <line id="chord" stroke="var(--orange)" stroke-width="4" stroke-linecap="butt"/>
+        <!-- new perpendicular width -->
+        <line id="perp" stroke="var(--blue)" stroke-width="4" stroke-linecap="butt"/>
+        <path id="perp-right-angle" fill="none" stroke="var(--blue)" stroke-width="1.3"/>
+
+        <text id="chord-label" font-size="14" font-weight="600" fill="var(--orange)"
+              font-family="IBM Plex Mono, monospace"></text>
+        <text id="perp-label" font-size="14" font-weight="600" fill="var(--blue)"
+              font-family="IBM Plex Mono, monospace"></text>
+      </g>
+    </svg>
+
+    <div class="demo-controls">
+      <label>tilt θ
+        <input id="theta" type="range" min="0" max="45" step="1" value="30"
+               aria-label="fibre tilt in degrees">
+        <span class="theta-val" id="theta-val">30°</span>
+      </label>
+      <label>
+        <input id="show-samples" type="checkbox">
+        show the 41-column averaging window at the top wall
+      </label>
+    </div>
+
+    <div class="readouts">
+      <div class="readout orange">
+        <div class="k">vertical chord y_bot − y_top</div>
+        <div class="v"><span id="ro-chord">69.3</span> px <small id="ro-chord-err">(+15.5 %)</small></div>
+      </div>
+      <div class="readout blue">
+        <div class="k">× cos θ → perpendicular</div>
+        <div class="v"><span id="ro-perp">60.0</span> px <small>= true width ✓</small></div>
+      </div>
+      <div class="readout">
+        <div class="k">wall drift across 41 columns</div>
+        <div class="v"><span id="ro-drift">23.7</span> px <small>smear if not axis-following</small></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= fix 1 ========================================== -->
+<section>
+  <div class="sec-label">Fix 1 · geometry</div>
+  <h2>Report the chord × cos θ, not the chord</h2>
+  <p>
+    Scanning stays vertical and <code>y_top</code>/<code>y_bot</code> remain
+    sub-pixel image rows — overlays, manual-edit clicks and QC keep their
+    coordinate meaning. Only the reported value changes:
+    <code>diameter&nbsp;=&nbsp;(y_bot&nbsp;−&nbsp;y_top)&nbsp;·&nbsp;cos&nbsp;θ</code>,
+    the width perpendicular to the axis. θ comes from the slope of the robust
+    (Theil–Sen) centerline fit that the pipeline already computes.
+  </p>
+  <figure>
+    <img src="1_perpendicular_chord.png"
+         alt="Left: micrograph with the inflated vertical chord (orange) and the correct perpendicular width (blue). Right: measured width versus tilt — the vertical chord drifts to +40 % by 45 degrees, the perpendicular measurement stays flat.">
+    <figcaption>
+      Measured on the real pipeline over the synthetic fixture. Left: at θ = 30° the
+      vertical chord reads 69.3 px for a 60 px fibre. Right: sweeping θ from 0° to 45°,
+      the <span class="old">chord</span> drifts to +40 % while the
+      <span class="new">perpendicular width</span> stays within ±1 %.
+    </figcaption>
+  </figure>
+</section>
+
+<!-- ================= fix 2 ========================================== -->
+<section>
+  <div class="sec-label">Fix 2 · detection</div>
+  <h2>The 41-column average must follow the axis</h2>
+  <p>
+    The neighbourhood average exists to suppress iridescence banding, and on a
+    horizontal fibre averaging "the same row, 41 columns wide" is exactly right.
+    On a tilted fibre that row cuts straight across the wall. The fix keeps the
+    window 41 columns wide but slides each sample up or down so it tracks the
+    axis — implemented as <em>shear → horizontal box filter → unshear</em>, three
+    vectorised passes whose cost is independent of the window size, and an exact
+    identity at zero tilt.
+  </p>
+  <figure>
+    <img src="2_axis_following_average.png"
+         alt="Left: zoom on the top wall showing old same-row samples crossing the wall versus fixed samples sliding along it. Right: the column profile — the straight average smears the walls outward, the axis-following average keeps them sharp.">
+    <figcaption>
+      Left: the pixels that get averaged into one column at θ = 30° — the
+      <span class="old">old samples</span> cross the wall, the
+      <span class="new">fixed samples</span> stay on it. Right: the resulting profile
+      of a single column; smeared walls move the level-crossing boundary outward on
+      both sides, which is why this error is about twice the chord error.
+    </figcaption>
+  </figure>
+</section>
+
+<!-- ================= full recipe ==================================== -->
+<section>
+  <div class="sec-label">End to end</div>
+  <h2>The full per-column recipe</h2>
+  <ol class="recipe">
+    <li>
+      <h3>Desaturation map <span class="src">features.py</span></h3>
+      <p>Saturation — not brightness — separates fibre from background. Each pixel
+      becomes a robust z-score of how desaturated it is versus the pink background:
+      D ≈ 0 outside the fibre, large and positive inside it.</p>
+    </li>
+    <li>
+      <h3>Band and tilt <span class="src">band.py</span></h3>
+      <p>A coarse mask of D locates the band; a Theil–Sen fit through per-column
+      band centres gives the centerline, the band half-thickness, and the slope
+      m → θ. The slope is clamped to 60° so a pathological fit can never drive the
+      compensations to extremes.</p>
+    </li>
+    <li>
+      <h3>Axis-following column average <span class="src">edges.py · _axis_average</span></h3>
+      <p>Fix 2: the 41-column iridescence-suppressing average follows the axis
+      (shear → box filter → unshear) instead of cutting across the walls.</p>
+    </li>
+    <li>
+      <h3>Smooth and differentiate in the perpendicular frame <span class="src">edges.py</span></h3>
+      <p>Vertical Gaussian smoothing uses σ/cos θ and the vertical gradient is
+      divided by cos θ, so the calibrated wall-slope gates see the same
+      perpendicular-frame values at any tilt. The wall-local background zone
+      (guard rows) is stretched by 1/cos θ for the same reason.</p>
+    </li>
+    <li>
+      <h3>Find the outermost steep wall on each side <span class="src">edges.py · _find_wall</span></h3>
+      <p>Scanning inward from the window extremes, the first run whose slope and
+      total rise beat calibrated gates is the wall. Outermost beats internal
+      reflections (they are further in); the slope + rise gates reject shadow and
+      vignette ramps (they are too gentle). Short flat plateaus are bridged so a
+      defocus-softened wall is not rejected piecewise.</p>
+    </li>
+    <li>
+      <h3>Sub-pixel boundary on the wall itself <span class="src">edges.py · _side_edge</span></h3>
+      <p>The background reference is the median of the guard pixels just
+      <em>outside</em> the wall — an adjacent shadow plateau becomes the reference,
+      so shadow is never counted as fibre. The boundary is the sub-pixel crossing of
+      a level a fixed rise above that reference, searched on the wall run only.</p>
+    </li>
+    <li>
+      <h3>Perpendicular diameter and QC <span class="src">edges.py → qc.py</span></h3>
+      <p>Fix 1: <code>diameter = (y_bot − y_top) · cos θ</code>. QC then flags bad
+      columns, and its band-mismatch ratio is compared in the same perpendicular
+      frame so the check stays calibrated on tilted fibres.</p>
+    </li>
+  </ol>
+</section>
+
+<!-- ================= guard rails ==================================== -->
+<section>
+  <div class="sec-label">Guard rails</div>
+  <h2>What keeps it safe</h2>
+  <div class="cards">
+    <div class="card"><b>Exact identity at θ = 0</b>
+      Every compensation reduces to a no-op for a horizontal fibre — existing
+      results reproduce bit-for-bit, guarded by tests.</div>
+    <div class="card"><b>Clamped tilt</b>
+      One shared helper (<code>band.tilt_geometry</code>) clamps |θ| to 60°, so
+      every 1/cos θ factor is bounded at 2× and edges, QC and manual edits can
+      never disagree on the geometry.</div>
+    <div class="card"><b>Manual edits stay consistent</b>
+      Hand-corrected columns recompute θ from the <em>edited</em> boundaries, then
+      apply the same cos θ projection as automatic detection.</div>
+    <div class="card"><b>Validated range</b>
+      Flat to within 2 % from 0° to 45° on synthetic fibres of known width. Real
+      MasP2 data sits well inside that: median tilt 0.9°, max 6.7°.</div>
+  </div>
+</section>
+
+<footer>
+  Figures are produced by the real pipeline on the test-suite fixture — regenerate
+  with&nbsp;<code>uv run python others/tilt_corrected_diameter/make_visualisations.py</code>&nbsp;from the repo root.
+</footer>
+
+</main>
+
+<script>
+(function () {
+  const TRUE_W = 60, WCOL = 41;
+  const VW = 720, VH = 400, XC = VW / 2, YC = VH / 2;
+
+  const $ = (id) => document.getElementById(id);
+  const svgNS = "http://www.w3.org/2000/svg";
+
+  const els = {
+    band: $("band"), wallTop: $("wall-top"), wallBot: $("wall-bot"),
+    axis: $("axis"), axisLabel: $("axis-label"),
+    chord: $("chord"), perp: $("perp"), rightAngle: $("perp-right-angle"),
+    chordLabel: $("chord-label"), perpLabel: $("perp-label"),
+    samples: $("samples"), samplesOld: $("samples-old"), samplesNew: $("samples-new"),
+    theta: $("theta"), thetaVal: $("theta-val"),
+    roChord: $("ro-chord"), roChordErr: $("ro-chord-err"),
+    roPerp: $("ro-perp"), roDrift: $("ro-drift"),
+    showSamples: $("show-samples"),
+  };
+
+  function dot(parent, cx, cy, fill) {
+    const c = document.createElementNS(svgNS, "circle");
+    c.setAttribute("cx", cx); c.setAttribute("cy", cy); c.setAttribute("r", 4.2);
+    c.setAttribute("fill", fill);
+    c.setAttribute("stroke", "#fff"); c.setAttribute("stroke-width", "1.4");
+    parent.appendChild(c);
+  }
+
+  function render() {
+    const deg = +els.theta.value;
+    const rad = deg * Math.PI / 180;
+    const m = Math.tan(rad), cth = Math.cos(rad), sth = Math.sin(rad);
+    const halfVert = (TRUE_W / 2) / cth;          // vertical half-offset of the walls
+    const yAt = (x, s) => YC + m * (x - XC) + s * halfVert;
+
+    // band + wall lines (extend past the frame; clipped)
+    els.band.setAttribute("points",
+      `-40,${yAt(-40, -1)} ${VW + 40},${yAt(VW + 40, -1)} ` +
+      `${VW + 40},${yAt(VW + 40, 1)} -40,${yAt(-40, 1)}`);
+    for (const [el, s] of [[els.wallTop, -1], [els.wallBot, 1]]) {
+      el.setAttribute("x1", -40);      el.setAttribute("y1", yAt(-40, s));
+      el.setAttribute("x2", VW + 40);  el.setAttribute("y2", yAt(VW + 40, s));
+    }
+
+    // axis arrow along the centerline, right of centre
+    const a0 = 120, a1 = 205;
+    els.axis.setAttribute("x1", XC + a0 * cth); els.axis.setAttribute("y1", YC + a0 * sth);
+    els.axis.setAttribute("x2", XC + a1 * cth); els.axis.setAttribute("y2", YC + a1 * sth);
+    const lx = XC + (a1 + 14) * cth, ly = YC + (a1 + 14) * sth + 5;
+    els.axisLabel.setAttribute("x", lx); els.axisLabel.setAttribute("y", ly);
+    els.axisLabel.textContent = `fibre axis  θ = ${deg}°`;
+
+    // old vertical chord through the centre column
+    els.chord.setAttribute("x1", XC); els.chord.setAttribute("y1", yAt(XC, -1));
+    els.chord.setAttribute("x2", XC); els.chord.setAttribute("y2", yAt(XC, 1));
+
+    // new perpendicular width a little along the axis (kept apart for legibility)
+    const off = 62;
+    const px = XC + off * cth, py = YC + off * sth;
+    const nx = -sth, ny = cth;                    // unit normal to the axis
+    els.perp.setAttribute("x1", px - nx * TRUE_W / 2);
+    els.perp.setAttribute("y1", py - ny * TRUE_W / 2);
+    els.perp.setAttribute("x2", px + nx * TRUE_W / 2);
+    els.perp.setAttribute("y2", py + ny * TRUE_W / 2);
+
+    // right-angle marker where the perpendicular meets the bottom wall
+    const s = 9;
+    const bx = px + nx * TRUE_W / 2, by = py + ny * TRUE_W / 2;
+    els.rightAngle.setAttribute("d",
+      `M ${bx - nx * s - cth * s} ${by - ny * s - sth * s} ` +
+      `L ${bx - nx * s} ${by - ny * s} L ${bx - cth * s} ${by - sth * s}`);
+
+    // labels
+    const chordPx = TRUE_W / cth;
+    els.chordLabel.setAttribute("x", XC - 12);
+    els.chordLabel.setAttribute("y", yAt(XC, -1) - 10);
+    els.chordLabel.setAttribute("text-anchor", "end");
+    els.chordLabel.textContent = `${chordPx.toFixed(1)} px`;
+    els.perpLabel.setAttribute("x", bx + 14);
+    els.perpLabel.setAttribute("y", by + 16);
+    els.perpLabel.textContent = `${TRUE_W.toFixed(0)} px`;
+
+    // averaging-window samples at the top wall (fix 2) -- drawn around a
+    // column left of the chord so the overlay never collides with it
+    els.samplesOld.replaceChildren();
+    els.samplesNew.replaceChildren();
+    if (els.showSamples.checked) {
+      // as far left of the chord as fits while the whole cluster stays in frame
+      const dx = m > 0 ? Math.min(150, (YC - halfVert - 46) / m) : 150;
+      const x0 = XC - dx;
+      const yWall = yAt(x0, -1);
+      for (let k = -(WCOL - 1) / 2; k <= (WCOL - 1) / 2; k += 4) {
+        dot(els.samplesOld, x0 + k, yWall, "var(--orange)");        // same row
+        dot(els.samplesNew, x0 + k, yWall + m * k, "var(--blue)");  // follows the axis
+      }
+    }
+    els.samples.style.display = els.showSamples.checked ? "" : "none";
+
+    // readouts
+    els.thetaVal.textContent = `${deg}°`;
+    els.roChord.textContent = chordPx.toFixed(1);
+    els.roChordErr.textContent = `(+${(100 * (1 / cth - 1)).toFixed(1)} %)`;
+    els.roPerp.textContent = (chordPx * cth).toFixed(1);
+    els.roDrift.textContent = (WCOL * Math.abs(m)).toFixed(1);
+  }
+
+  const q = new URLSearchParams(location.search);
+  if (q.has("theta")) els.theta.value = Math.min(45, Math.max(0, +q.get("theta") || 0));
+  if (q.get("samples") === "1") els.showSamples.checked = true;
+
+  els.theta.addEventListener("input", render);
+  els.showSamples.addEventListener("change", render);
+  render();
+})();
+</script>
+</body>
+</html>
