@@ -98,8 +98,11 @@ are passed straight through to `streamlit run`).
 
 **Main area**
 - One tab per replicate: the full-resolution **overlay** (cyan top edge / yellow
-  bottom edge / dashed centerline), the **diameter-vs-position** plot (raw points
-  + smoothed line, µm), and scalar metrics (median Ø, coverage, tilt, QC flags).
+  bottom edge / dashed centerline / green perpendicular measurement chords —
+  each green line is the exact diameter being reported at that column, so its
+  far end must touch the bottom edge), the **diameter-vs-position** plot (raw
+  points + smoothed line, µm), and scalar metrics (median Ø, coverage, tilt,
+  QC flags).
 - **Edit boundaries (manual correction)**: when detection fails locally, open
   the expander in a replicate tab, pick the top or bottom line, and click 2+
   points along the true edge in the zoomed strip — the line is redrawn through

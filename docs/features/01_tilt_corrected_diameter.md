@@ -2,9 +2,11 @@
 Added: 2026-07-31
 Code: `src/fibrecv/edges.py` (`_axis_average`, `_vshift`, `detect_edges`),
 `src/fibrecv/band.py` (`tilt_geometry`, `TAN_TILT_MAX`), `src/fibrecv/qc.py`
-(band-mismatch ratio), `src/fibrecv/manual_edit.py` (edited-column diameter);
-tests in `tests/test_edges_tilt.py`; visual explainer in
-`others/tilt_corrected_diameter/` (open `algorithm_visualisation.html`).
+(band-mismatch ratio), `src/fibrecv/manual_edit.py` (edited-column diameter),
+`src/fibrecv/overlay.py` (`draw_perp_chords` verification chords);
+tests in `tests/test_edges_tilt.py` and `tests/test_overlay.py`; visual
+explainer in `others/tilt_corrected_diameter/`
+(open `algorithm_visualisation.html`).
 
 ## What it does
 
@@ -77,6 +79,16 @@ manual-edit columns use `(y_bot − y_top) · cos θ` with θ re-fitted from the
 edited boundaries. Validated by `tests/test_edges_tilt.py`: invariance ≤ 2 %
 relative across 0–45°, identity at zero slope, exact-width even-`wcol`
 behaviour, and clamping.
+
+**Visual verification chords** (`overlay.draw_perp_chords`): every overlay
+(CLI PNG and GUI preview) draws green chords at 7 evenly spaced valid columns.
+Each chord starts on the top boundary and runs perpendicular to the fitted
+axis for exactly the reported length `(y_bot − y_top) · cos θ`, with short end
+ticks along the wall direction — so its far end must land on the bottom
+boundary. A gap, overshoot or skewed angle exposes a tilt bug at a glance.
+The chords use the automatic band tilt; heavily manually-edited stretches
+re-fit their own slope for the reported number, so a small end-gap there is
+expected. Geometry regression-tested in `tests/test_overlay.py`.
 
 ## Caveats
 

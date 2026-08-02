@@ -82,7 +82,7 @@ stage 1 with `--jobs N`. Every detection parameter can be overridden by flag
 
 ```
 fibrecv_output/
-├── overlays/                 # full-res images with detected boundaries drawn
+├── overlays/                 # full-res images with boundaries + measurement chords drawn
 ├── per_image/
 │   ├── csv/                  # diameter-vs-position profile per image
 │   ├── plots/
