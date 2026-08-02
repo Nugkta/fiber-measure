@@ -792,9 +792,11 @@ def _enable_folder_upload(label: str) -> None:
     re-applies it whenever a matching uploader (re)appears, so it survives both
     client-side expander toggles (no Python rerun) and Streamlit reruns. The
     observer is created once per label (guarded by a flag on ``window.parent``)
-    and cleaned up on iframe unload so a later re-creation of this component
-    (e.g. the folder-mode checkbox toggled off then on) gets a fresh observer
-    instead of being silently blocked by a stale flag.
+    and cleaned up on iframe teardown (``pagehide`` — ``unload`` is deprecated
+    and Chrome may never fire it, leaving the flag stuck) so a later
+    re-creation of this component (e.g. the folder-mode checkbox toggled off
+    then on) gets a fresh observer instead of being silently blocked by a
+    stale flag.
     """
     js = """
     <script>
@@ -821,7 +823,7 @@ def _enable_folder_upload(label: str) -> None:
         window.parent[FLAG] = true;
         const observer = new MutationObserver(apply);
         observer.observe(doc.body, {childList: true, subtree: true});
-        window.addEventListener("unload", function () {
+        window.addEventListener("pagehide", function () {
           observer.disconnect();
           window.parent[FLAG] = false;
         });
@@ -982,7 +984,11 @@ _CSS = """
    -> class st-key-metrics_<name>; matched by prefix so this one rule covers
    both. Each real st.metric widget inside becomes a bordered white card;
    label is small/uppercase/grey, value is tabular-nums and contained
-   (min-width:0 + ellipsis) so a long number never grows or clips its column. */
+   (min-width:0 so it never grows its column). Overflow/white-space/text-
+   overflow are deliberately left unset here (rather than nowrap+ellipsis)
+   so the shared stMetricValue wrap rule below is the one in effect: a value
+   like "62.43 µm" must always be fully readable, so it wraps to a second
+   line instead of being clipped. */
 [class*="st-key-metrics_"] [data-testid="stMetric"] {
     background: #FFFFFF;
     border: 1px solid #E2E8F0;
@@ -1001,9 +1007,6 @@ _CSS = """
 [class*="st-key-metrics_"] [data-testid="stMetricValue"] {
     font-variant-numeric: tabular-nums;
     min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
 }
 /* primary metric (first column of the row) reads as the headline number */
 [class*="st-key-metrics_"] [data-testid="stColumn"]:first-of-type
@@ -1015,9 +1018,17 @@ _CSS = """
 [class*="st-key-status_ok"] [data-testid="stMetricValue"] { color: #15803D; }
 [class*="st-key-status_warn"] [data-testid="stMetricValue"] { color: #B45309; }
 
-/* ---- ellipsis containment: let any metric value wrap instead of being
-   silently clipped when its column is narrow ---- */
-[data-testid="stMetricValue"] {
+/* ---- wrap, don't clip: lets any metric value wrap to a second line instead
+   of being silently ellipsised/clipped when its column is narrow (e.g.
+   "62.43 µm" at 1280px). Streamlit renders the value text in a <p> inside
+   stMetricValue and ships its own emotion-generated ".st-emotion-cache-* p"
+   rule (specificity 0,1,1: one class + the p type) hard-coding
+   nowrap/hidden/ellipsis on that <p> -- overflow/text-overflow/white-space
+   are not inherited, so overriding stMetricValue (the div) alone never
+   reaches the actual text node. The " p" selector here matches that
+   specificity so ours (declared later) wins in the cascade. ---- */
+[data-testid="stMetricValue"],
+[data-testid="stMetricValue"] p {
     overflow: visible;
     white-space: normal;
     text-overflow: clip;
@@ -1042,6 +1053,15 @@ _CSS = """
 .fcv-jump a:hover { text-decoration: underline; }
 @media (max-width: 1200px) {
     .fcv-jump { display: none; }
+}
+/* ---- reserve the nav's column wherever it is shown (>=1200px) so the fixed
+   .fcv-jump never sits over page content: the header chip's right edge at
+   wide viewports, or a plot's corner at narrower ones. Padding goes on the
+   block container (covers every child, incl. .fcv-header and st.pyplot
+   figures) sized to clear the nav's own width (~1rem right offset + ~0.9rem
+   padding each side + its longest link, "04 Export & batch") plus a gap ---- */
+@media (min-width: 1200px) {
+    [data-testid="stMainBlockContainer"] { padding-right: 11rem; }
 }
 
 /* anchored headings (card subheaders) land below the fixed header on jump */
@@ -1127,7 +1147,10 @@ def _render_replicate(rep: dict, cfg: CONFIG) -> None:
     if res.band_mismatch:
         flags.append("band_mismatch")
     flags_txt = ", ".join(flags) if flags else "none"
-    safe_name = _safe_key(rep["name"])
+    # rep["idx"] (position within the group) disambiguates names that collide
+    # after sanitisation, e.g. "masp2 1_1_1.png" and "masp2_1_1_1.png" both
+    # reduce to "masp2_1_1_1_png" via _safe_key alone -> StreamlitDuplicateElementKey.
+    safe_name = f"{rep['idx']}_{_safe_key(rep['name'])}"
     with st.container(key=f"metrics_rep_{safe_name}"):
         c = st.columns(6)
         c[0].metric("mean Ø", _fmt(mean_um, "um"),
