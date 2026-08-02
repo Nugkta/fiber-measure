@@ -833,7 +833,9 @@ _CSS = """
     white-space: nowrap;
 }
 
-/* ---- section cards: st.container(key="card_...") -> class st-key-card_NN */
+/* ---- section cards: st.container(key="card_replicates"/"card_group"/
+   "card_tensile"/"card_export") -> class st-key-card_<name>; matched by
+   prefix so this one rule covers all four ---- */
 [class*="st-key-card_"] {
     background: #FFFFFF;
     border: 1px solid #E2E8F0;
@@ -892,14 +894,20 @@ def _render_header(group_label: str | None, n_reps: int, edge_z: float) -> None:
     """Slim header + state chip, replacing ``st.title``/``st.caption``.
 
     Must run after the sidebar builders (``_load_reps`` etc.) since the chip
-    needs group state. Contains the literal "fibrecv" the external
-    screenshot harness waits on (``text=fibrecv``).
+    needs ``n_reps``/``group_label``. The no-data branch is keyed on
+    ``n_reps == 0``, not on ``group_label`` truthiness: unparseable-name
+    uploads land in the "ungrouped" bucket with ``group_label=None`` while
+    ``reps`` is still populated, so that case must still show a truthful
+    "loaded" chip rather than "no data loaded". Contains the literal
+    "fibrecv" the external screenshot harness waits on (``text=fibrecv``).
     """
-    if group_label:
-        reps_txt = f"{n_reps} replicate" + ("" if n_reps == 1 else "s")
-        chip = f"group {group_label} · {reps_txt} · edge_z {edge_z:.1f}"
-    else:
+    if n_reps == 0:
         chip = "no data loaded"
+    else:
+        reps_txt = f"{n_reps} replicate" + ("" if n_reps == 1 else "s")
+        chip = (f"group {group_label} · {reps_txt} · edge_z {edge_z:.1f}"
+                if group_label else
+                f"{reps_txt} (ungrouped) · edge_z {edge_z:.1f}")
     st.markdown(
         '<div class="fcv-header">'
         '<h1>fibrecv — fibre diameter detection</h1>'
@@ -1553,7 +1561,7 @@ def main() -> None:
 
     _render_jump_menu()
 
-    with st.container(key="card_01"):
+    with st.container(key="card_replicates"):
         st.subheader(
             f"01 Replicates — group {group_label}" if group_label
             else "01 Replicates (uploaded)", anchor="replicates")
@@ -1563,7 +1571,7 @@ def main() -> None:
             with tab:
                 _render_replicate(rep, cfg)
 
-    with st.container(key="card_02"):
+    with st.container(key="card_group"):
         st.subheader("02 Group panel", anchor="group-panel")
         st.caption("Registered mean ± std across the group's aligned replicates.")
         mean_um = _render_group(reps, tcfg, group_label)
@@ -1572,11 +1580,11 @@ def main() -> None:
     # gating to the pre-redesign code, where _render_tensile was called from
     # inside _render_group only on its non-early-return path
     if mean_um is not None:
-        with st.container(key="card_03"):
+        with st.container(key="card_tensile"):
             st.subheader("03 Tensile", anchor="tensile")
             _render_tensile(group_label, mean_um, tcfg, tensile["tmap"])
 
-    with st.container(key="card_04"):
+    with st.container(key="card_export"):
         st.subheader("04 Export & batch", anchor="export")
         _render_export_batch(reps, tcfg, group_label, folder, tensile["tmap"], cfg_items)
 
