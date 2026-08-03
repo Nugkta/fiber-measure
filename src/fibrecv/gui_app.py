@@ -17,15 +17,17 @@ Inputs
 - Images from a local folder OR any number of uploaded files; both are
   auto-grouped via ``parse_name``'s trailing-numbers rule, with unparseable
   names collected in an "ungrouped" bucket.
-- The three boundary knobs (``edge_z``/``edge_frac``/``wcol``) plus the ``ppu``
-  calibration, edited in a sidebar form and applied on demand; all other
-  ``CONFIG`` fields stay at the validated defaults.
+- The three boundary knobs (``edge_z``/``edge_frac``/``wcol``), the
+  ``refine_on`` erf edge-refinement toggle and the ``ppu`` calibration, edited
+  in a sidebar form and applied on demand; all other ``CONFIG`` fields stay at
+  the validated defaults.
 - An output-folder path for export/batch.
 
 Output
 ------
 - Live, in-memory preview: full-res boundary overlays, per-replicate diameter
-  profiles, and a registered mean+/-std group curve -- all redrawn when the user
+  profiles (with a sigma(x) fit-quality trace overlaid when refinement ran),
+  and a registered mean+/-std group curve -- all redrawn when the user
   changes parameters and clicks Apply (no disk writes for preview).
 - Manual boundary correction: per replicate, the user can click anchor points
   on a zoomed strip (or nudge a whole line) to redraw the detected top/bottom
@@ -129,6 +131,12 @@ PARAM_SPECS: list[tuple] = [
      "preserve fine thickness variation — too high flattens real variation. "
      "Default 41.",
      1, 1, 201, None),
+    ("refine_on", "Edge refinement (refine_on)", "bool",
+     "Refit each detected wall as a blurred step edge and shift the boundary "
+     "to the fitted midpoint (sub-pixel). Improves accuracy on soft/blurred "
+     "walls; turn off to reproduce the legacy (pre-refinement) boundary "
+     "exactly. Default on.",
+     None, None, None, None),
     ("ppu", "Pixels per micron (ppu)", "float",
      "Calibration: camera pixels per micron; diameters in µm = pixels / ppu, "
      "so this scales every µm number in the app and exports (pixel values "
@@ -537,7 +545,18 @@ def _styled_fig(figsize: tuple[float, float] = (9, 3)):
 
 
 def _profile_fig(mr, rgb, cfg: CONFIG):
-    """Per-replicate diameter-vs-position figure (raw points + smoothed line, µm)."""
+    """Per-replicate diameter-vs-position figure (raw points + smoothed line, µm).
+
+    When refinement diagnostics are available (``mr.ref``, populated whenever
+    ``compute_measurement`` ran -- present but all-NaN when ``refine_on`` was
+    off or nothing was refined) and carry at least one finite fitted sigma,
+    overlays the erf-fit blur width sigma(x) (perpendicular px, top/bottom
+    walls) on a second, muted-slate y-axis (``ax.twinx()``) so fit quality is
+    visible alongside the diameter trace. Degrades silently to the plain
+    diameter plot for stale ``mr`` objects with no ``ref`` attribute at all
+    (e.g. hand-built in tests), for an all-NaN ``ref`` (refine off / nothing
+    refined) or for a completely unrefined replicate.
+    """
     bnd, res = mr.bnd, mr.res
     span = slice(bnd.x0, bnd.x1 + 1)
     x = np.arange(rgb.shape[1])[span]
@@ -548,7 +567,32 @@ def _profile_fig(mr, rgb, cfg: CONFIG):
     ax.plot(x, sm_um, "-", lw=1.3, color=_ACCENT, label="smooth")
     ax.set_xlabel("x position (px)")
     ax.set_ylabel("diameter (µm)")
-    ax.legend(loc="best", fontsize=8)
+    handles, labels = ax.get_legend_handles_labels()
+
+    ref = getattr(mr, "ref", None)
+    if ref is not None:
+        sigma_top = np.asarray(ref.sigma_top, dtype=float)[span]
+        sigma_bot = np.asarray(ref.sigma_bot, dtype=float)[span]
+        if np.isfinite(sigma_top).any() or np.isfinite(sigma_bot).any():
+            axr = ax.twinx()
+            axr.set_facecolor("none")
+            axr.spines["top"].set_visible(False)
+            axr.spines["right"].set_color(_MUTED)
+            axr.tick_params(colors=_MUTED)
+            axr.yaxis.label.set_color(_MUTED)
+            if np.isfinite(sigma_top).any():
+                axr.plot(x, sigma_top, "-", lw=0.9, alpha=0.6, color=_MUTED,
+                         label="sigma top")
+            if np.isfinite(sigma_bot).any():
+                axr.plot(x, sigma_bot, "--", lw=0.9, alpha=0.6, color=_MUTED,
+                         label="sigma bot")
+            axr.set_ylabel("fit sigma (px)")
+            axr.grid(False)
+            h2, l2 = axr.get_legend_handles_labels()
+            handles += h2
+            labels += l2
+
+    ax.legend(handles, labels, loc="best", fontsize=8)
     ax.grid(alpha=0.3)
     fig.tight_layout()
     return fig
@@ -679,7 +723,9 @@ def _param_form() -> None:
             if name == "ppu":
                 st.markdown("**Calibration**")
             key = f"p_{name}_v{ver}"
-            cur = applied[name]
+            # .get fallback: session state may predate this field (e.g. refine_on
+            # added after the session's cfg_dict was created) -- never KeyError.
+            cur = applied.get(name, getattr(DEFAULTS, name))
             if kind == "slider":
                 new_vals[name] = st.slider(
                     label, min_value=float(lo), max_value=float(hi),
@@ -688,6 +734,9 @@ def _param_form() -> None:
                 new_vals[name] = int(st.number_input(
                     label, min_value=int(lo), max_value=int(hi),
                     value=int(cur), step=int(step), help=help_txt, key=key))
+            elif kind == "bool":
+                new_vals[name] = st.checkbox(
+                    label, value=bool(cur), help=help_txt, key=key)
             else:  # float
                 kwargs = dict(min_value=float(lo), max_value=float(hi),
                               value=float(cur), step=float(step), help=help_txt, key=key)

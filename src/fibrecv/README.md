@@ -41,16 +41,20 @@ Streamlit GUI) that call the same core so CLI and GUI outputs match.
 - `register.py` — current — aligns a group's replicate profiles into a
   registered mean ± std curve (`register_sample`).
 - `run_measure.py` — current — CLI, stage 1: measures a glob of images in
-  parallel (`ProcessPoolExecutor`), writing per-image artifacts.
+  parallel (`ProcessPoolExecutor`), writing per-image artifacts; exposes every
+  `CONFIG` knob as a flag, including `--refine`/`--no-refine` for the erf
+  edge-refinement stage.
 - `run_aggregate.py` — current — CLI, stage 2: groups per-image profiles by
   sample and builds the registered averages + `master_summary.csv`.
 - `tensile.py` — current — tensile (stress-strain) CSV/Excel ingestion and
   single-fibre metric computation (modulus, toughness, break point) from a
   fibre's measured mean diameter.
 - `gui_app.py` — current — local Streamlit GUI: tuning/preview/manual-edit/
-  batch/export over the same `compute`/`register`/`tensile` core, plus the
-  "clean lab" visual layer (`_CSS`/`_inject_css`, header+chip, four numbered
-  card sections with a jump menu, `_fmt`, `_styled_fig`) — see
-  `docs/features/02_gui-redesign.md`.
+  batch/export over the same `compute`/`register`/`tensile` core (sidebar
+  params include the `refine_on` erf edge-refinement toggle, and the
+  per-replicate profile plot overlays a sigma(x) fit-quality trace when
+  refinement ran), plus the "clean lab" visual layer (`_CSS`/`_inject_css`,
+  header+chip, four numbered card sections with a jump menu, `_fmt`,
+  `_styled_fig`) — see `docs/features/02_gui-redesign.md`.
 - `gui_launch.py` — current — `fibrecv-gui` console-script entry point; a
   thin subprocess wrapper around `streamlit run gui_app.py`.

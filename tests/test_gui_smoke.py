@@ -34,6 +34,17 @@ def test_boot_without_data():
     at = AppTest.from_file(APP, default_timeout=60).run()
     assert not at.exception
 
+    # refine_on checkbox must render before the Calibration divider (i.e. among
+    # the detection knobs, not after -- PARAM_SPECS ordering + the divider's
+    # name=='ppu' trigger). Both live in the sidebar form, so compare their
+    # positions in document order rather than relying on separate type lists.
+    sidebar_nodes = list(at.sidebar)
+    checkbox_idx = next(i for i, n in enumerate(sidebar_nodes)
+                         if n.type == "checkbox" and "refine" in n.label.lower())
+    calibration_idx = next(i for i, n in enumerate(sidebar_nodes)
+                            if n.type == "markdown" and "Calibration" in n.value)
+    assert checkbox_idx < calibration_idx
+
 
 def test_full_flow_with_manual_edits(image_folder: Path):
     at = AppTest.from_file(APP, default_timeout=180)

@@ -9,7 +9,8 @@ Inputs
 ------
 Command-line flags: image selector (``--glob`` / ``--groups`` / ``--all``),
 ``--root`` (image dir), ``--out`` (output root), ``--jobs`` and every CONFIG
-parameter (``--ppu``, ``--edge-frac`` strictness knob, ``--k-band`` ...).
+parameter (``--ppu``, ``--edge-frac`` strictness knob, ``--k-band`` ...,
+``--refine``/``--no-refine`` for the erf edge-refinement stage).
 
 Output
 ------
@@ -60,6 +61,7 @@ def build_config(args: argparse.Namespace) -> CONFIG:
         "slope_min": args.slope_min,
         "slope_rel": args.slope_rel,
         "rise_min": args.rise_min,
+        "refine_on": args.refine,
     }
     overrides = {k: v for k, v in overrides.items() if v is not None}
     return replace(cfg, **overrides)
@@ -146,6 +148,9 @@ def main(argv: list[str] | None = None) -> int:
                     help="wall slope as fraction of side max slope")
     ap.add_argument("--rise-min", dest="rise_min", type=float, default=None,
                     help="minimum z-rise of a wall run")
+    ap.add_argument("--refine", action=argparse.BooleanOptionalAction, default=None,
+                    help="erf edge-refinement stage (default: on, per CONFIG.refine_on); "
+                         "--no-refine reproduces the pre-refinement edges bit-identically")
     args = ap.parse_args(argv)
 
     cfg = build_config(args)
