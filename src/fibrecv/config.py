@@ -109,8 +109,18 @@ class CONFIG:
     #                                specular core stripe and shadow ramps are a
     #                                systematic model mismatch, not noise, so wider
     #                                blocks do not help. 0.15 lifts mean coverage to
-    #                                90% (median 96%) while the fitted midpoints and
-    #                                sigmas stay put (see docs/report/01_...md).
+    #                                90% (median 96%). Where the tight gate already
+    #                                had a representative sample the added blocks
+    #                                agree with it (masp2 10_1_1 top wall, 65->72%
+    #                                coverage: median sigma 11.654->11.680 px,
+    #                                median |t0| 5.658->5.245 px); where it did not
+    #                                (same image's bottom wall, 23->99%) the fit
+    #                                population is replaced, not extended -- but a
+    #                                gate rejecting three quarters of a wall was not
+    #                                delivering a usable estimate there anyway.
+    #                                Unlike shrinking refine_in_max, this leaves
+    #                                every passing block's fit unchanged and only
+    #                                adds more of them (see docs/report/01_...md).
     refine_sigma_min: float = 0.8   # accepted fitted sigma floor (perpendicular px)
     refine_sigma_max: float = 20.0  # accepted fitted sigma ceiling (perpendicular px)
     refine_maxshift: float = 12.0   # max |t0| (perpendicular px) from the legacy edge

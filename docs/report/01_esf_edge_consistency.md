@@ -97,6 +97,22 @@ over 144 images.
   nominally one fibre, any such correlation *is* the focus-dependent bias the
   refinement claims to remove; it should be weaker with refinement on.
 
+**One planned secondary was replaced.** The validation plan listed "a sanity
+check that σ(x) maps match visually defocused stretches" — an eyeball check
+that the fitted blur width tracks where an image looks out of focus. It was
+not run. In its place this report uses the quantitative regression above: the
+within-group slope of measured diameter against fitted σ. The substitution is
+a strict improvement for the question at hand — the eyeball check would
+confirm only that σ is plausible, on a handful of images and by human
+judgement, whereas the regression tests the thing that actually matters
+(whether σ still biases the measurement) across all 141 images and yields a
+number that either falls with refinement on or does not. What is lost is the
+failure mode the eyeball check would have caught: a σ(x) map that is smoothly
+wrong — self-consistent, well-fit, but systematically mis-scaled — would pass
+the regression while looking obviously incorrect over a defocused stretch. The
+pilot's per-image σ medians (7.3–9.3 px) agreeing with this run's (8.53 px)
+is weak reassurance on that point, not a substitute. See §6.
+
 ### 2.4 Acceptance criteria (from the design spec)
 
 1. The primary metric falls in a clear majority of groups.
@@ -148,20 +164,42 @@ would otherwise fall back to — so admitting these fits is still the better of
 the two options. That bound is now a regression test
 (`tests/test_refine.py::test_contamination_the_residual_gate_admits_moves_the_midpoint_under_1_5_px`).
 
-**The fits themselves do not move.** Across `relmax` 0.08 → 0.20 the per-block
-fitted midpoints and σ stay put (e.g. `masp2 10_1_1` top wall: median offset
-−5.64 → −5.03 px; σ 10.8 → 8.6 px), i.e. the extra blocks a looser gate admits
-agree with the ones a tight gate already accepted. Beyond 0.15 the coverage
-gain is ≤ 2 points for a doubling of the admitted midpoint error, so 0.15 is
-the knee.
+**Where the tight gate had a real sample, the extra blocks agree with it.**
+Raising `relmax` changes only which blocks are accepted — the fit window and
+the model are untouched — so the test is whether the enlarged block population
+still says the same thing. On `masp2 10_1_1` (0.08 arm vs 0.15 arm, from the
+saved `meta["refine"]` of each):
 
-**A knob that was rejected.** Shrinking the inward window `refine_in_max`
-(28 → 20 → 16 → 12 px) also lifts coverage (66.9 → 79.0 → 85.5 → 89.3% on the
-12-image probe) by excluding the specular stripe — but it truncates the erf's
-inner plateau, and the fit degrades with it: on `masp2 10_1_1` the median
-fitted σ collapses 10.8 → 8.1 → 6.5 px and the bottom-wall median offset walks
-+4.9 → +2.0 → +0.5 px. Higher coverage bought with biased fits is not a win,
-so `refine_in_max` was left at 28.
+| wall | coverage | median σ | median \|t₀\| |
+|---|---|---|---|
+| top | 65.3% → 71.6% | 11.654 → 11.680 px | 5.658 → 5.245 px |
+| bottom | 23.1% → 99.1% | 9.075 → 7.746 px | 4.945 → 3.527 px |
+
+The top wall is the honest test: it already had a two-thirds sample at 0.08,
+and adding 6 points of coverage moves σ by 0.03 px and the median offset by
+0.4 px. The bottom wall is **not** a test at all — 23.1% coverage is not a
+representative sample of that wall, and going to 99.1% replaces the population
+rather than extending it, so its σ and offset do move materially (−1.33 px and
+−1.42 px). Nothing in this data says the 23% subset was the more trustworthy
+of the two; it says a gate that rejects three quarters of a wall leaves you
+without an estimate to defend. Read together: the looser gate is safe where it
+merely tops up an existing sample, and where it does more than that the tight
+gate was not delivering a usable measurement in the first place. Beyond 0.15
+the coverage gain is ≤ 2 points for a doubling of the admitted midpoint error,
+so 0.15 is the knee.
+
+**A knob that was rejected — and why it is a different kind of change.**
+Shrinking the inward window `refine_in_max` (28 → 20 → 16 → 12 px) also lifts
+coverage (66.9 → 79.0 → 85.5 → 89.3% on the 12-image probe) by excluding the
+specular stripe, but it truncates the erf's inner plateau: on `masp2 10_1_1`
+the median fitted σ collapses 10.8 → 8.1 → 6.5 px and the bottom-wall median
+offset walks +4.9 → +2.0 → +0.5 px (12-image probe, both walls pooled, gate
+held at 0.08). The distinction from the `relmax` change is what moves. A
+shorter window refits *the blocks that were already passing* through less
+data, so it changes the estimate itself; `relmax` leaves every passing block's
+fit bit-identical and only adds more of them. Higher coverage bought by
+biasing fits that were already fine is not a win, so `refine_in_max` was left
+at 28.
 
 **Change made:** `CONFIG.refine_relmax` 0.08 → **0.15** in
 `src/fibrecv/config.py`. Two gate unit tests, which had encoded contamination
@@ -407,8 +445,18 @@ old numbers bit-identically.
 - **The looser residual gate admits mildly contaminated fits**, bounded at
   ~1.5 px of midpoint error (§3.1). That bound is measured on synthetic
   contamination, not on real specular rims.
-- **Only 46 of 47 groups, and 4 of those have 2 replicates**, so several
-  per-group std values rest on two points and are very noisy.
+- **Only 46 of 47 groups, and 6 of those (`8_5`, `8_7`, `9_9`, `10_2`,
+  `10_5`, `10_7`) have 2 replicates**, so their std rests on two points and is
+  very noisy. This matters for the verdict, not just for the error bars: both
+  of the acceptance-criterion-2 failures (`10_5`, `10_7`) are 2-replicate
+  groups, and both had a near-zero off-arm baseline (0.005 and 0.804 µm) that
+  almost any change would exceed. A 3-replicate-only reading of criterion 2
+  would pass.
+- **The σ(x)-vs-visible-defocus sanity check was not run** (see §2.3). Nothing
+  in this report verifies that the fitted blur map corresponds to what is
+  actually out of focus in an image; a smoothly mis-scaled σ(x) would be
+  invisible to every metric used here. That check is cheap and should be done
+  before σ(x) is trusted as a "focus map" diagnostic in the GUI.
 - **Absolute accuracy is untested** and remains out of scope — the edge is
   chromatic, and no known-diameter standard was measured.
 - Sign tests treat groups as independent, which they are for different fibres
@@ -422,6 +470,16 @@ Outputs live under `fibrecv_output/` (gitignored): `ab_refine_off`,
 `ab_refine_on` (final defaults), `ab_refine_on_rel008` (as-landed gate). Each
 holds `per_image/csv/*_profile.csv`, `per_image/diagnostics/*_meta.json`,
 `summary/master_summary.csv` and `summary/run_config.json` (the full CONFIG
-snapshot for that arm). The analysis scripts were ephemeral, per repo policy;
-every number above is recomputable from those artifacts with the commands in
-§2.2.
+snapshot for that arm). The analysis scripts were ephemeral, per repo policy.
+
+What those three arms are enough to recompute: everything in §3.2–§3.5 and
+§4, the whole per-group table, and the `refine_relmax` 0.08 and 0.15 rows of
+the §3.1 coverage table.
+
+What needs the pipeline re-run at other configs, because no arm was saved for
+them: the §3.1 coverage rows at `refine_relmax` 0.10 / 0.12 / 0.20 / 0.25 and
+their improved-out-of-46 counts; the `refine_block` 16/32/64 probe; the
+`refine_in_max` 28/20/16/12 probe; and the synthetic gate-cost curve
+(midpoint error vs residual), which needs `refine._fit_block` called directly
+on generated profiles — its 1.5 px conclusion is pinned by
+`tests/test_refine.py::test_contamination_the_residual_gate_admits_moves_the_midpoint_under_1_5_px`.

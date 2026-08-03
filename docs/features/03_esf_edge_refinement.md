@@ -79,13 +79,22 @@ A/B control.
   cause is not block noise — widening the block barely moves coverage (block
   16 → 66.9%, 32 → 70.3%, 64 → 68.0% on a 12-image probe) — but systematic
   model mismatch from specular stripes and shadow ramps. 0.15 lifts coverage
-  to 89.6% (median image 95.7%) while the fitted midpoints and σ stay put.
-  The cost is bounded and measured: a fit admitted at residual 0.08 is within
-  ~0.7 px of the true step, one admitted at 0.15 within ~1.5 px — still
-  smaller than the 2.3–3.4 px per-side bias of the legacy edge the block would
-  otherwise fall back to. Rejected alternative: shrinking `refine_in_max`,
-  which lifts coverage further but truncates the erf's inner plateau and
-  biases σ and the midpoint (see `docs/report/01_esf_edge_consistency.md`).
+  to 89.6% (median image 95.7%). Where the tight gate already had a
+  representative sample, the added blocks agree with it — `masp2 10_1_1` top
+  wall, 65.3% → 71.6% coverage: median σ 11.654 → 11.680 px, median |t₀|
+  5.658 → 5.245 px. Where it did not (the same image's bottom wall, 23.1% →
+  99.1%), the fit population is replaced rather than extended and does move
+  (σ 9.075 → 7.746 px, |t₀| 4.945 → 3.527 px) — but a gate rejecting three
+  quarters of a wall was not delivering a defensible estimate there in the
+  first place. The cost is bounded and measured: a fit admitted at residual
+  0.08 is within ~0.7 px of the true step, one admitted at 0.15 within
+  ~1.5 px — still smaller than the 2.3–3.4 px per-side bias of the legacy edge
+  the block would otherwise fall back to. Rejected alternative: shrinking
+  `refine_in_max`, which lifts coverage further but truncates the erf's inner
+  plateau, biasing σ and the midpoint of blocks that were *already passing* —
+  a change to the estimate itself, where `relmax` leaves every passing block's
+  fit untouched and only adds more of them (see
+  `docs/report/01_esf_edge_consistency.md` §3.1).
 - **Perf budget: < 1 s added per 2560-px image** (~320 fits/image, block
   width 16) — met, see Algorithm details.
 - **Manual edits run after refine and are not re-refined** — see Caveats.
