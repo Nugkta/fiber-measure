@@ -8,5 +8,5 @@ two-digit number here). Each file: hypothesis/status/started header, then one
 
 ## Files
 
-*(none yet — new studies are created only after the slug + hypothesis are
-confirmed in chat; see CLAUDE.md, Lab Notebook Protocol)*
+- `01_esf_edge_consistency.md` — active — erf-midpoint edge refinement study: validates the blurred-step (PSF) model on MasP2 images and will A/B replicate consistency of the refined edges.
+- `01_esf_fits.png` — evidence figure for study 01 (edge-aligned profiles, erf fits, residual clouds on three MasP2 images).

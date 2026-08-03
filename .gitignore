@@ -17,3 +17,5 @@ fibrecv_output/
 
 # OS clutter
 .DS_Store
+
+.superpowers/

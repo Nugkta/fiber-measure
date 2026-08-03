@@ -10,5 +10,4 @@ confirmed in chat (see CLAUDE.md, Lab Notebook Protocol).
 
 | Slug | Status | Started | Last Updated | One-line Summary |
 |------|--------|---------|--------------|------------------|
-
-*(no studies yet)*
+| 01_esf_edge_consistency | active | 2026-08-03 | 2026-08-03 | erf-midpoint edge refinement to remove focus-dependent diameter bias; blurred-step model validated on 3 MasP2 images, implementation pending |

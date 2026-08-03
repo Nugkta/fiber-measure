@@ -7,6 +7,10 @@ reused ``fibrecv`` package: ``compute`` (pure detection core), ``config``,
 ``io_utils``, ``overlay`` (``render_overlay``), ``register``, ``measure``
 (``write_measurement``) and ``run_measure``/``run_aggregate`` (batch + aggregate).
 Imports are absolute (``fibrecv.*``) because Streamlit runs this file as a script.
+The sibling ``.streamlit/config.toml`` supplies the Streamlit-engine half of the
+theme (base colours, radii, ``toolbarMode``); this file's own ``_CSS`` constant
+covers what that engine cannot reach (header/chip markup, section cards, the
+jump menu) -- the two are one visual design and must be read together.
 
 Inputs
 ------
@@ -33,6 +37,11 @@ Output
 - On request: the standard fibrecv output tree (overlays/, per_image/*,
   per_sample/*, summary/master_summary.csv, run_config.json) written locally for
   the current group or for a whole folder (in-process batch with a progress bar).
+- A "clean lab" light UI over that data: a slim violet-accent header + state
+  chip (``_render_header``), four numbered card sections -- 01 Replicates,
+  02 Group panel, 03 Tensile, 04 Export & batch -- each an
+  ``st.container(key="card_...")`` framed by ``_CSS``, with a fixed jump menu
+  (``_render_jump_menu``, hidden below 1200px) linking to their anchors.
 
 Pos
 ---
@@ -40,12 +49,25 @@ Thin front-end over the validated pipeline; adds no detection logic. Designed to
 run on the user's local Mac/Windows machine (``fibrecv-gui`` or
 ``streamlit run src/fibrecv/gui_app.py``), reading a copied images folder. The
 heavy compute reuses ``compute.compute_measurement`` so preview == CLI output.
+The styling layer is self-contained and additive over that data path: ``_CSS``
+(injected once via ``_inject_css()`` at the top of ``main()``) styles the
+header/chip, section cards and jump menu by targeting ``data-testid``/
+``.st-key-*`` hooks on ordinary widgets rather than replacing them (metric
+cards are real ``st.metric`` underneath, kept AppTest-inspectable); ``_fmt``
+centralises the one value-formatting policy (precision + unit suffix per
+``kind``, ``None``/NaN -> "—") used by every metric, caption and the header
+chip; ``_styled_fig``/``_ACCENT``/``_REP_CYCLE`` give every matplotlib figure
+the same muted, transparent-background look. None of this touches
+``CONFIG``, session-state keys, ``compute_measurement`` or the export/batch
+code paths.
 """
 
 from __future__ import annotations
 
+import html
 import io
 import json
+import re
 import traceback
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from dataclasses import replace
@@ -83,43 +105,41 @@ DEFAULTS = CONFIG()  # never mutated; the source of widget defaults + reset targ
 
 # --- visible parameters: the three knobs that move the detected boundary,
 # plus the ppu calibration. Everything else in CONFIG stays at the validated
-# defaults (CLI keeps full control). spec = (name, kind, help, step, lo, hi,
-# fmt). ---
+# defaults (CLI keeps full control). spec = (name, label, kind, help, step,
+# lo, hi, fmt); ``name`` stays the CONFIG field key, ``label`` is the display
+# text only. ---
 PARAM_SPECS: list[tuple] = [
-    ("edge_z", "slider",
-     "Where on the fibre wall the boundary line is drawn (the main knob). The "
-     "detector finds the steep brightness wall at each fibre edge and draws "
-     "the line where the signal has risen edge_z units above the background "
-     "just outside that wall. Higher = the line sits higher up the wall, "
-     "further inside the fibre = thinner reading; lower = further out = "
-     "thicker reading. If the line cuts into the fibre (too thin), lower it; "
-     "if it sits in the shadow outside the fibre (too thick), raise it. "
+    ("edge_z", "Boundary tightness (edge_z)", "slider",
+     "Where on the fibre wall the boundary line is drawn (the main knob): "
+     "higher sits further inside the fibre (thinner reading), lower sits "
+     "further outside (thicker reading). If the line cuts into the fibre, "
+     "lower it; if it sits in the shadow outside the fibre, raise it. "
      "Recommended 3-5, default 4.0.",
      0.5, 1.0, 12.0, "%.1f"),
-    ("edge_frac", "float",
-     "Protection for faint fibres. A pale, low-contrast fibre has a weak wall "
-     "that may never rise edge_z units above background; this caps the "
-     "crossing level at edge_frac of the wall's own height so the line stays "
-     "on the wall instead of drifting outward. It only kicks in when the wall "
-     "is weaker than edge_z. Leave at 0.65 unless a very faint fibre loses "
-     "its boundary — then lower it slightly.",
+    ("edge_frac", "Faint-fibre guard (edge_frac)", "float",
+     "Protection for faint fibres: caps the crossing level at edge_frac of a "
+     "weak wall's own height, so the line stays on the wall instead of "
+     "drifting outward when the wall never reaches edge_z above background. "
+     "It only kicks in when the wall is weaker than edge_z. Leave at 0.65 "
+     "unless a very faint fibre loses its boundary — then lower it slightly.",
      0.05, 0.0, 1.0, "%.2f"),
-    ("wcol", "int",
-     "Horizontal smoothing width (pixels). If the boundary line is jittery or "
-     "ragged, raise it (61-81) for a smoother, more stable line; lower it "
-     "(15-25) to preserve fine thickness variation. Too high flattens real "
-     "variation. Default 41.",
+    ("wcol", "Smoothing width (wcol)", "int",
+     "Horizontal smoothing width in pixels. If the boundary line is jittery "
+     "or ragged, raise it (61-81) for a smoother line; lower it (15-25) to "
+     "preserve fine thickness variation — too high flattens real variation. "
+     "Default 41.",
      1, 1, 201, None),
-    ("ppu", "float",
-     "Calibration: camera pixels per micron. Diameters in µm = pixels / ppu, "
-     "so this scales every µm number in the app and the exports (pixel values "
-     "are unaffected). Measure it with a stage micrometer for your microscope "
-     "+ camera combination. Default 1.3680 (the original calibrated setup).",
+    ("ppu", "Pixels per micron (ppu)", "float",
+     "Calibration: camera pixels per micron; diameters in µm = pixels / ppu, "
+     "so this scales every µm number in the app and exports (pixel values "
+     "are unaffected). Measure it with a stage micrometer for your "
+     "microscope + camera combination. Default 1.3680 (the original "
+     "calibrated setup).",
      0.001, 0.1, 10.0, "%.4f"),
 ]
 
 # names of int-typed visible fields (so widgets return int, not float)
-_INT_FIELDS = {name for (name, kind, *_rest) in PARAM_SPECS if kind == "int"}
+_INT_FIELDS = {name for (name, label, kind, *_rest) in PARAM_SPECS if kind == "int"}
 
 
 # --------------------------------------------------------------------------- #
@@ -137,6 +157,55 @@ def _cfg_from_items(cfg_items: tuple) -> CONFIG:
         if k in d:
             d[k] = int(round(d[k]))
     return replace(CONFIG(), **d)
+
+
+# kind -> (format spec, unit suffix); the single source of display precision
+# for every metric/caption number in the app, so the same quantity is never
+# shown at two different precisions.
+_FMT_KINDS: dict[str, tuple[str, str]] = {
+    "um":     ("{:.2f}", " µm"),
+    "um2":    ("{:.1f}", " µm²"),
+    "cv":     ("{:.3f}", ""),
+    "coverage": ("{:.0%}", ""),
+    "px":     ("{:.0f}", " px"),
+    "ppu":    ("{:.4f}", ""),
+    "tilt":   ("{:.4f}", ""),
+    "mm":     ("{:.3f}", " mm"),
+    "mN":     ("{:.2f}", " mN"),
+    "GPa":    ("{:.2f}", " GPa"),
+    "MJ/m3":  ("{:.2f}", " MJ/m³"),
+    "MPa":    ("{:.1f}", " MPa"),
+    "one_dp": ("{:.1f}", ""),
+    "pct100": ("{:.2f}", " %"),
+    "int":    ("{:.0f}", ""),
+}
+
+
+def _fmt(value, kind: str, dash: str = "—") -> str:
+    """Format ``value`` per ``kind``'s entry in ``_FMT_KINDS``; ``None``/NaN -> ``dash``.
+
+    Centralises the precision + unit suffix used across metric cards, table
+    captions and the header chip, so a missing value always renders as the
+    same em-dash instead of "nan" or an inconsistent decimal count.
+    """
+    if value is None:
+        return dash
+    try:
+        fval = float(value)
+    except (TypeError, ValueError):
+        return dash
+    if not np.isfinite(fval):
+        return dash
+    fmt, suffix = _FMT_KINDS[kind]
+    return fmt.format(fval) + suffix
+
+
+def _safe_key(name: str) -> str:
+    """Sanitise a free-text name (e.g. an image filename) into a valid
+    Streamlit container key: alphanumerics, ``_`` and ``-`` only. Only used to
+    build container keys — never changes ``rep["name"]`` or any session-state
+    key derived from it."""
+    return re.sub(r"[^A-Za-z0-9_-]", "_", name)
 
 
 def _rgb_from_bytes(data: bytes) -> np.ndarray:
@@ -439,6 +508,34 @@ def _grouped_reps_from_uploads(image_uploads, cfg_items: tuple,
 # --------------------------------------------------------------------------- #
 # Plot builders                                                               #
 # --------------------------------------------------------------------------- #
+_ACCENT = "#660099"
+_REP_CYCLE = ("#A78BFA", "#F9A8D4", "#93C5FD", "#FCD34D")
+_MUTED = "#64748B"
+_GRID = "#E2E8F0"
+
+
+def _styled_fig(figsize: tuple[float, float] = (9, 3)):
+    """Build a Figure/Axes pair sharing the app's muted, transparent plot style.
+
+    Top/right spines are dropped; the remaining spines, ticks and axis labels
+    use the muted slate (``_MUTED``); the grid is a faint slate (``_GRID``);
+    the figure and axes backgrounds are transparent so the plot sits directly
+    on the surrounding section card instead of a white rectangle.
+    """
+    fig, ax = plt.subplots(figsize=figsize)
+    fig.patch.set_alpha(0.0)
+    ax.set_facecolor("none")
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+    ax.spines["left"].set_color(_MUTED)
+    ax.spines["bottom"].set_color(_MUTED)
+    ax.tick_params(colors=_MUTED)
+    ax.xaxis.label.set_color(_MUTED)
+    ax.yaxis.label.set_color(_MUTED)
+    ax.grid(color=_GRID, lw=0.8, alpha=0.3)
+    return fig, ax
+
+
 def _profile_fig(mr, rgb, cfg: CONFIG):
     """Per-replicate diameter-vs-position figure (raw points + smoothed line, µm)."""
     bnd, res = mr.bnd, mr.res
@@ -446,12 +543,11 @@ def _profile_fig(mr, rgb, cfg: CONFIG):
     x = np.arange(rgb.shape[1])[span]
     raw_um = mr.diameter_um[span]
     sm_um = res.diameter_smooth[span] / cfg.ppu
-    fig, ax = plt.subplots(figsize=(9, 3))
-    ax.plot(x, raw_um, ".", ms=2, alpha=0.4, color="tab:gray", label="raw")
-    ax.plot(x, sm_um, "-", lw=1.3, color="tab:blue", label="smooth")
+    fig, ax = _styled_fig()
+    ax.plot(x, raw_um, ".", ms=2, alpha=0.4, color="#94A3B8", label="raw")
+    ax.plot(x, sm_um, "-", lw=1.3, color=_ACCENT, label="smooth")
     ax.set_xlabel("x position (px)")
     ax.set_ylabel("diameter (µm)")
-    ax.set_title(f"{mr.name}   coverage={res.coverage:.0%}")
     ax.legend(loc="best", fontsize=8)
     ax.grid(alpha=0.3)
     fig.tight_layout()
@@ -465,23 +561,20 @@ def _group_fig(table: dict, group_label: str, rep_curves: list[tuple]):
     one per replicate, drawn thin/faded so the user can see what the mean and
     std are built from.
     """
-    fig, ax = plt.subplots(figsize=(9, 3))
-    cmap = plt.get_cmap("tab10")
+    fig, ax = _styled_fig()
     for i, (rep, rx, ry) in enumerate(rep_curves):
-        ax.plot(rx, ry, "-", lw=0.8, alpha=0.45, color=cmap(i % 10),
+        ax.plot(rx, ry, "-", lw=0.8, alpha=0.45, color=_REP_CYCLE[i % 4],
                 label=f"rep {rep}")
     x = table["x_aligned_px"]
     mean = table["mean_um"]
     std = table["std_um"]
-    ax.plot(x, mean, "-", lw=2.0, color="tab:blue", zorder=5,
+    ax.plot(x, mean, "-", lw=2.0, color=_ACCENT, zorder=5,
             label="mean of replicates")
     band = np.where(np.isfinite(std), std, 0.0)
-    ax.fill_between(x, mean - band, mean + band, alpha=0.25, color="tab:blue",
+    ax.fill_between(x, mean - band, mean + band, alpha=0.25, color=_ACCENT,
                     label="±std across replicates")
     ax.set_xlabel("aligned x position (px)")
     ax.set_ylabel("diameter (µm)")
-    ax.set_title(f"sample {group_label} — replicates aligned and averaged "
-                 f"(n_reps={int(np.nanmax(table['n']))})")
     ax.legend(loc="best", fontsize=7, ncols=2)
     ax.grid(alpha=0.3)
     fig.tight_layout()
@@ -498,8 +591,7 @@ def _tensile_fig(res):
     fibre (all-NaN stress) it falls back to the raw force/displacement trace so
     the curve is still informative.
     """
-    fig, ax = plt.subplots(figsize=(9, 3))
-    group = res.group or "fibre"
+    fig, ax = _styled_fig()
     brk = int(res.break_index)
 
     def _focus(x_used, y_used, has_tail):
@@ -521,17 +613,15 @@ def _tensile_fig(res):
     if not np.isfinite(res.stress_pa).any():
         x = res.disp_mm
         y = res.load_n
-        ax.plot(x[:brk + 1], y[:brk + 1], "-", lw=1.6, color="tab:blue",
+        ax.plot(x[:brk + 1], y[:brk + 1], "-", lw=1.6, color=_ACCENT,
                 label="load")
         if brk + 1 < x.size:
-            ax.plot(x[brk:], y[brk:], "-", lw=0.8, alpha=0.35, color="tab:blue")
-        ax.scatter([x[brk]], [y[brk]], s=30, color="tab:red", zorder=6,
+            ax.plot(x[brk:], y[brk:], "-", lw=0.8, alpha=0.35, color=_ACCENT)
+        ax.scatter([x[brk]], [y[brk]], s=30, color="#DC2626", zorder=6,
                    label="break point")
         _focus(x[:brk + 1], y[:brk + 1], brk + 1 < x.size)
         ax.set_xlabel("displacement (mm)")
         ax.set_ylabel("load (N)")
-        ax.set_title(f"{group} — stress–strain "
-                     f"(no matched diameter — force/displacement only)")
         ax.legend(loc="best", fontsize=8)
         ax.grid(alpha=0.3)
         fig.tight_layout()
@@ -539,15 +629,15 @@ def _tensile_fig(res):
 
     x = res.strain * 100.0          # %
     y = res.stress_pa / 1e6         # MPa
-    ax.plot(x[:brk + 1], y[:brk + 1], "-", lw=1.6, color="tab:blue",
+    ax.plot(x[:brk + 1], y[:brk + 1], "-", lw=1.6, color=_ACCENT,
             label="stress–strain")
     if brk + 1 < x.size:
-        ax.plot(x[brk:], y[brk:], "-", lw=0.8, alpha=0.35, color="tab:blue",
+        ax.plot(x[brk:], y[brk:], "-", lw=0.8, alpha=0.35, color=_ACCENT,
                 label="post-break (unused)")
 
     # toughness = area under the curve up to fracture
     ax.fill_between(x[:brk + 1], 0.0, y[:brk + 1], alpha=0.15,
-                    color="tab:blue", label="toughness (area)")
+                    color=_ACCENT, label="toughness (area)")
 
     # steepest initial slope = Young's modulus, drawn over its fit segment
     fit = res.modulus_fit or {}
@@ -556,17 +646,16 @@ def _tensile_fig(res):
         s_line = np.array([s_lo, s_hi], dtype=float)
         stress_fit = fit["slope"] * s_line + fit["intercept"]
         ax.plot(s_line * 100.0, stress_fit / 1e6, "--", lw=1.4,
-                color="tab:orange",
-                label=f"E = {res.youngs_modulus_pa / 1e9:.2f} GPa")
+                color="#D97706",
+                label=f"E = {_fmt(res.youngs_modulus_pa / 1e9, 'GPa')}")
 
     # break point
-    ax.scatter([x[brk]], [y[brk]], s=30, color="tab:red", zorder=6,
+    ax.scatter([x[brk]], [y[brk]], s=30, color="#DC2626", zorder=6,
                label="break point")
 
     _focus(x[:brk + 1], y[:brk + 1], brk + 1 < x.size)
     ax.set_xlabel("strain (%)")
     ax.set_ylabel("stress (MPa)")
-    ax.set_title(f"{group} — stress–strain")
     ax.legend(loc="best", fontsize=7)
     ax.grid(alpha=0.3)
     fig.tight_layout()
@@ -581,28 +670,30 @@ def _param_form() -> None:
     applied = st.session_state.cfg_dict
     ver = st.session_state.form_version
 
+    st.sidebar.markdown('<div class="fcv-side-label">Detection</div>',
+                        unsafe_allow_html=True)
     with st.sidebar.form("params", clear_on_submit=False):
         st.markdown("**Parameters** — edit, then click **Apply** to re-render.")
         new_vals: dict = {}
-        for (name, kind, help_txt, step, lo, hi, fmt) in PARAM_SPECS:
+        for (name, label, kind, help_txt, step, lo, hi, fmt) in PARAM_SPECS:
             if name == "ppu":
                 st.markdown("**Calibration**")
             key = f"p_{name}_v{ver}"
             cur = applied[name]
             if kind == "slider":
                 new_vals[name] = st.slider(
-                    name, min_value=float(lo), max_value=float(hi),
+                    label, min_value=float(lo), max_value=float(hi),
                     value=float(cur), step=float(step), help=help_txt, key=key)
             elif kind == "int":
                 new_vals[name] = int(st.number_input(
-                    name, min_value=int(lo), max_value=int(hi),
+                    label, min_value=int(lo), max_value=int(hi),
                     value=int(cur), step=int(step), help=help_txt, key=key))
             else:  # float
                 kwargs = dict(min_value=float(lo), max_value=float(hi),
                               value=float(cur), step=float(step), help=help_txt, key=key)
                 if fmt:
                     kwargs["format"] = fmt
-                new_vals[name] = float(st.number_input(name, **kwargs))
+                new_vals[name] = float(st.number_input(label, **kwargs))
         c1, c2 = st.columns(2)
         apply = c1.form_submit_button("Apply", type="primary", width="stretch")
         reset = c2.form_submit_button("Reset to defaults", width="stretch")
@@ -633,50 +724,51 @@ def _tensile_controls() -> dict:
     diameter knobs are untouched). Returns
     ``{"tmap", "folder", "gauge_length_mm", "modulus_window"}``.
     """
-    st.sidebar.markdown("### Tensile data")
-    source = st.sidebar.radio("tensile source", ["Local folder", "Upload"],
-                              horizontal=True, label_visibility="collapsed",
-                              key="tensile_source")
-    tmap: dict[str, object] = {}
-    folder: str | None = None
-    if source == "Local folder":
-        folder = st.sidebar.text_input(
-            "Tensile data folder", value=st.session_state.get("tensile_folder", ""))
-        st.session_state.tensile_folder = folder
-        if folder and Path(folder).is_dir():
-            try:
-                tmap = {g: Path(p)
-                        for g, p in _cached_discover_tensile(folder).items()}
-            except Exception as exc:  # noqa: BLE001
-                st.sidebar.warning(f"Could not scan tensile folder: {exc}")
-        elif folder:
-            st.sidebar.warning("Enter a valid tensile folder path.")
-    else:
-        folder_mode = st.sidebar.checkbox(
-            "📁 upload a whole folder", key="tensile_folder_mode",
-            help="Make Browse open a folder chooser; non-tensile files are ignored.")
-        ups = st.sidebar.file_uploader(
-            "Upload tensile files",
-            type=None if folder_mode else ["csv", "xls", "xlsx"],
-            accept_multiple_files=True, key="tensile_uploads")
-        if folder_mode:
-            _enable_folder_upload("Upload tensile files")
-        if ups:
-            tmap = discover_tensile_files(ups)
-    if tmap:
-        st.sidebar.caption(f"{len(tmap)} tensile fibre(s) matched.")
+    with st.sidebar.expander("Tensile", expanded=False):
+        source = st.radio("tensile source", ["Local folder", "Upload"],
+                          horizontal=True, label_visibility="collapsed",
+                          key="tensile_source")
+        tmap: dict[str, object] = {}
+        folder: str | None = None
+        if source == "Local folder":
+            folder = st.text_input(
+                "Tensile data folder", value=st.session_state.get("tensile_folder", ""))
+            st.session_state.tensile_folder = folder
+            if folder and Path(folder).is_dir():
+                try:
+                    tmap = {g: Path(p)
+                            for g, p in _cached_discover_tensile(folder).items()}
+                except Exception as exc:  # noqa: BLE001
+                    st.warning(f"Could not scan tensile folder: {exc}")
+            elif folder:
+                st.warning("Enter a valid tensile folder path.")
+        else:
+            folder_mode = st.checkbox(
+                "📁 upload a whole folder", key="tensile_folder_mode",
+                help="Make Browse open a folder chooser; non-tensile files are ignored.")
+            ups = st.file_uploader(
+                "Upload tensile files",
+                type=None if folder_mode else ["csv", "xls", "xlsx"],
+                accept_multiple_files=True, key="tensile_uploads")
+            if folder_mode:
+                _enable_folder_upload("Upload tensile files")
+            if ups:
+                tmap = discover_tensile_files(ups)
+        if tmap:
+            st.caption(f"{len(tmap)} tensile fibre(s) matched.")
 
-    gauge_length_mm = float(st.sidebar.number_input(
-        "Gauge length L₀ (mm)", min_value=0.1, value=float(DEFAULTS.gauge_length_mm),
-        step=1.0,
-        help="Grip separation; strain = displacement / L₀. The tester records "
-             "only displacement, so this sets the strain scale."))
-    modulus_window = float(st.sidebar.number_input(
-        "Modulus window (fraction)", min_value=0.02, max_value=0.5,
-        value=float(DEFAULTS.modulus_window), step=0.01,
-        help="Width of the sliding linear fit used to auto-detect the steepest "
-             "initial slope (Young's modulus), as a fraction of the rising "
-             "region."))
+        gauge_length_mm = float(st.number_input(
+            "Gauge length L₀ (mm)", min_value=0.1, max_value=1000.0,
+            value=float(DEFAULTS.gauge_length_mm),
+            step=1.0, format="%.1f",
+            help="Grip separation; strain = displacement / L₀. The tester records "
+                 "only displacement, so this sets the strain scale."))
+        modulus_window = float(st.number_input(
+            "Modulus window (fraction)", min_value=0.02, max_value=0.5,
+            value=float(DEFAULTS.modulus_window), step=0.01, format="%.2f",
+            help="Width of the sliding linear fit used to auto-detect the steepest "
+                 "initial slope (Young's modulus), as a fraction of the rising "
+                 "region."))
     return {
         "tmap": tmap,
         "folder": folder or None,
@@ -695,23 +787,49 @@ def _enable_folder_upload(label: str) -> None:
     zero-height html component (same-origin, reaching the parent document). The
     Browse button then opens a folder chooser and the browser hands back every
     file inside; the caller keeps only the ones with the right extension.
+
+    A collapsed sidebar expander re-mounts the uploader's DOM on re-expand, which
+    drops the one-shot attribute. A ``MutationObserver`` on the parent document
+    re-applies it whenever a matching uploader (re)appears, so it survives both
+    client-side expander toggles (no Python rerun) and Streamlit reruns. The
+    observer is created once per label (guarded by a flag on ``window.parent``)
+    and cleaned up on iframe teardown (``pagehide`` — ``unload`` is deprecated
+    and Chrome may never fire it, leaving the flag stuck) so a later
+    re-creation of this component (e.g. the folder-mode checkbox toggled off
+    then on) gets a fresh observer instead of being silently blocked by a
+    stale flag.
     """
     js = """
     <script>
-    const WANT = %s;
-    const doc = window.parent.document;
-    function apply() {
-      doc.querySelectorAll('[data-testid="stFileUploader"]').forEach(u => {
-        if ((u.innerText || "").includes(WANT)) {
-          const inp = u.querySelector('input[type="file"]');
-          if (inp) {
-            inp.setAttribute("webkitdirectory", "");
-            inp.setAttribute("directory", "");
+    (function () {
+      const WANT = %s;
+      const doc = window.parent.document;
+      const FLAG = "__fcv_folder_observer_" + WANT;
+
+      function apply() {
+        doc.querySelectorAll('[data-testid="stFileUploader"]').forEach(u => {
+          if ((u.innerText || "").includes(WANT)) {
+            const inp = u.querySelector('input[type="file"]');
+            if (inp && !inp.hasAttribute("webkitdirectory")) {
+              inp.setAttribute("webkitdirectory", "");
+              inp.setAttribute("directory", "");
+            }
           }
-        }
-      });
-    }
-    apply(); setTimeout(apply, 150); setTimeout(apply, 500);
+        });
+      }
+
+      apply(); setTimeout(apply, 150); setTimeout(apply, 500);
+
+      if (!window.parent[FLAG]) {
+        window.parent[FLAG] = true;
+        const observer = new MutationObserver(apply);
+        observer.observe(doc.body, {childList: true, subtree: true});
+        window.addEventListener("pagehide", function () {
+          observer.disconnect();
+          window.parent[FLAG] = false;
+        });
+      }
+    })();
     </script>
     """ % json.dumps(label)
     with st.sidebar:
@@ -727,7 +845,8 @@ def _load_reps(cfg_items: tuple) -> tuple[list[dict], str | None, str | None]:
     the shared ``parse_name`` rule; unparseable names land in an "ungrouped"
     bucket instead of being hidden.
     """
-    st.sidebar.markdown("### Data source")
+    st.sidebar.markdown('<div class="fcv-side-label">Data</div>',
+                        unsafe_allow_html=True)
     source = st.sidebar.radio("source", ["Local folder", "Upload"],
                               horizontal=True, label_visibility="collapsed")
     reps: list[dict] = []
@@ -789,6 +908,219 @@ def _load_reps(cfg_items: tuple) -> tuple[list[dict], str | None, str | None]:
 
 
 # --------------------------------------------------------------------------- #
+# Theme: CSS, slim header, jump menu                                          #
+# --------------------------------------------------------------------------- #
+# Most colours/radii live in .streamlit/config.toml (Streamlit's own theme
+# engine); this constant covers what that engine cannot reach: the custom
+# header/chip markup, section-card framing around the existing
+# st.container(key=...) pattern, the fixed jump nav, and a chrome backstop.
+_CSS = """
+<style>
+/* ---- chrome backstop: config.toml's toolbarMode="minimal" hides most of
+   this already; kept as a belt-and-braces override ---- */
+#MainMenu, footer, [data-testid="stDecoration"],
+[data-testid="stAppDeployButton"] { display: none !important; }
+
+/* ---- slim header + state chip (see _render_header) ---- */
+.fcv-header {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 0.6rem 1rem;
+    padding-bottom: 0.6rem;
+    margin-bottom: 1rem;
+    border-bottom: 1px solid #E2E8F0;
+}
+.fcv-header h1 {
+    font-size: 1.4rem;
+    font-weight: 700;
+    color: #0F172A;
+    margin: 0;
+}
+.fcv-header .fcv-sub {
+    font-size: 0.85rem;
+    color: #64748B;
+}
+.fcv-chip {
+    margin-left: auto;
+    padding: 0.2rem 0.7rem;
+    border-radius: 999px;
+    background: #F3E8FF;
+    color: #660099;
+    font-size: 0.8rem;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+/* ---- sidebar group captions (DATA / DETECTION), rendered via
+   st.sidebar.markdown('<div class="fcv-side-label">...</div>'); the Tensile
+   group uses a native st.sidebar.expander instead, so it needs no caption ---- */
+.fcv-side-label {
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #64748B;
+    margin: 0.2rem 0 0.35rem;
+}
+
+/* ---- section cards: st.container(key="card_replicates"/"card_group"/
+   "card_tensile"/"card_export") -> class st-key-card_<name>; matched by
+   prefix so this one rule covers all four ---- */
+[class*="st-key-card_"] {
+    background: #FFFFFF;
+    border: 1px solid #E2E8F0;
+    border-radius: 0.75rem;
+    padding: 1.1rem 1.4rem 1.4rem;
+    margin-bottom: 1.2rem;
+}
+
+/* ---- tensile metrics: shrink the value font so figures like "161.00 mN"
+   don't ellipsis in six narrow columns (moved from the inline <style> that
+   used to sit next to st.container(key="tensile_metrics")) ---- */
+.st-key-tensile_metrics [data-testid="stMetricValue"] { font-size: 1.1rem; }
+.st-key-tensile_metrics [data-testid="stMetricLabel"] { font-size: 0.8rem; }
+
+/* ---- metric cards: st.container(key="metrics_rep_<name>"/"metrics_group")
+   -> class st-key-metrics_<name>; matched by prefix so this one rule covers
+   both. Each real st.metric widget inside becomes a bordered white card;
+   label is small/uppercase/grey, value is tabular-nums and contained
+   (min-width:0 so it never grows its column). Overflow/white-space/text-
+   overflow are deliberately left unset here (rather than nowrap+ellipsis)
+   so the shared stMetricValue wrap rule below is the one in effect: a value
+   like "62.43 µm" must always be fully readable, so it wraps to a second
+   line instead of being clipped. */
+[class*="st-key-metrics_"] [data-testid="stMetric"] {
+    background: #FFFFFF;
+    border: 1px solid #E2E8F0;
+    border-radius: 0.6rem;
+    padding: 0.6rem 0.8rem;
+    min-width: 0;
+    overflow: hidden;
+}
+[class*="st-key-metrics_"] [data-testid="stMetricLabel"] {
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: #64748B;
+}
+[class*="st-key-metrics_"] [data-testid="stMetricValue"] {
+    font-variant-numeric: tabular-nums;
+    min-width: 0;
+}
+/* primary metric (first column of the row) reads as the headline number */
+[class*="st-key-metrics_"] [data-testid="stColumn"]:first-of-type
+    [data-testid="stMetricValue"] { color: #660099; }
+
+/* ---- flags / registration status: the single metric wrapped in
+   st.container(key="status_ok_*"/"status_warn_*") gets its value coloured
+   green (good: no flags / registration ok) or amber (needs attention) ---- */
+[class*="st-key-status_ok"] [data-testid="stMetricValue"] { color: #15803D; }
+[class*="st-key-status_warn"] [data-testid="stMetricValue"] { color: #B45309; }
+
+/* ---- wrap, don't clip: lets any metric value wrap to a second line instead
+   of being silently ellipsised/clipped when its column is narrow (e.g.
+   "62.43 µm" at 1280px). Streamlit renders the value text in a <p> inside
+   stMetricValue and ships its own emotion-generated ".st-emotion-cache-* p"
+   rule (specificity 0,1,1: one class + the p type) hard-coding
+   nowrap/hidden/ellipsis on that <p> -- overflow/text-overflow/white-space
+   are not inherited, so overriding stMetricValue (the div) alone never
+   reaches the actual text node. The " p" selector here matches that
+   specificity so ours (declared later) wins in the cascade. ---- */
+[data-testid="stMetricValue"],
+[data-testid="stMetricValue"] p {
+    overflow: visible;
+    white-space: normal;
+    text-overflow: clip;
+}
+
+/* ---- jump menu: fixed right-hand nav, hidden below 1200px ---- */
+.fcv-jump {
+    position: fixed;
+    top: 5.5rem;
+    right: 1rem;
+    z-index: 999;
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+    padding: 0.6rem 0.9rem;
+    background: #FFFFFF;
+    border: 1px solid #E2E8F0;
+    border-radius: 0.75rem;
+    font-size: 0.8rem;
+}
+.fcv-jump a { color: #660099; text-decoration: none; }
+.fcv-jump a:hover { text-decoration: underline; }
+@media (max-width: 1200px) {
+    .fcv-jump { display: none; }
+}
+/* ---- reserve the nav's column wherever it is shown (>=1200px) so the fixed
+   .fcv-jump never sits over page content: the header chip's right edge at
+   wide viewports, or a plot's corner at narrower ones. Padding goes on the
+   block container (covers every child, incl. .fcv-header and st.pyplot
+   figures) sized to clear the nav's own width (~1rem right offset + ~0.9rem
+   padding each side + its longest link, "04 Export & batch") plus a gap ---- */
+@media (min-width: 1200px) {
+    [data-testid="stMainBlockContainer"] { padding-right: 11rem; }
+}
+
+/* anchored headings (card subheaders) land below the fixed header on jump */
+h1, h2, h3 { scroll-margin-top: 4.5rem; }
+</style>
+"""
+
+
+def _inject_css() -> None:
+    """Emit ``_CSS`` once per run; called first thing in ``main()``."""
+    st.markdown(_CSS, unsafe_allow_html=True)
+
+
+def _render_header(group_label: str | None, n_reps: int, edge_z: float) -> None:
+    """Slim header + state chip, replacing ``st.title``/``st.caption``.
+
+    Must run after the sidebar builders (``_load_reps`` etc.) since the chip
+    needs ``n_reps``/``group_label``. The no-data branch is keyed on
+    ``n_reps == 0``, not on ``group_label`` truthiness: unparseable-name
+    uploads land in the "ungrouped" bucket with ``group_label=None`` while
+    ``reps`` is still populated, so that case must still show a truthful
+    "loaded" chip rather than "no data loaded". Contains the literal
+    "fibrecv" the external screenshot harness waits on (``text=fibrecv``).
+    """
+    if n_reps == 0:
+        chip = "no data loaded"
+    else:
+        reps_txt = f"{n_reps} replicate" + ("" if n_reps == 1 else "s")
+        edge_z_txt = _fmt(edge_z, "one_dp")
+        chip = (f"group {group_label} · {reps_txt} · edge_z {edge_z_txt}"
+                if group_label else
+                f"{reps_txt} (ungrouped) · edge_z {edge_z_txt}")
+    st.markdown(
+        '<div class="fcv-header">'
+        '<h1>fibrecv — fibre diameter detection</h1>'
+        '<span class="fcv-sub">Local preview / tuning / batch / export over '
+        'the validated pipeline.</span>'
+        f'<span class="fcv-chip">{html.escape(chip)}</span>'
+        '</div>',
+        unsafe_allow_html=True)
+
+
+def _render_jump_menu() -> None:
+    """Fixed right-hand nav to the four card anchors; only called once data
+    is loaded. If a target anchor did not render (e.g. card 03 is skipped
+    because no group mean is available), its link is simply inert — the
+    nav itself still degrades gracefully rather than erroring."""
+    st.markdown(
+        '<nav class="fcv-jump">'
+        '<a href="#replicates">01 Replicates</a>'
+        '<a href="#group-panel">02 Group panel</a>'
+        '<a href="#tensile">03 Tensile</a>'
+        '<a href="#export">04 Export &amp; batch</a>'
+        '</nav>',
+        unsafe_allow_html=True)
+
+
+# --------------------------------------------------------------------------- #
 # Main-area renderers                                                         #
 # --------------------------------------------------------------------------- #
 def _render_replicate(rep: dict, cfg: CONFIG) -> None:
@@ -815,18 +1147,28 @@ def _render_replicate(rep: dict, cfg: CONFIG) -> None:
         flags.append("low_confidence")
     if res.band_mismatch:
         flags.append("band_mismatch")
-    c = st.columns(6)
-    c[0].metric("mean Ø", f"{mean_um:.2f} µm" if mean_um is not None else "—",
-                help="Mean diameter of this image, averaged along the fibre "
-                     "(valid columns only).")
-    c[1].metric("median Ø", f"{med:.2f} µm" if med is not None else "—")
-    c[2].metric("along-fibre std", f"{std_um:.2f} µm" if std_um is not None else "—",
-                help="Std of the diameter along this image's fibre — thickness "
-                     "variation within the picture, not disagreement between "
-                     "replicates (that is the group panel's std).")
-    c[3].metric("coverage", f"{res.coverage:.0%}")
-    c[4].metric("tilt slope", f"{bnd.slope:.4f}")
-    c[5].metric("flags", ", ".join(flags) if flags else "none")
+    flags_txt = ", ".join(flags) if flags else "none"
+    # rep["idx"] (position within the group) disambiguates names that collide
+    # after sanitisation, e.g. "masp2 1_1_1.png" and "masp2_1_1_1.png" both
+    # reduce to "masp2_1_1_1_png" via _safe_key alone -> StreamlitDuplicateElementKey.
+    safe_name = f"{rep['idx']}_{_safe_key(rep['name'])}"
+    with st.container(key=f"metrics_rep_{safe_name}"):
+        c = st.columns(6)
+        c[0].metric("mean Ø", _fmt(mean_um, "um"),
+                    help="Mean diameter of this image, averaged along the fibre "
+                         "(valid columns only).")
+        c[1].metric("median Ø", _fmt(med, "um"))
+        c[2].metric("along-fibre std", _fmt(std_um, "um"),
+                    help="Std of the diameter along this image's fibre — thickness "
+                         "variation within the picture, not disagreement between "
+                         "replicates (that is the group panel's std).")
+        c[3].metric("coverage", _fmt(res.coverage, "coverage"))
+        c[4].metric("tilt slope", _fmt(bnd.slope, "tilt"))
+        status_key = (f"status_ok_flags_{safe_name}" if not flags
+                      else f"status_warn_flags_{safe_name}")
+        with c[5]:
+            with st.container(key=status_key):
+                st.metric("flags", flags_txt, help=f"Full flags: {flags_txt}")
 
     _render_edit_expander(rep)
 
@@ -960,11 +1302,13 @@ def _render_edit_expander(rep: dict) -> None:
 
         n1, n2 = st.columns(2)
         new_nt = n1.number_input("Nudge top line (px, + = down)",
+                                 min_value=-200.0, max_value=200.0,
                                  value=float(edits["nudge_top"]), step=0.5,
-                                 key=f"nudgetop_{name}")
+                                 format="%.1f", key=f"nudgetop_{name}")
         new_nb = n2.number_input("Nudge bottom line (px, + = down)",
+                                 min_value=-200.0, max_value=200.0,
                                  value=float(edits["nudge_bot"]), step=0.5,
-                                 key=f"nudgebot_{name}")
+                                 format="%.1f", key=f"nudgebot_{name}")
         if new_nt != edits["nudge_top"] or new_nb != edits["nudge_bot"]:
             ed = st.session_state.manual_edits.setdefault(name, empty_edits())
             ed["nudge_top"], ed["nudge_bot"] = float(new_nt), float(new_nb)
@@ -999,7 +1343,7 @@ def _render_per_image_stats(reps: list[dict]) -> None:
             "mean Ø (µm)": float(np.nanmean(d)) if ok else np.nan,
             "std (µm)": float(np.nanstd(d)) if ok else np.nan,
             "median Ø (µm)": float(np.nanmedian(d)) if ok else np.nan,
-            "coverage": mr.res.coverage,
+            "coverage (%)": mr.res.coverage * 100.0,
         })
     st.markdown("**Per-image statistics** — each picture's own fibre, before "
                 "registration")
@@ -1011,13 +1355,21 @@ def _render_per_image_stats(reps: list[dict]) -> None:
                 format="%.2f",
                 help="Thickness variation along this picture's fibre."),
             "median Ø (µm)": st.column_config.NumberColumn(format="%.2f"),
-            "coverage": st.column_config.NumberColumn(format="percent"),
+            "coverage (%)": st.column_config.NumberColumn(format="%.1f%%"),
         })
 
 
-def _render_group(reps: list[dict], cfg: CONFIG, group_label: str | None,
-                  tmap: dict) -> None:
-    st.subheader("Group panel — registered mean ± std")
+def _render_group(reps: list[dict], cfg: CONFIG,
+                  group_label: str | None) -> float | None:
+    """Registered mean ± std group panel; renders inside card 02.
+
+    Returns the group's registered mean diameter (µm) so ``main()`` can gate
+    card 03 (Tensile) on it — ``None`` on either early-return path (no
+    replicate passed QC, or registration raised), matching exactly what used
+    to gate the inline ``_render_tensile`` call this function made itself.
+    The "Group panel" heading now lives in main()'s card-02 subheader; this
+    function no longer renders its own.
+    """
     profiles, dropped = [], []
     for rep in reps:
         mr = rep["mr"]
@@ -1026,7 +1378,8 @@ def _render_group(reps: list[dict], cfg: CONFIG, group_label: str | None,
             dropped.append(f"{mr.name} (band_mismatch)")
             continue
         if res.coverage < cfg.min_coverage:
-            dropped.append(f"{mr.name} (coverage {res.coverage:.0%} < {cfg.min_coverage:.0%})")
+            dropped.append(f"{mr.name} (coverage {_fmt(res.coverage, 'coverage')} "
+                           f"< {_fmt(cfg.min_coverage, 'coverage')})")
             continue
         W = rep["rgb"].shape[1]
         span = slice(bnd.x0, bnd.x1 + 1)
@@ -1043,7 +1396,7 @@ def _render_group(reps: list[dict], cfg: CONFIG, group_label: str | None,
     if not profiles:
         st.warning("No replicate passed QC (coverage / band_mismatch); nothing to register.")
         _render_per_image_stats(reps)
-        return
+        return None
     # sort with the same key register_sample uses, so zip(profiles, shifts)
     # below is order-aligned (replicate-keyed dicts would silently collide for
     # ungrouped uploads that share the idx+1 fallback number)
@@ -1053,7 +1406,7 @@ def _render_group(reps: list[dict], cfg: CONFIG, group_label: str | None,
     except Exception as exc:  # noqa: BLE001
         st.error(f"Registration failed: {exc}")
         _render_per_image_stats(reps)
-        return
+        return None
     assert all(s["replicate"] == p["replicate"] for p, s in zip(profiles, shifts))
 
     rep_curves = [(p["replicate"], p["x"] + s["shift_px"],
@@ -1074,26 +1427,31 @@ def _render_group(reps: list[dict], cfg: CONFIG, group_label: str | None,
         "replicates; band = ±1 std.")
 
     cv = summary["cv"]
-    c = st.columns(6)
-    c[0].metric("group mean Ø", f"{summary['mean_um']:.2f} µm",
-                help="Mean diameter across the replicates of this group, "
-                     "averaged along the aligned overlap region (where all "
-                     "replicates are present after registration).")
-    c[1].metric("between-replicate std", f"{summary['std_um']:.2f} µm",
-                help="At each aligned position, the std of the diameter across "
-                     "replicates; this is its average along the fibre. It "
-                     "measures replicate-to-replicate disagreement, not "
-                     "thickness variation along the fibre.")
-    c[2].metric("CV", f"{cv:.3f}" if np.isfinite(cv) else "—",
-                help="between-replicate std / group mean (dimensionless).")
-    c[3].metric("n reps used", f"{summary['n_replicates_used']}")
-    c[4].metric("overlap", f"{summary['overlap_px']} px",
-                help="Number of aligned columns where every replicate has data.")
-    c[5].metric("registration",
-                "uncertain" if summary["registration_uncertain"] else "ok",
-                help="'uncertain' = the cross-correlation peak was below "
-                     "min_corr for at least one replicate, so its shift was "
-                     "reset to 0.")
+    reg_uncertain = summary["registration_uncertain"]
+    with st.container(key="metrics_group"):
+        c = st.columns(6)
+        c[0].metric("group mean Ø", _fmt(summary["mean_um"], "um"),
+                    help="Mean diameter across the replicates of this group, "
+                         "averaged along the aligned overlap region (where all "
+                         "replicates are present after registration).")
+        c[1].metric("between-replicate std", _fmt(summary["std_um"], "um"),
+                    help="At each aligned position, the std of the diameter across "
+                         "replicates; this is its average along the fibre. It "
+                         "measures replicate-to-replicate disagreement, not "
+                         "thickness variation along the fibre.")
+        c[2].metric("CV", _fmt(cv, "cv"),
+                    help="between-replicate std / group mean (dimensionless).")
+        c[3].metric("reps used", _fmt(summary["n_replicates_used"], "int"))
+        c[4].metric("overlap", _fmt(summary["overlap_px"], "px"),
+                    help="Number of aligned columns where every replicate has data.")
+        status_key = ("status_warn_registration" if reg_uncertain
+                      else "status_ok_registration")
+        with c[5]:
+            with st.container(key=status_key):
+                st.metric("registration", "uncertain" if reg_uncertain else "ok",
+                          help="'uncertain' = the cross-correlation peak was below "
+                               "min_corr for at least one replicate, so its shift "
+                               "was reset to 0.")
 
     _render_per_image_stats(reps)
     st.caption(
@@ -1103,7 +1461,7 @@ def _render_group(reps: list[dict], cfg: CONFIG, group_label: str | None,
         "average the registered replicates, so their std = disagreement "
         "between replicates.")
 
-    _render_tensile(group_label, summary["mean_um"], cfg, tmap)
+    return summary["mean_um"]
 
 
 def _manual_break_control(df, mean_um, cfg: CONFIG, group_label: str,
@@ -1181,37 +1539,32 @@ def _render_tensile(group_label: str | None, mean_um: float, cfg: CONFIG,
         fig = _tensile_fig(res)
         st.pyplot(fig)
         plt.close(fig)
+        fallback = not np.isfinite(res.stress_pa).any()
+        if fallback:
+            st.caption("No matched diameter — showing force vs displacement.")
 
-        # Six metrics in six narrow columns: shrink the value font so figures
-        # like "161.00 mN" are not clipped with an ellipsis. Scoped to this
-        # container's key so the diameter metrics elsewhere keep their size.
-        st.markdown(
-            "<style>.st-key-tensile_metrics [data-testid='stMetricValue']"
-            "{font-size:1.1rem;}.st-key-tensile_metrics "
-            "[data-testid='stMetricLabel']{font-size:0.8rem;}</style>",
-            unsafe_allow_html=True)
+        # Six metrics in six narrow columns: the value font is shrunk (scoped
+        # to this container's key, see _CSS's ".st-key-tensile_metrics" rules)
+        # so figures like "161.00 mN" are not clipped with an ellipsis.
         with st.container(key="tensile_metrics"):
             c = st.columns(6)
-            c[0].metric("breaking force", f"{res.fmax_n * 1000:.2f} mN",
+            c[0].metric("breaking force", _fmt(res.fmax_n * 1000, "mN"),
                         help="Maximum load reached before the break (Fmax).")
             c[1].metric("tensile strength",
-                        f"{res.tensile_strength_pa / 1e6:.1f} MPa"
-                        if np.isfinite(res.tensile_strength_pa) else "—",
+                        _fmt(res.tensile_strength_pa / 1e6, "MPa"),
                         help="Fmax / cross-sectional area.")
             c[2].metric("extension at break",
-                        f"{res.extension_at_break_mm:.3f} mm")
-            c[3].metric("strain at break", f"{res.strain_at_break * 100:.2f} %")
+                        _fmt(res.extension_at_break_mm, "mm"))
+            c[3].metric("strain at break",
+                        _fmt(res.strain_at_break * 100, "pct100"))
             c[4].metric("Young's modulus",
-                        f"{res.youngs_modulus_pa / 1e9:.2f} GPa"
-                        if np.isfinite(res.youngs_modulus_pa) else "—")
+                        _fmt(res.youngs_modulus_pa / 1e9, "GPa"))
             c[5].metric("toughness",
-                        f"{res.toughness_j_m3 / 1e6:.2f} MJ/m³"
-                        if np.isfinite(res.toughness_j_m3) else "—")
+                        _fmt(res.toughness_j_m3 / 1e6, "MJ/m3"))
 
         area_um2 = res.area_m2 * 1e12 if np.isfinite(res.area_m2) else np.nan
-        d_txt = (f"{res.diameter_um:.2f} µm" if res.diameter_um is not None
-                 else "—")
-        a_txt = f"{area_um2:.1f} µm²" if np.isfinite(area_um2) else "—"
+        d_txt = _fmt(res.diameter_um, "um")
+        a_txt = _fmt(area_um2, "um2")
         flag_txt = ("; flags: " + ", ".join(res.flags)) if res.flags else ""
         st.caption(f"Diameter used: {d_txt}; cross-section area: {a_txt}"
                    f"{flag_txt}.")
@@ -1226,8 +1579,9 @@ def _render_tensile(group_label: str | None, mean_um: float, cfg: CONFIG,
 def _render_export_batch(reps: list[dict], cfg: CONFIG, group_label: str | None,
                          folder: str | None, tmap: dict,
                          cfg_items: tuple) -> None:
-    st.divider()
-    st.subheader("Export & batch")
+    """Export/batch subsection; renders inside card 04 (main() owns the
+    "04 Export & batch" heading, so the leading divider + subheader this
+    function used to render itself are gone)."""
     out_folder = st.text_input("Output folder",
                                value=st.session_state.get("out_folder", "./fibrecv_output"))
     st.session_state.out_folder = out_folder
@@ -1376,17 +1730,20 @@ def main() -> None:
     st.session_state.setdefault("form_version", 0)
     st.session_state.setdefault("manual_edits", {})  # image name -> edits dict
 
-    st.title("fibrecv — fibre diameter detection")
-    st.caption("Local preview / tuning / batch / export over the validated pipeline. "
-               f"Strictness knob edge_z = {st.session_state.cfg_dict['edge_z']}.")
+    _inject_css()
 
     cfg_items = _cfg_items(st.session_state.cfg_dict)
     cfg = _cfg_from_items(cfg_items)
 
-    # sidebar
+    # sidebar — _load_reps must run first: the smoke test's
+    # at.sidebar.text_input[0] is the "Image folder" field it renders
     reps, group_label, folder = _load_reps(cfg_items)
     _param_form()
     tensile = _tensile_controls()
+
+    # header renders after the sidebar builders since its state chip needs
+    # the group/replicate state they just produced
+    _render_header(group_label, len(reps), cfg.edge_z)
 
     # tensile-specific config: the diameter knobs stay as tuned; only the
     # strain scale and modulus-fit width come from the tensile controls
@@ -1407,15 +1764,34 @@ def main() -> None:
         st.info("Pick a folder + group, or upload images, to begin.")
         return
 
-    st.subheader(f"Replicates — group {group_label}" if group_label else "Replicates (uploaded)")
-    tabs = st.tabs([f"_{r['mr'].replicate}" if r["mr"].replicate is not None else r["name"]
-                    for r in reps])
-    for tab, rep in zip(tabs, reps):
-        with tab:
-            _render_replicate(rep, cfg)
+    _render_jump_menu()
 
-    _render_group(reps, tcfg, group_label, tensile["tmap"])
-    _render_export_batch(reps, tcfg, group_label, folder, tensile["tmap"], cfg_items)
+    with st.container(key="card_replicates"):
+        st.subheader(
+            f"01 Replicates — group {group_label}" if group_label
+            else "01 Replicates (uploaded)", anchor="replicates")
+        tabs = st.tabs([f"Rep {r['mr'].replicate}" if r["mr"].replicate is not None
+                        else r["name"] for r in reps])
+        for tab, rep in zip(tabs, reps):
+            with tab:
+                _render_replicate(rep, cfg)
+
+    with st.container(key="card_group"):
+        st.subheader("02 Group panel", anchor="group-panel")
+        st.caption("Registered mean ± std across the group's aligned replicates.")
+        mean_um = _render_group(reps, tcfg, group_label)
+
+    # card 03 (Tensile) only when the group panel produced a mean — identical
+    # gating to the pre-redesign code, where _render_tensile was called from
+    # inside _render_group only on its non-early-return path
+    if mean_um is not None:
+        with st.container(key="card_tensile"):
+            st.subheader("03 Tensile", anchor="tensile")
+            _render_tensile(group_label, mean_um, tcfg, tensile["tmap"])
+
+    with st.container(key="card_export"):
+        st.subheader("04 Export & batch", anchor="export")
+        _render_export_batch(reps, tcfg, group_label, folder, tensile["tmap"], cfg_items)
 
 
 if __name__ == "__main__":
