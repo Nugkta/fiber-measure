@@ -3,7 +3,7 @@
 Dependencies
 ------------
 ``numpy`` plus the pipeline modules ``io_utils``, ``features``, ``band``,
-``edges``, ``qc``. Deliberately imports nothing that writes to disk.
+``edges``, ``refine``, ``qc``. Deliberately imports nothing that writes to disk.
 
 Inputs
 ------

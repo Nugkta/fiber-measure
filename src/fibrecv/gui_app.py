@@ -716,7 +716,7 @@ def _tensile_fig(res):
 # Sidebar: parameter form                                                     #
 # --------------------------------------------------------------------------- #
 def _param_form() -> None:
-    """Render the 3-knob parameter form; updates session_state on Apply/Reset."""
+    """Render the 5-param parameter form; updates session_state on Apply/Reset."""
     applied = st.session_state.cfg_dict
     ver = st.session_state.form_version
 
@@ -758,8 +758,8 @@ def _param_form() -> None:
         st.session_state.form_version += 1
         st.rerun()
     if apply:
-        # merge: the three knobs override a full defaults dict, so hidden
-        # fields always carry the validated values
+        # merge: the five visible params override a full defaults dict, so
+        # hidden fields always carry the validated values
         st.session_state.cfg_dict = {**DEFAULTS.as_dict(), **new_vals}
         st.rerun()  # re-run top-to-bottom so reps recompute with the new params
 
