@@ -94,6 +94,22 @@ class CONFIG:
     window_thick_mult: float = 1.5  # half-window = mult*band_half + window_pad + 3*guard
     window_pad: int = 10
 
+    # --- erf edge refinement ---
+    refine_on: bool = True        # refit each wall as a blurred step and shift to its
+    #                                midpoint (spec default; --no-refine is the A/B control)
+    refine_block: int = 16        # column block width for the batched profile fit (px)
+    refine_out: float = 35.0      # outward profile half-window, perpendicular px
+    refine_in_frac: float = 0.8   # inward half-window as a fraction of band_half*cth
+    refine_in_max: float = 28.0   # cap on the inward half-window (perpendicular px);
+    #                                inside = clip(refine_in_frac*band_half*cth, 8, refine_in_max)
+    refine_relmax: float = 0.08   # max rms residual / (b-a) to accept a block's fit
+    refine_sigma_min: float = 0.8   # accepted fitted sigma floor (perpendicular px)
+    refine_sigma_max: float = 20.0  # accepted fitted sigma ceiling (perpendicular px)
+    refine_maxshift: float = 12.0   # max |t0| (perpendicular px) from the legacy edge
+    #                                  to accept a fit
+    refine_gap_blocks: int = 2    # interpolation chains split where the gap between
+    #                                passing block centres exceeds this many blocks
+
     # --- QC / smoothing ---
     min_coverage: float = 0.5  # below this fraction of valid columns -> low_confidence
     roll_window: int = 51      # rolling-MAD outlier window (odd, px)

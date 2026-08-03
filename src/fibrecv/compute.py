@@ -39,10 +39,12 @@ from . import edges as edges_mod
 from . import features as feat_mod
 from . import io_utils
 from . import qc as qc_mod
+from . import refine as refine_mod
 from .band import BandResult
 from .config import CONFIG
 from .edges import EdgeResult
 from .qc import QCResult
+from .refine import RefineResult
 
 
 @dataclass
@@ -59,6 +61,9 @@ class MeasureResult:
     group: str | None         # parsed "A_B" group, or None if name unparseable
     replicate: int | None     # parsed replicate C, or None if name unparseable
     meta: dict = field(default_factory=dict)  # diagnostics (identical to the meta JSON)
+    ref: RefineResult | None = None  # refine.py diagnostics; default None so callers
+    #                                   that construct a MeasureResult directly
+    #                                   (e.g. manual_edit tests) need not pass it
 
 
 def compute_measurement(rgb: np.ndarray, cfg: CONFIG, name: str | None = None) -> MeasureResult:
@@ -72,6 +77,7 @@ def compute_measurement(rgb: np.ndarray, cfg: CONFIG, name: str | None = None) -
     D, S, s_bg, mad = feat_mod.rgb_to_desaturation(rgb, cfg)
     bnd = band_mod.locate_band(D, cfg)
     edg = edges_mod.detect_edges(D, bnd, cfg)
+    edg, ref = refine_mod.refine_edges(D, edg, bnd, cfg)
     res = qc_mod.run_qc(edg, bnd, cfg)
 
     diameter_um = np.where(res.valid, res.diameter_raw / cfg.ppu, np.nan)
@@ -87,6 +93,40 @@ def compute_measurement(rgb: np.ndarray, cfg: CONFIG, name: str | None = None) -
     # diagnostics meta -- identical content/order to the JSON written by the CLI
     span = slice(bnd.x0, bnd.x1 + 1)
     flag_counts = Counter(int(f) for f in res.reason[span])
+
+    # refine diagnostics: anchor columns are finite y_top & y_bot AND flags==FLAG_OK
+    # (the same set refine_edges may move); coverage/median stats are None-safe
+    # when nothing was refined (always true in this M1 skeleton).
+    anchor = (
+        np.isfinite(edg.y_top) & np.isfinite(edg.y_bot) & (edg.flags == edges_mod.FLAG_OK)
+    )
+    n_anchor = int(anchor.sum())
+    coverage_top = float(ref.refined_top.sum()) / n_anchor if n_anchor > 0 else 0.0
+    coverage_bot = float(ref.refined_bot.sum()) / n_anchor if n_anchor > 0 else 0.0
+
+    finite_sigma_top = ref.sigma_top[np.isfinite(ref.sigma_top)]
+    finite_sigma_bot = ref.sigma_bot[np.isfinite(ref.sigma_bot)]
+    median_sigma_top = float(np.median(finite_sigma_top)) if finite_sigma_top.size else None
+    median_sigma_bot = float(np.median(finite_sigma_bot)) if finite_sigma_bot.size else None
+
+    finite_o_top = ref.o_top[np.isfinite(ref.o_top)]
+    finite_o_bot = ref.o_bot[np.isfinite(ref.o_bot)]
+    median_abs_t0_top = float(np.median(np.abs(finite_o_top))) if finite_o_top.size else None
+    median_abs_t0_bot = float(np.median(np.abs(finite_o_bot))) if finite_o_bot.size else None
+
+    refine_meta = {
+        "enabled": bool(cfg.refine_on),
+        "n_blocks": int(ref.n_blocks),
+        "n_pass_top": int(ref.n_pass_top),
+        "n_pass_bot": int(ref.n_pass_bot),
+        "coverage_top": coverage_top,
+        "coverage_bot": coverage_bot,
+        "median_sigma_top": median_sigma_top,
+        "median_sigma_bot": median_sigma_bot,
+        "median_abs_t0_top": median_abs_t0_top,
+        "median_abs_t0_bot": median_abs_t0_bot,
+    }
+
     meta = {
         "name": name,
         "group": group,
@@ -105,6 +145,7 @@ def compute_measurement(rgb: np.ndarray, cfg: CONFIG, name: str | None = None) -
         "low_confidence": bool(res.low_confidence),
         "band_mismatch": bool(res.band_mismatch),
         "flag_counts": {str(k): int(v) for k, v in flag_counts.items()},
+        "refine": refine_meta,
         "median_diameter_um": float(np.nanmedian(diameter_um)) if res.valid.any() else None,
         "params": cfg.as_dict(),
     }
@@ -120,4 +161,5 @@ def compute_measurement(rgb: np.ndarray, cfg: CONFIG, name: str | None = None) -
         group=group,
         replicate=replicate,
         meta=meta,
+        ref=ref,
     )
