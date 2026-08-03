@@ -117,7 +117,7 @@ is weak reassurance on that point, not a substitute. See §6.
 
 1. The primary metric falls in a clear majority of groups.
 2. It rises in no group by more than that group's old between-replicate noise.
-3. Refinement coverage ≥ ~80% of valid columns on typical images.
+3. Refinement coverage ≥ ~80% of valid columns (measured as refined/anchor columns — anchor = columns with finite edges and OK flags) on typical images.
 
 ## 3. Results
 
@@ -377,7 +377,7 @@ columns (−14%), and `FLAG_CENTER_DEV` was essentially unchanged
 |---|---|---|
 | primary falls in a clear majority of groups | 23/46 (50%), sign test p = 1.000 | **FAIL** |
 | rises in no group beyond its old noise | 2/46 groups (`10_5`, `10_7`) exceed it | **FAIL** |
-| coverage ≥ ~80% of valid columns | mean 89.6%, median image 95.7%, 81.6% of images ≥ 80% | **PASS** |
+| coverage ≥ ~80% of valid columns (measured as refined/anchor columns — anchor = columns with finite edges and OK flags) | mean 89.6%, median image 95.7%, 81.6% of images ≥ 80% | **PASS** |
 
 **The feature is not accepted on its stated goal.** It is a working,
 well-covered, correctly-behaving stage that does not deliver replicate
