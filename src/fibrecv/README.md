@@ -2,7 +2,7 @@
 
 Once my folder has changes, please update me.
 
-Per-image detection pipeline (features → band → edges → qc) driven by
+Per-image detection pipeline (features → band → edges → refine → qc) driven by
 `compute`/`measure`/`run_measure`, replicate registration (`register`/
 `run_aggregate`), tensile ingestion (`tensile`), and the two front ends
 (`run_measure.py`/`run_aggregate.py` CLIs, `gui_app.py`/`gui_launch.py`
@@ -25,10 +25,17 @@ Streamlit GUI) that call the same core so CLI and GUI outputs match.
 - `edges.py` — current — per-column tight-inner-edge detection producing
   sub-pixel top/bottom boundaries and the tilt-corrected perpendicular
   diameter (`EdgeResult`, `detect_edges`).
+- `refine.py` — current — erf edge-refinement stage: refits each detected
+  wall as a Gaussian-blurred step over blocks of columns and shifts the
+  boundary to the fitted midpoint, sub-pixel and blur-invariant; falls back
+  to the legacy edge per block/column when a fit doesn't pass its gates, and
+  is bit-identical to the pre-refinement edges when `refine_on=False`
+  (`RefineResult`, `refine_edges`) — see
+  `docs/features/03_esf_edge_refinement.md`.
 - `qc.py` — current — outlier rejection, smoothing and coverage gating on
   the raw edge diameters (`QCResult`).
 - `compute.py` — current — pure per-image compute core chaining
-  features → band → edges → qc with no file I/O (`compute_measurement`);
+  features → band → edges → refine → qc with no file I/O (`compute_measurement`);
   shared by the CLI and the GUI so preview == CLI output.
 - `manual_edit.py` — current — headless manual boundary correction:
   anchors/nudges → corrected edges + re-run QC (`apply_manual_edits`); no

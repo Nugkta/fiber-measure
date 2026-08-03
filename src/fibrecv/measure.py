@@ -1,10 +1,10 @@
-"""Per-image orchestration: features -> band -> edges -> qc -> artifacts.
+"""Per-image orchestration: features -> band -> edges -> refine -> qc -> artifacts.
 
 Dependencies
 ------------
 ``numpy``, ``pandas``, ``matplotlib`` (Agg backend), ``io_utils`` (load/parse),
 ``compute`` (the pure detection core) and ``overlay`` (boundary PNG). The
-features/band/edges/qc stages are reached via ``compute.compute_measurement``.
+features/band/edges/refine/qc stages are reached via ``compute.compute_measurement``.
 
 Inputs
 ------

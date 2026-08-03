@@ -88,7 +88,7 @@ each one once data is loaded.
   export needs names ending in numbers to derive a group label.
 
 **Sidebar — Detection** (parameters)
-- Four knobs are exposed; everything else uses the validated defaults (the CLI
+- Five knobs are exposed; everything else uses the validated defaults (the CLI
   retains full parameter control):
   - **`edge_z`** (slider) — where on the fibre wall the boundary is drawn:
     higher = higher up the wall = further inside the fibre = thinner reading;
@@ -100,6 +100,10 @@ each one once data is loaded.
   - **`wcol`** — horizontal smoothing width (px): raise it for a smoother,
     more stable line; lower it to preserve fine thickness variation.
     Default 41.
+  - **`refine_on`** (checkbox) — erf edge-refinement: refits each detected
+    wall as a Gaussian-blurred step and shifts the boundary to the fitted
+    midpoint (sub-pixel, blur-invariant); on by default. Turn it off to
+    reproduce the legacy (pre-refinement) boundary exactly — the A/B control.
   - **`ppu`** (Calibration) — camera pixels per micron; every µm value is
     px / ppu. Change it if your images come from a different
     microscope/magnification.
@@ -115,8 +119,9 @@ each one once data is loaded.
   bottom edge / dashed centerline / green perpendicular measurement chords —
   each green line is the exact diameter being reported at that column, so its
   far end must touch the bottom edge), the **diameter-vs-position** plot (raw
-  points + smoothed line, µm), and scalar metrics (median Ø, coverage, tilt,
-  QC flags).
+  points + smoothed line, µm, with a fitted sigma(x) blur-width trace overlaid
+  on a twin axis wherever `refine_on` refined that column), and scalar metrics
+  (median Ø, coverage, tilt, QC flags).
 - **Edit boundaries (manual correction)**: when detection fails locally, open
   the expander in a replicate tab, pick the top or bottom line, and click 2+
   points along the true edge in the zoomed strip — the line is redrawn through

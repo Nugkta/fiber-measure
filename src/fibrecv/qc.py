@@ -21,7 +21,7 @@ boolean masks, per-column ``reason`` flags, and scalar ``coverage`` /
 
 Pos
 ---
-Fifth stage of the per-image pipeline. Turns noisy raw edges into a clean,
+Sixth stage of the per-image pipeline. Turns noisy raw edges into a clean,
 NaN-honest profile + a smoothed view, and decides per-image confidence. Feeds
 the per-image CSV and the registration stage.
 """

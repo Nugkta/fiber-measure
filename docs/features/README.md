@@ -16,3 +16,8 @@ What it does / Design choices / Algorithm details / Caveats (see CLAUDE.md).
   Streamlit GUI: violet-accent theme, numbered card sections + jump menu,
   shared `_fmt`/`_styled_fig` formatting/plot policy; detection logic and
   exports unchanged.
+- `03_esf_edge_refinement.md` — current — erf edge-refinement pipeline
+  stage: refits each detected wall as a Gaussian-blurred step and shifts to
+  the fitted midpoint (blur-invariant), block gates + interpolation, legacy
+  fallback, CLI/GUI wiring and caveats (partial-coverage blending, manual
+  edits run after refine).

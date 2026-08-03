@@ -12,7 +12,11 @@ batch processing.
 Detection runs on a per-image *desaturation z-map*: the fibre desaturates the
 background colour, so thresholds are self-normalising per image and robust to
 illumination changes. Boundaries are placed by per-column edge detection with
-wall/shadow discrimination, followed by outlier rejection and smoothing.
+wall/shadow discrimination, then optionally refined sub-pixel by refitting
+each wall as a Gaussian-blurred step (erf) and shifting to its fitted
+midpoint — see
+[docs/features/03_esf_edge_refinement.md](docs/features/03_esf_edge_refinement.md)
+— followed by outlier rejection and smoothing.
 Diameters are measured perpendicular to the fibre axis: the per-column
 neighbourhood average follows the fitted centerline and the vertical chord is
 rescaled by cos(tilt), so inclined fibres (validated to ~45°) are not
@@ -52,9 +56,10 @@ uv run fibrecv-gui
 ```
 
 Opens at http://localhost:8501. Point it at an image folder (or drag in any
-number of files), pick a group, and tune the three boundary knobs — `edge_z`
+number of files), pick a group, and tune the four boundary knobs — `edge_z`
 (tightness), `edge_frac` (faint-fibre safeguard), `wcol` (anti-jitter
-smoothing) — then export results or batch-process the whole folder. The app
+smoothing), `refine_on` (erf edge refinement) — then export results or
+batch-process the whole folder. The app
 is a violet-accented "clean lab" light theme with numbered card sections and
 a jump menu (see
 [docs/features/02_gui-redesign.md](docs/features/02_gui-redesign.md)). See

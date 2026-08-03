@@ -1,4 +1,4 @@
-"""Pure per-image compute core: features -> band -> edges -> qc, no file I/O.
+"""Pure per-image compute core: features -> band -> edges -> refine -> qc, no file I/O.
 
 Dependencies
 ------------
@@ -67,7 +67,7 @@ class MeasureResult:
 
 
 def compute_measurement(rgb: np.ndarray, cfg: CONFIG, name: str | None = None) -> MeasureResult:
-    """Run features -> band -> edges -> qc in memory and assemble the meta dict.
+    """Run features -> band -> edges -> refine -> qc in memory and assemble the meta dict.
 
     This is the exact computation that used to live inline in
     ``measure.measure_image`` (lines ~68-123), lifted out verbatim so the CLI and

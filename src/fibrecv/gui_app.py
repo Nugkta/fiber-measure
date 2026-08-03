@@ -106,10 +106,10 @@ from streamlit_image_coordinates import streamlit_image_coordinates  # noqa: E40
 DEFAULTS = CONFIG()  # never mutated; the source of widget defaults + reset target
 
 # --- visible parameters: the three knobs that move the detected boundary,
-# plus the ppu calibration. Everything else in CONFIG stays at the validated
-# defaults (CLI keeps full control). spec = (name, label, kind, help, step,
-# lo, hi, fmt); ``name`` stays the CONFIG field key, ``label`` is the display
-# text only. ---
+# the refine_on erf edge-refinement toggle, plus the ppu calibration.
+# Everything else in CONFIG stays at the validated defaults (CLI keeps full
+# control). spec = (name, label, kind, help, step, lo, hi, fmt); ``name``
+# stays the CONFIG field key, ``label`` is the display text only. ---
 PARAM_SPECS: list[tuple] = [
     ("edge_z", "Boundary tightness (edge_z)", "slider",
      "Where on the fibre wall the boundary line is drawn (the main knob): "
