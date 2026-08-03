@@ -577,6 +577,12 @@ def _profile_fig(mr, rgb, cfg: CONFIG):
             axr = ax.twinx()
             axr.set_facecolor("none")
             axr.spines["top"].set_visible(False)
+            # left/bottom are ax's spines (already muted by _styled_fig); axr
+            # is drawn on top of ax at the same bbox, so its own left/bottom
+            # spines (default matplotlib black) must be hidden here or they
+            # paint directly over ax's muted border.
+            axr.spines["left"].set_visible(False)
+            axr.spines["bottom"].set_visible(False)
             axr.spines["right"].set_color(_MUTED)
             axr.tick_params(colors=_MUTED)
             axr.yaxis.label.set_color(_MUTED)
