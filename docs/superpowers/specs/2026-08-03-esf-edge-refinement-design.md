@@ -140,6 +140,13 @@ plus an all-False `RefineResult` — bit-identical to today's pipeline.
 Defaults derive from the study-01 measurements (σ range 5–15 px, observed
 offsets ≤ ~6 px/side, residuals 3–7%).
 
+> **Revised after M5 (2026-08-03):** `refine_relmax` was raised 0.08 → **0.15**
+> when the full-set validation showed 0.08 refined only 76% of anchor columns,
+> under this spec's own ≥80% coverage bar. Rationale, alternatives tried and
+> the bound on the admitted midpoint error are in
+> `docs/report/01_esf_edge_consistency.md` §3.1. The other nine defaults are
+> unchanged.
+
 ## Diagnostics
 
 - meta JSON gains a `refine` sub-dict: enabled flag, per-side block pass

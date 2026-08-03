@@ -319,7 +319,7 @@ def test_fit_rejects_a_specular_bump_on_the_wall():
     t = _t_grid()
     clean = _profile(t, t0=0.0, sigma=4.0)
     assert _fit_block(t, clean, cfg) is not None  # the same profile passes clean
-    bump = (0.6 * 12.0 * np.exp(-0.5 * ((t - 12.0) / 5.0) ** 2)).astype(np.float32)
+    bump = (1.5 * 12.0 * np.exp(-0.5 * ((t - 12.0) / 5.0) ** 2)).astype(np.float32)
     assert _fit_block(t, (clean + bump).astype(np.float32), cfg) is None
 
 
@@ -328,8 +328,31 @@ def test_fit_rejects_a_shadow_ramp_outside_the_wall():
     cfg = CONFIG()
     t = _t_grid()
     clean = _profile(t, t0=0.0, sigma=4.0)
-    ramp = (0.4 * 12.0 * np.clip((-t - 10.0) / 25.0, 0.0, 1.0)).astype(np.float32)
+    ramp = (0.8 * 12.0 * np.clip((-t - 10.0) / 25.0, 0.0, 1.0)).astype(np.float32)
     assert _fit_block(t, (clean + ramp).astype(np.float32), cfg) is None
+
+
+@pytest.mark.parametrize("amp", [0.2, 0.4, 0.6, 0.8, 1.0])
+def test_contamination_the_residual_gate_admits_moves_the_midpoint_under_1_5_px(amp):
+    """What ``refine_relmax`` really buys: a bound on the admitted midpoint error.
+
+    Study-01 M5 raised the gate from 0.08 to 0.15 to lift block coverage from
+    76% to 90% on MasP2. That necessarily admits mildly contaminated profiles,
+    so the guarantee is a *bounded* error, not a perfect fit: anything the gate
+    lets through is within 1.5 px of the true step -- still well inside the
+    2.3-3.4 px per-side bias of the fixed-level edge it replaces (study 01,
+    2026-08-03). Contamination strong enough to break that bound is rejected.
+    """
+    cfg = CONFIG()
+    t = _t_grid()
+    clean = _profile(t, t0=0.0, sigma=4.0)
+    for contam in (
+        (amp * 12.0 * np.exp(-0.5 * ((t - 12.0) / 5.0) ** 2)),          # specular bump
+        (amp * 12.0 * np.clip((-t - 10.0) / 25.0, 0.0, 1.0)),           # shadow ramp
+    ):
+        fit = _fit_block(t, (clean + contam).astype(np.float32), cfg)
+        if fit is not None:
+            assert abs(fit[0]) <= 1.5, f"amp={amp}: admitted midpoint {fit[0]:+.3f} px"
 
 
 def test_fit_rejects_an_inverted_step():

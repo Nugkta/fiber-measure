@@ -16,6 +16,9 @@ wall/shadow discrimination, then optionally refined sub-pixel by refitting
 each wall as a Gaussian-blurred step (erf) and shifting to its fitted
 midpoint — see
 [docs/features/03_esf_edge_refinement.md](docs/features/03_esf_edge_refinement.md)
+(the full-set A/B validation of that stage, including what it does and does
+not fix, is
+[docs/report/01_esf_edge_consistency.md](docs/report/01_esf_edge_consistency.md))
 — followed by outlier rejection and smoothing.
 Diameters are measured perpendicular to the fibre axis: the per-column
 neighbourhood average follows the fitted centerline and the vertical chord is

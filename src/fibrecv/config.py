@@ -102,7 +102,15 @@ class CONFIG:
     refine_in_frac: float = 0.8   # inward half-window as a fraction of band_half*cth
     refine_in_max: float = 28.0   # cap on the inward half-window (perpendicular px);
     #                                inside = clip(refine_in_frac*band_half*cth, 8, refine_in_max)
-    refine_relmax: float = 0.08   # max rms residual / (b-a) to accept a block's fit
+    refine_relmax: float = 0.15   # max rms residual / (b-a) to accept a block's fit.
+    #                                Study-01 M5 tuning: the 0.08 the single-image
+    #                                prototype suggested left mean coverage at 76%
+    #                                (median 82%) on the 141-image MasP2 set -- the
+    #                                specular core stripe and shadow ramps are a
+    #                                systematic model mismatch, not noise, so wider
+    #                                blocks do not help. 0.15 lifts mean coverage to
+    #                                90% (median 96%) while the fitted midpoints and
+    #                                sigmas stay put (see docs/report/01_...md).
     refine_sigma_min: float = 0.8   # accepted fitted sigma floor (perpendicular px)
     refine_sigma_max: float = 20.0  # accepted fitted sigma ceiling (perpendicular px)
     refine_maxshift: float = 12.0   # max |t0| (perpendicular px) from the legacy edge

@@ -73,6 +73,19 @@ A/B control.
   `diameter` matches the dtype/rounding semantics of `edges.py`'s own
   diameter computation (`edges.py:359`) — no numeric drift from a dtype
   mismatch between the legacy and refined values.
+- **Residual gate at 0.15, not the 0.08 the single-image prototype
+  suggested.** On the full 141-image MasP2 set, 0.08 refined only 76.4% of
+  anchor columns (median image 81.9%), under the design spec's ~80% bar. The
+  cause is not block noise — widening the block barely moves coverage (block
+  16 → 66.9%, 32 → 70.3%, 64 → 68.0% on a 12-image probe) — but systematic
+  model mismatch from specular stripes and shadow ramps. 0.15 lifts coverage
+  to 89.6% (median image 95.7%) while the fitted midpoints and σ stay put.
+  The cost is bounded and measured: a fit admitted at residual 0.08 is within
+  ~0.7 px of the true step, one admitted at 0.15 within ~1.5 px — still
+  smaller than the 2.3–3.4 px per-side bias of the legacy edge the block would
+  otherwise fall back to. Rejected alternative: shrinking `refine_in_max`,
+  which lifts coverage further but truncates the erf's inner plateau and
+  biases σ and the midpoint (see `docs/report/01_esf_edge_consistency.md`).
 - **Perf budget: < 1 s added per 2560-px image** (~320 fits/image, block
   width 16) — met, see Algorithm details.
 - **Manual edits run after refine and are not re-refined** — see Caveats.
@@ -104,7 +117,8 @@ Runs between `edges.detect_edges` and `qc.run_qc` inside
    the outer/inner 6-sample means and the sample nearest the level
    midpoint, σ0=3.0, loose bounds (σ floor 0.05). A block's fit is accepted
    only when all four gates pass: `b − a > 0` (genuine rising step);
-   `rms_residual / (b − a) < refine_relmax` (default 0.08);
+   `rms_residual / (b − a) < refine_relmax` (default 0.15, raised from 0.08
+   by the study-01 M5 tuning — see Design choices);
    `refine_sigma_min ≤ σ ≤ refine_sigma_max` (default 0.8–20 px);
    `|t0| ≤ refine_maxshift` (default 12 px).
 5. **Interpolation** (`_interp_side`): passing blocks' `t0`/σ/residual are
@@ -151,7 +165,10 @@ Performance: ~320 fits per 2560-px image at `refine_block=16`; measured
   inside the inward fit window and trips the residual gate on most blocks,
   so the bottom-wall median there is still mostly the legacy edge. Check
   `meta["refine"]["coverage_top"/"coverage_bot"]` before treating a
-  per-image median as "refined."
+  per-image median as "refined." Across the whole MasP2 set at the tuned
+  `refine_relmax=0.15`, coverage averages 89.6% (median image 95.7%), but the
+  p10 image is at 59.6% on the top wall and 79.8% on the bottom — so
+  low-coverage walls do still exist and are still mostly legacy.
 - **Manual edits run after refine and override it, with no re-refine.**
   `manual_edit.py` corrects `EdgeResult` boundaries downstream of
   `refine_edges`; a manually edited stretch is not re-fit as a blurred
@@ -166,13 +183,22 @@ Performance: ~320 fits per 2560-px image at `refine_block=16`; measured
   residual or shift gates — the block then fails and falls back to the
   legacy edge rather than fitting an incorrect blurred step (the coverage
   numbers above are exactly this failure mode).
-- **Interpolation seams.** A chain break (gap > `refine_gap_blocks`) leaves
-  a hard boundary between refined and legacy columns; nothing smooths
-  across it, so a short unsupported stretch surrounded by refined columns
-  can step the profile in a way `qc`'s rolling-MAD outlier check may or may
-  not catch.
-- **Validation is still pending.** The coverage and diameter numbers above
-  are single-image implementation-stage observations, not the systematic
-  A/B replicate-consistency result the study
-  (`docs/labbooks/01_esf_edge_consistency.md`) is designed to answer; that
-  run is Task 5.
+- **Interpolation seams and along-fibre ripple.** A chain break (gap >
+  `refine_gap_blocks`) leaves a hard boundary between refined and legacy
+  columns, and within a chain the offset field is piecewise linear between
+  block centres. `qc`'s rolling-MAD outlier check does not object — the
+  outlier flag count actually *fell* 14% across MasP2 — but the detrended
+  along-fibre noise `std(raw − smooth)` rose from 0.681 µm to 0.846 µm
+  (median image 0.342 → 0.491), improving in only 8 of 141 images. If you
+  need per-column fidelity along the fibre, this stage currently costs you
+  some.
+- **It does not (yet) deliver replicate consistency, its stated goal.** The
+  full-set A/B (`docs/report/01_esf_edge_consistency.md`) found the
+  within-group between-replicate std of the per-image mean diameter falls in
+  23 of 46 groups and rises in 23 (sign test p = 1.00; mean 11.14 → 10.85 µm).
+  The focus-dependent bias the stage targets is real and measurable
+  (+1.87 µm per px of fitted σ, within-group), but refinement removes only
+  ~11% of it, and on MasP2 the replicate spread is dominated by the sample
+  (the three replicates of a group differ in median diameter by 22.9% at the
+  median group), not by edge placement. Treat the stage as a better-motivated
+  edge estimator with a validated fit model, not as a consistency fix.

@@ -10,4 +10,4 @@ confirmed in chat (see CLAUDE.md, Lab Notebook Protocol).
 
 | Slug | Status | Started | Last Updated | One-line Summary |
 |------|--------|---------|--------------|------------------|
-| 01_esf_edge_consistency | active | 2026-08-03 | 2026-08-03 | erf-midpoint edge refinement to remove focus-dependent diameter bias; `refine` stage implemented + docs synced, A/B replicate-consistency validation pending |
+| 01_esf_edge_consistency | active | 2026-08-03 | 2026-08-03 | erf-midpoint edge refinement: full MasP2 A/B done — coverage 90% after tuning `refine_relmax` 0.08→0.15, but between-replicate std unchanged (23/46 groups improve, p=1.00); hypothesis unsupported because the replicates are not the same fibre segment (median spread 22.9%); report written, study kept open pending a proper replicate/focus-sweep set |
