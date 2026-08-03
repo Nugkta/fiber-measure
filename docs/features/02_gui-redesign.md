@@ -140,3 +140,16 @@ this is a presentation layer over the same data path.
   cutoff and the card layout are tuned for a normal desktop browser window;
   very narrow windows lose the jump menu (by design) but the cards themselves
   do not reflow into a mobile-friendly layout.
+
+## History
+
+- **2026-08-02** — Feature implemented on `feat/gui-redesign` (spec →
+  six subagent tasks → per-task review → browser verification → final
+  whole-branch review); PR #4 opened.
+- **2026-08-03** — PR review round: Copilot flagged three issues. Fixed in
+  `ac535a7`: header chip now `html.escape()`d (filename-derived group label
+  could inject markup) and this doc's observer-cleanup wording corrected from
+  `unload` to `pagehide`. Pushed back on the third (claim that
+  `metricValueFontSize`/`metricValueFontWeight` are invalid theme keys —
+  both exist in Streamlit 1.58.0's config template), no change made.
+  Merged to `main` as `479456b`; branch deleted.
