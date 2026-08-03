@@ -19,7 +19,7 @@ import numpy as np
 import pytest
 from scipy.special import erf
 
-from fibrecv.band import BandResult, locate_band
+from fibrecv.band import BandResult, locate_band, tilt_geometry
 from fibrecv.compute import MeasureResult, compute_measurement
 from fibrecv.config import CONFIG
 from fibrecv.edges import EdgeResult, detect_edges
@@ -368,43 +368,58 @@ def test_fit_rejects_a_shift_beyond_maxshift():
 # --------------------------------------------------------------------------- #
 def _slab_case(H: int = 240, W: int = 160, top: float = 80.0, bot: float = 160.0,
                sigma: float = 3.0, amp: float = 12.0, shift: float = 3.0,
-               seed: int = 0, noise: float = 0.3):
-    """A horizontal slab z-map plus the (band, edges) a legacy pass would give.
+               seed: int = 0, noise: float = 0.3, slope: float = 0.0):
+    """A slab z-map plus the (band, edges) a legacy pass would give.
 
-    The TRUE walls sit at rows ``top``/``bot`` with an erf blur of ``sigma``;
-    the supplied ``EdgeResult`` places them ``shift`` px OUTSIDE them, so a
-    correct refinement must recover ``t0 = +shift`` on both walls and pull the
-    diameter from ``bot - top + 2*shift`` back to ``bot - top``. ``W`` is a
-    multiple of ``refine_block``, so there are exactly ``W // 16`` blocks with
-    centres at 8, 24, 40, ...
+    At ``slope = 0`` the TRUE walls sit at rows ``top``/``bot`` with an erf blur
+    of ``sigma``. At ``slope != 0`` the whole slab is sheared about the image
+    centre column, keeping its VERTICAL thickness ``bot - top`` (so
+    ``band_half``, a vertical count in ``band.py``, is unchanged) while its
+    perpendicular width becomes ``(bot - top) * cth`` -- the blur ``sigma`` and
+    the offset ``shift`` stay PERPENDICULAR quantities, exactly the frame
+    ``refine.py`` fits in.
+
+    The supplied ``EdgeResult`` places each wall ``shift`` perpendicular px
+    OUTSIDE the true one (i.e. ``shift / cth`` vertical px), so a correct
+    refinement must recover ``t0 = +shift`` on both walls, move each wall by
+    ``shift / cth`` VERTICAL px onto the true row, and pull the perpendicular
+    diameter back to ``(bot - top) * cth``. ``W`` is a multiple of
+    ``refine_block``, so there are exactly ``W // 16`` blocks with centres at
+    8, 24, 40, ...
     """
-    y = np.arange(H, dtype=np.float64)[:, None]
-    s = sigma * math.sqrt(2.0)
-    blend = 0.5 * (erf((y - top) / s) + erf((bot - y) / s))
-    rng = np.random.default_rng(seed)
-    D = (amp * np.repeat(blend, W, axis=1) + rng.normal(0.0, noise, (H, W))).astype(np.float32)
-
+    cth = 1.0 / math.sqrt(1.0 + slope * slope)
     mid = float(top + bot) / 2.0
+    half = (bot - top) / 2.0                    # vertical half-thickness
+    x = np.arange(W, dtype=np.float64)[None, :]
+    y = np.arange(H, dtype=np.float64)[:, None]
+    centre = mid + slope * (x - (W - 1) / 2.0)  # tilted centerline row
+    dist = (y - centre) * cth                   # PERPENDICULAR distance from it
+    s = sigma * math.sqrt(2.0)
+    blend = 0.5 * (erf((half * cth + dist) / s) + erf((half * cth - dist) / s))
+    rng = np.random.default_rng(seed)
+    D = (amp * blend + rng.normal(0.0, noise, (H, W))).astype(np.float32)
+
+    c_fit = centre[0].astype(np.float32)
     bnd = BandResult(
         mask=np.zeros((H, W), dtype=bool),
-        c_fit=np.full(W, mid, dtype=np.float32),
-        slope=0.0,
-        intercept=mid,
-        band_half=(bot - top) / 2.0,
+        c_fit=c_fit,
+        slope=slope,
+        intercept=float(c_fit[0]),
+        band_half=half,
         x0=0,
         x1=W - 1,
-        centroid=np.full(W, mid, dtype=np.float32),
+        centroid=c_fit.copy(),
         low_confidence=False,
         n_components=1,
     )
-    y_top = np.full(W, top - shift, dtype=np.float32)
-    y_bot = np.full(W, bot + shift, dtype=np.float32)
+    y_top = (c_fit - half - shift / cth).astype(np.float32)
+    y_bot = (c_fit + half + shift / cth).astype(np.float32)
     edg = EdgeResult(
         y_top=y_top,
         y_bot=y_bot,
-        diameter=(y_bot - y_top).astype(np.float32),
+        diameter=((y_bot - y_top) * cth).astype(np.float32),
         amp=np.full(W, amp, dtype=np.float32),
-        y_core=np.full(W, mid, dtype=np.float32),
+        y_core=c_fit.copy(),
         flags=np.zeros(W, dtype=np.int32),
         half_window=60,
     )
@@ -461,6 +476,55 @@ def test_refine_recovers_a_known_offset_and_recomputes_the_diameter():
     np.testing.assert_allclose(edg2.diameter[r], edg2.y_bot[r] - edg2.y_top[r], rtol=1e-6)
     assert np.allclose(edg2.diameter[r], 80.0, atol=0.6)
     assert np.all(edg2.diameter[r] < edg.diameter[r] - 4.0)
+
+
+def test_perpendicular_offsets_are_converted_to_vertical_shifts_exactly_once():
+    """The tilt conversion of global constraint #1, on a slab that can see it.
+
+    Every other group-C case is horizontal, where ``cth == 1`` and dropping a
+    ``/cth`` is invisible. Here the slab is tilted hard enough (slope 0.6,
+    ``cth = 0.857``) that the vertical shift and the perpendicular offset differ
+    by 0.83 px -- far outside the fit's ~0.05 px noise -- so an offset applied
+    unconverted, or converted twice, moves the wall off its true row.
+    """
+    cfg = CONFIG()
+    slope, shift = 0.6, 5.0
+    D, bnd, edg = _slab_case(H=320, top=120.0, bot=200.0, slope=slope, shift=shift)
+    _m, cth = tilt_geometry(bnd.slope)
+    assert cth == pytest.approx(1.0 / math.sqrt(1.0 + slope ** 2))
+    assert shift / cth - shift > 0.8  # the margin this test lives on
+
+    edg2, ref = refine_edges(D, edg, bnd, cfg)
+    rt, rb = ref.refined_top, ref.refined_bot
+    assert rt.sum() >= 140 and rb.sum() >= 140
+
+    # 1. the FITTED offset is perpendicular: it recovers the rendered shift
+    assert np.allclose(ref.o_top[rt], shift, atol=0.3), np.nanmedian(ref.o_top)
+    assert np.allclose(ref.o_bot[rb], shift, atol=0.3), np.nanmedian(ref.o_bot)
+    assert np.allclose(ref.sigma_top[rt], 3.0, rtol=0.15)
+
+    # 2. the APPLIED shift is vertical -- o/cth, the conversion done once ...
+    np.testing.assert_allclose(edg2.y_top[rt] - edg.y_top[rt], ref.o_top[rt] / cth,
+                               rtol=1e-5, err_msg="top shift is not o_top/cth")
+    np.testing.assert_allclose(edg.y_bot[rb] - edg2.y_bot[rb], ref.o_bot[rb] / cth,
+                               rtol=1e-5, err_msg="bot shift is not o_bot/cth")
+    # ... and it is measurably NOT the unconverted offset
+    assert np.all(np.abs(np.abs(edg2.y_top[rt] - edg.y_top[rt]) - ref.o_top[rt]) > 0.5)
+
+    # 3. ground truth, independent of the formulas above: each wall lands on its
+    #    true row, which an unconverted (or doubly converted) shift misses by 0.83
+    true_top = bnd.c_fit - bnd.band_half
+    true_bot = bnd.c_fit + bnd.band_half
+    assert np.allclose(edg2.y_top[rt], true_top[rt], atol=0.3), (
+        f"top off by {np.max(np.abs(edg2.y_top[rt] - true_top[rt])):.3f} px"
+    )
+    assert np.allclose(edg2.y_bot[rb], true_bot[rb], atol=0.3)
+
+    # 4. and the diameter is the PERPENDICULAR chord of the shifted walls
+    both = rt & rb
+    np.testing.assert_allclose(edg2.diameter[both],
+                               (edg2.y_bot[both] - edg2.y_top[both]) * cth, rtol=1e-6)
+    assert np.allclose(edg2.diameter[both], 2 * bnd.band_half * cth, atol=0.6)
 
 
 def test_a_two_block_hole_is_bridged_and_a_three_block_hole_is_not():
