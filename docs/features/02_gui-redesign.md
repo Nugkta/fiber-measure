@@ -109,7 +109,7 @@ this is a presentation layer over the same data path.
   matching uploader (re)appears in the DOM — needed because a collapsed
   sidebar expander re-mounts the uploader and drops the one-shot attribute.
   The observer is created once per label (guarded by a flag on
-  `window.parent`) and disconnected on `unload`, clearing the flag so a later
+  `window.parent`) and disconnected on `pagehide`, clearing the flag so a later
   re-creation (e.g. toggling the folder-mode checkbox off then on) gets a
   fresh observer instead of being silently blocked by a stale one.
 
@@ -129,8 +129,8 @@ this is a presentation layer over the same data path.
   zoomed-strip click widget (in `_render_edit_expander`) is a third-party
   component rendered in its own iframe; `_CSS` cannot reach into it, so its
   chrome is unchanged from the component's own default look.
-- **Folder-upload `MutationObserver` cleanup is unload-based.** The observer
-  disconnects on the *component iframe's* `unload` event, not on a Streamlit
+- **Folder-upload `MutationObserver` cleanup is pagehide-based.** The observer
+  disconnects on the *component iframe's* `pagehide` event, not on a Streamlit
   rerun per se — this is believed correct for both expander re-mounts and
   full reruns (both remount the iframe), but was not exhaustively tested
   against every Streamlit rerun path; a regression here would surface as the

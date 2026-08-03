@@ -64,6 +64,7 @@ code paths.
 
 from __future__ import annotations
 
+import html
 import io
 import json
 import re
@@ -1099,7 +1100,7 @@ def _render_header(group_label: str | None, n_reps: int, edge_z: float) -> None:
         '<h1>fibrecv — fibre diameter detection</h1>'
         '<span class="fcv-sub">Local preview / tuning / batch / export over '
         'the validated pipeline.</span>'
-        f'<span class="fcv-chip">{chip}</span>'
+        f'<span class="fcv-chip">{html.escape(chip)}</span>'
         '</div>',
         unsafe_allow_html=True)
 
