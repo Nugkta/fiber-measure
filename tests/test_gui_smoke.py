@@ -103,6 +103,10 @@ def test_anomaly_flags_surface_in_gui(anomaly_folder: Path):
     at.sidebar.text_input[0].set_value(str(anomaly_folder)).run()
     assert not at.exception
 
+    # the anomaly knobs live in their own collapsed sidebar expander
+    exp_labels = [e.label for e in at.sidebar.expander]
+    assert "Anomaly flags" in exp_labels, exp_labels
+
     # rep 2's diameter step earns a warning prefix on its tab label
     tab_labels = [t.label for t in at.tabs]
     assert any(lbl.startswith("⚠") for lbl in tab_labels), tab_labels

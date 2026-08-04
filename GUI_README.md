@@ -104,7 +104,7 @@ each one once data is loaded.
   - **`ppu`** (Calibration) — camera pixels per micron; every µm value is
     px / ppu. Change it if your images come from a different
     microscope/magnification.
-- An **Anomaly flags** section holds the four advisory-warning thresholds
+- A collapsed **Anomaly flags** expander holds the four advisory-warning thresholds
   (edge-jump px, missing-stretch fraction, diameter-step fraction, replicate
   deviation fraction) and the **exclude** checkbox that makes flagged images
   drop out of the group statistics (off by default — flags are advisory).
