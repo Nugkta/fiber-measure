@@ -233,6 +233,61 @@ def test_as_dict_json_safe_and_capped():
     assert isinstance(d["max_jump_px"], float)
 
 
+def _qc_fixture(diameter_px=100.0, band_half=50.0, slope=0.0, W=300):
+    """EdgeResult/BandResult pair mirroring tests/test_edges_wall.py."""
+    from fibrecv.band import BandResult
+    from fibrecv.edges import EdgeResult
+
+    x = np.arange(W, dtype=float)
+    center = 150.0 + slope * x
+    y_top = center - diameter_px / 2.0
+    y_bot = center + diameter_px / 2.0
+    edg = EdgeResult(
+        y_top=y_top, y_bot=y_bot, diameter=y_bot - y_top,
+        amp=np.full(W, 10.0), y_core=center.copy(),
+        flags=np.zeros(W, dtype=np.int64), half_window=120,
+    )
+    bnd = BandResult(
+        mask=np.zeros((300, W), dtype=bool), c_fit=center.copy(),
+        slope=slope, intercept=150.0, band_half=band_half, x0=5, x1=294,
+        centroid=center.copy(), low_confidence=False, n_components=1,
+    )
+    return edg, bnd
+
+
+def test_qc_clean_fibre_has_no_anomalies():
+    from fibrecv.qc import run_qc
+
+    edg, bnd = _qc_fixture()
+    res = run_qc(edg, bnd, CONFIG())
+    assert res.anomaly.flags == []
+
+
+def test_qc_injected_jump_flagged_but_stays_valid():
+    from fibrecv.qc import run_qc
+
+    edg, bnd = _qc_fixture()
+    edg.y_top[150:160] -= 15.0
+    edg.diameter[150:160] += 15.0
+    res = run_qc(edg, bnd, CONFIG())
+    assert "edge_jump" in res.anomaly.flags
+    assert 150 in res.anomaly.jump_cols
+    # advisory: the jump must not invalidate columns around it
+    assert res.valid[148:162].all()
+
+
+def test_qc_tilted_gap_uses_refit_slope():
+    """A 41-col gap on a slope-0.5 fibre: the detrend must use the refit
+    centerline slope, so the across-gap step is not a false edge_jump."""
+    from fibrecv.qc import run_qc
+
+    edg, bnd = _qc_fixture(slope=0.5)
+    edg.flags[100:141] = 1  # invalidate a 41-col run
+    res = run_qc(edg, bnd, CONFIG())
+    assert "edge_jump" not in res.anomaly.flags
+    assert "large_gap" in res.anomaly.flags
+
+
 def test_as_dict_nan_becomes_none():
     y_top, y_bot, smooth, valid, x0, x1 = _straight_fibre(W=300, x0=5, x1=154)
     res = _detect(y_top, y_bot, smooth, valid, x0, x1)  # span too short for step

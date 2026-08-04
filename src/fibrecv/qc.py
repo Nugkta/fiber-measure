@@ -35,6 +35,7 @@ from scipy.ndimage import median_filter
 from scipy.signal import savgol_filter
 from scipy.stats import theilslopes
 
+from .anomaly import AnomalyResult, detect_image_anomalies
 from .band import BandResult, tilt_geometry
 from .config import CONFIG
 from .edges import EdgeResult, FLAG_OK
@@ -50,6 +51,7 @@ class QCResult:
     coverage: float              # fraction of span columns that are valid
     low_confidence: bool         # coverage/band/band-mismatch problem
     band_mismatch: bool          # diameter << coarse band thickness (defocus trap)
+    anomaly: AnomalyResult       # advisory image-level anomaly flags (anomaly.py)
 
 
 # extra QC reasons (kept distinct from edge flags' bit space, reused additively)
@@ -100,8 +102,10 @@ def run_qc(edges: EdgeResult, band: BandResult, cfg: CONFIG) -> QCResult:
     if fin.size >= 10:
         slope, intercept, _, _ = theilslopes(center[fin], fin)
         line = slope * np.arange(W) + intercept
+        tilt_slope = float(slope)
     else:
         line = band.c_fit
+        tilt_slope = float(band.slope)
     dev = np.abs(center - line)
     center_bad = np.isfinite(dev) & (dev > cfg.reject_dev)
     reason[center_bad] |= FLAG_CENTER_DEV
@@ -162,6 +166,13 @@ def run_qc(edges: EdgeResult, band: BandResult, cfg: CONFIG) -> QCResult:
         band.low_confidence or coverage < cfg.min_coverage or band_mismatch
     )
 
+    # advisory anomaly detectors (detrended with the refit centerline slope,
+    # so a tilted fibre's step across a gap is not mistaken for an edge jump)
+    anomaly = detect_image_anomalies(
+        edges.y_top, edges.y_bot, diameter_smooth, valid,
+        band.x0, band.x1, tilt_slope, cfg,
+    )
+
     return QCResult(
         diameter_raw=diameter_raw,
         diameter_smooth=diameter_smooth,
@@ -171,4 +182,5 @@ def run_qc(edges: EdgeResult, band: BandResult, cfg: CONFIG) -> QCResult:
         coverage=coverage,
         low_confidence=low_conf,
         band_mismatch=band_mismatch,
+        anomaly=anomaly,
     )
