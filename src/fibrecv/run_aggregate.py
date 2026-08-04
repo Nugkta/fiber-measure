@@ -165,6 +165,32 @@ def main(argv: list[str] | None = None) -> int:
     if args.groups:
         wanted = set(args.groups)
         groups = {g: v for g, v in groups.items() if g in wanted}
+
+    # per-image summary before the no-groups bailout: when exclusions drop
+    # every replicate this file is the audit of WHY, so it must still land.
+    # It covers every image in the tree, not just --groups selections.
+    if image_rows:
+        medians_by_group: dict[str, dict] = defaultdict(dict)
+        for r in image_rows:
+            medians_by_group[r["group"]][r["name"]] = r["median_diameter_um"]
+        for g, medians in medians_by_group.items():
+            devs, outliers = detect_replicate_outliers(medians, cfg)
+            for r in image_rows:
+                if r["group"] != g:
+                    continue
+                r["rep_dev_frac"] = devs.get(r["name"])
+                if r["name"] in outliers:
+                    r["anomaly_flags"] = [*r["anomaly_flags"], "replicate_outlier"]
+        for r in image_rows:
+            r["anomaly_flags"] = ";".join(r["anomaly_flags"])
+        (out_root / "summary").mkdir(parents=True, exist_ok=True)
+        per_image = pd.DataFrame(
+            sorted(image_rows, key=lambda r: natural_key(r["name"]))
+        )
+        per_image_path = out_root / "summary" / "per_image_summary.csv"
+        per_image.to_csv(per_image_path, index=False)
+        print(f"Wrote {len(image_rows)} image rows -> {per_image_path}")
+
     if not groups:
         print("No groups matched / no per-image CSVs found.")
         return 1
@@ -212,28 +238,6 @@ def main(argv: list[str] | None = None) -> int:
     master_path = out_root / "summary" / "master_summary.csv"
     master.to_csv(master_path, index=False)
     print(f"Wrote {len(rows)} sample rows -> {master_path}")
-
-    # group-level replicate_outlier pass over ALL images (advisory: excluded
-    # replicates still shape the group median), then the per-image summary
-    medians_by_group: dict[str, dict] = defaultdict(dict)
-    for r in image_rows:
-        medians_by_group[r["group"]][r["name"]] = r["median_diameter_um"]
-    for g, medians in medians_by_group.items():
-        devs, outliers = detect_replicate_outliers(medians, cfg)
-        for r in image_rows:
-            if r["group"] != g:
-                continue
-            r["rep_dev_frac"] = devs.get(r["name"])
-            if r["name"] in outliers:
-                r["anomaly_flags"] = [*r["anomaly_flags"], "replicate_outlier"]
-    for r in image_rows:
-        r["anomaly_flags"] = ";".join(r["anomaly_flags"])
-    per_image = pd.DataFrame(
-        sorted(image_rows, key=lambda r: natural_key(r["name"]))
-    )
-    per_image_path = out_root / "summary" / "per_image_summary.csv"
-    per_image.to_csv(per_image_path, index=False)
-    print(f"Wrote {len(image_rows)} image rows -> {per_image_path}")
     return 0
 
 

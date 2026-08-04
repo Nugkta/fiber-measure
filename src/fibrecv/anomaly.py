@@ -192,10 +192,11 @@ def detect_replicate_outliers(
 ) -> tuple[dict, set]:
     """Replicates whose median diameter deviates > rep_dev_frac from the group.
 
-    ``medians`` maps replicate id -> median diameter (None/NaN entries are
-    dropped). Needs >= 3 finite medians -- with fewer, the group median is not
-    meaningful and everything passes. Returns ({rep: deviation_frac}, {outlier
-    reps}). Advisory only: callers must never exclude on this flag.
+    ``medians`` maps any hashable per-image key (image name in the CLI, rep
+    index in the GUI) -> median diameter; None/NaN entries are dropped. Needs
+    >= 3 finite medians -- with fewer, the group median is not meaningful and
+    everything passes. Returns ({key: deviation_frac}, {outlier keys}).
+    Advisory only: callers must never exclude on this flag.
     """
     finite = {k: float(v) for k, v in medians.items()
               if v is not None and np.isfinite(v)}

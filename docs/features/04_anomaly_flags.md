@@ -79,6 +79,10 @@ x1, slope, cfg)` runs at the end of `qc.run_qc` and attaches an
 `summary/per_image_summary.csv` columns: `name, group, replicate,
 median_diameter_um, coverage, anomaly_flags` (`;`-joined), `max_jump_px,
 longest_gap_frac, step_frac, rep_dev_frac, excluded, excluded_reason`.
+It is deliberately a tree-wide audit: it covers every parseable image found,
+even under a `--groups` selection (where `master_summary.csv` covers only the
+selected groups), and it is written even when exclusions leave nothing to
+register — precisely then it is the record of why.
 
 ## Caveats
 - Thresholds were chosen by design reasoning, not calibrated on the full

@@ -1809,13 +1809,14 @@ def main() -> None:
                 apply_manual_edits(rep["mr"], edits, cfg)
 
     # group-level replicate_outlier check (advisory: badges/table only, never
-    # exclusion) — after manual edits so corrected medians feed the comparison
+    # exclusion) — after manual edits so corrected medians feed the comparison;
+    # keyed by idx, not name: uploaded files can share a stem
     rep_devs, rep_outliers = detect_replicate_outliers(
-        {rep["name"]: rep["mr"].meta.get("median_diameter_um") for rep in reps},
+        {rep["idx"]: rep["mr"].meta.get("median_diameter_um") for rep in reps},
         cfg)
     for rep in reps:
-        rep["rep_dev"] = rep_devs.get(rep["name"])
-        rep["rep_outlier"] = rep["name"] in rep_outliers
+        rep["rep_dev"] = rep_devs.get(rep["idx"])
+        rep["rep_outlier"] = rep["idx"] in rep_outliers
 
     # main area
     if not reps:

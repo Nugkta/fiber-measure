@@ -107,6 +107,21 @@ def test_anomaly_exclude_drops_flagged_image(out_root: Path):
     assert int(master.loc[0, "n_replicates_used"]) == 2
 
 
+def test_summary_written_even_when_everything_excluded(tmp_path: Path):
+    """All replicates excluded -> no groups to register (exit 1), but the
+    per-image summary must still exist: it is the audit of WHY."""
+    gap = _clean_anomaly()
+    gap.update({"flags": ["large_gap"], "longest_gap_frac": 0.3})
+    for rep in (1, 2, 3):
+        _write_replicate(tmp_path, rep, 100.0, dict(gap))
+    assert main(["--out", str(tmp_path), "--all", "--anomaly-exclude"]) == 1
+    df = _read_summary(tmp_path)
+    assert len(df) == 3
+    assert df["excluded"].all()
+    assert (df["excluded_reason"] == "anomaly: large_gap").all()
+    assert not (tmp_path / "summary" / "master_summary.csv").exists()
+
+
 def test_old_meta_without_anomaly_key(tmp_path: Path):
     for rep in (1, 2, 3):
         _write_replicate(tmp_path, rep, 100.0, None, drop_anomaly_key=True)
