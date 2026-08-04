@@ -8,5 +8,5 @@ two-digit number here). Each file: hypothesis/status/started header, then one
 
 ## Files
 
-- `01_esf_edge_consistency.md` — active — erf-midpoint edge refinement study: validates the blurred-step (PSF) model on MasP2 images and will A/B replicate consistency of the refined edges.
+- `01_esf_edge_consistency.md` — active — erf-midpoint edge refinement study: validated the blurred-step (PSF) model on MasP2 images, then A/B-tested replicate consistency of the refined edges over the full 141-image set (null result — see `docs/report/01_esf_edge_consistency.md`); kept open pending a better replicate set.
 - `01_esf_fits.png` — evidence figure for study 01 (edge-aligned profiles, erf fits, residual clouds on three MasP2 images).
