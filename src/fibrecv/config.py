@@ -103,11 +103,14 @@ class CONFIG:
     savgol_poly: int = 3       # Savitzky-Golay polynomial order
 
     # --- anomaly flagging (advisory image/group checks; see anomaly.py) ---
-    jump_thresh_px: float = 10.0  # edge_jump: slope-detrended edge displacement
+    # jump/step thresholds calibrated on the 141-image MasP2 set (2026-08-04):
+    # visual inspection put the real/false boundary at ~20 px jumps and ~0.25
+    # window-median shift (smooth along-fibre variation reaches ~0.20)
+    jump_thresh_px: float = 20.0  # edge_jump: slope-detrended edge displacement
     #                               between consecutive valid columns above this
     gap_frac: float = 0.10     # large_gap: longest invalid run > this fraction
     #                            of the fibre span
-    step_frac: float = 0.05    # diameter_step: adjacent-window median shift
+    step_frac: float = 0.25    # diameter_step: adjacent-window median shift
     #                            > this fraction of the global median diameter
     step_window_px: int = 100  # window for the diameter_step two-median scan
     #                            (config-only; span < 2*window skips the check)

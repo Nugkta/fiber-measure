@@ -23,12 +23,13 @@ def _synthetic_fibre(W: int = 800, H: int = 300, seed: int = 0) -> np.ndarray:
 
 
 def _step_fibre(W: int = 800, H: int = 300, seed: int = 0) -> np.ndarray:
-    """Like _synthetic_fibre but the band steps 40 -> 60 px tall at x=400."""
+    """Like _synthetic_fibre but the band steps 40 -> 70 px tall at x=400
+    (a ~55% level shift, safely above the calibrated step_frac=0.25)."""
     rng = np.random.default_rng(seed)
     img = np.empty((H, W, 3), dtype=np.float32)
     img[:] = (0.95, 0.45, 0.65)
     img[130:170, :400] = (0.92, 0.90, 0.91)
-    img[120:180, 400:] = (0.92, 0.90, 0.91)
+    img[115:185, 400:] = (0.92, 0.90, 0.91)
     img += rng.normal(0.0, 0.01, img.shape).astype(np.float32)
     return np.clip(img, 0.0, 1.0)
 

@@ -36,10 +36,12 @@ def _detect(y_top, y_bot, smooth, valid, x0, x1, slope=0.0, cfg=None):
 # --- config defaults -------------------------------------------------------
 
 def test_config_defaults():
+    """Defaults calibrated on the 141-image MasP2 set (2026-08-04): the
+    true/false boundary sat at ~20 px jumps and ~0.25 window-median shift."""
     cfg = CONFIG()
-    assert cfg.jump_thresh_px == 10.0
+    assert cfg.jump_thresh_px == 20.0
     assert cfg.gap_frac == 0.10
-    assert cfg.step_frac == 0.05
+    assert cfg.step_frac == 0.25
     assert cfg.step_window_px == 100
     assert cfg.rep_dev_frac == 0.25
     assert cfg.anomaly_exclude is False
@@ -49,17 +51,17 @@ def test_config_defaults():
 
 def test_jump_on_top_edge_triggers():
     y_top, y_bot, smooth, valid, x0, x1 = _straight_fibre()
-    y_top[150:] -= 15.0  # 15 px jump at column 150
+    y_top[150:] -= 25.0  # 25 px jump at column 150
     res = _detect(y_top, y_bot, smooth, valid, x0, x1)
     assert "edge_jump" in res.flags
     assert 150 in res.jump_cols
-    assert res.max_jump_px >= 15.0
+    assert res.max_jump_px >= 25.0
     assert res.n_jumps >= 1
 
 
 def test_small_jump_is_clean():
     y_top, y_bot, smooth, valid, x0, x1 = _straight_fibre()
-    y_top[150:] -= 5.0  # below jump_thresh_px=10
+    y_top[150:] -= 15.0  # below jump_thresh_px=20
     res = _detect(y_top, y_bot, smooth, valid, x0, x1)
     assert "edge_jump" not in res.flags
     assert res.n_jumps == 0
@@ -68,7 +70,7 @@ def test_small_jump_is_clean():
 
 def test_bottom_edge_is_checked_too():
     y_top, y_bot, smooth, valid, x0, x1 = _straight_fibre()
-    y_bot[200:] += 12.0
+    y_bot[200:] += 25.0
     res = _detect(y_top, y_bot, smooth, valid, x0, x1)
     assert "edge_jump" in res.flags
     assert 200 in res.jump_cols
@@ -126,7 +128,7 @@ def test_no_gap_reports_zero():
 
 # --- diameter_step ---------------------------------------------------------
 
-def _stepped_fibre(W=800, step_at=400, d0=100.0, d1=112.0):
+def _stepped_fibre(W=800, step_at=400, d0=100.0, d1=140.0):
     y_top = np.full(W, 100.0)
     y_bot = y_top + d0
     y_bot[step_at:] = 100.0 + d1
@@ -135,11 +137,11 @@ def _stepped_fibre(W=800, step_at=400, d0=100.0, d1=112.0):
     return y_top, y_bot, smooth.astype(float), valid, 0, W - 1
 
 
-def test_diameter_step_12pct_triggers():
-    y_top, y_bot, smooth, valid, x0, x1 = _stepped_fibre()
+def test_diameter_step_33pct_triggers():
+    y_top, y_bot, smooth, valid, x0, x1 = _stepped_fibre()  # 100 -> 140 px
     res = _detect(y_top, y_bot, smooth, valid, x0, x1)
     assert "diameter_step" in res.flags
-    assert res.step_frac > 0.05
+    assert res.step_frac > 0.25
     assert abs(res.step_col - 400) <= 10
 
 
@@ -237,7 +239,7 @@ def test_compute_meta_carries_anomaly_dict():
 
 
 def _mr_with_jump(cfg):
-    """MeasureResult whose top edge has a 15-px 20-col dent (edge_jump)."""
+    """MeasureResult whose top edge has a 25-px 20-col dent (edge_jump)."""
     from fibrecv.band import BandResult
     from fibrecv.compute import MeasureResult
     from fibrecv.edges import EdgeResult
@@ -246,7 +248,7 @@ def _mr_with_jump(cfg):
     W = 300
     y_top = np.full(W, 100.0)
     y_bot = np.full(W, 200.0)
-    y_top[140:160] = 85.0  # 15-px jump down at 140 and back up at 160
+    y_top[140:160] = 75.0  # 25-px jump down at 140 and back up at 160
     edg = EdgeResult(
         y_top=y_top, y_bot=y_bot, diameter=y_bot - y_top,
         amp=np.full(W, 10.0), y_core=np.full(W, 150.0),
@@ -291,7 +293,7 @@ def test_as_dict_json_safe_and_capped():
     y_top, y_bot, smooth, valid, x0, x1 = _straight_fibre(W=600, x0=0, x1=599)
     # 30 separate jumps -> jump_cols must be capped at 20 in the dict
     for i, c in enumerate(range(20, 580, 18)):
-        y_top[c] += 15.0 if i % 2 == 0 else -15.0
+        y_top[c] += 25.0 if i % 2 == 0 else -25.0
     res = _detect(y_top, y_bot, smooth, valid, x0, x1)
     d = res.as_dict()
     assert set(d.keys()) == {
@@ -339,8 +341,8 @@ def test_qc_injected_jump_flagged_but_stays_valid():
     from fibrecv.qc import run_qc
 
     edg, bnd = _qc_fixture()
-    edg.y_top[150:160] -= 15.0
-    edg.diameter[150:160] += 15.0
+    edg.y_top[150:160] -= 25.0
+    edg.diameter[150:160] += 25.0
     res = run_qc(edg, bnd, CONFIG())
     assert "edge_jump" in res.anomaly.flags
     assert 150 in res.anomaly.jump_cols

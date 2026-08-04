@@ -147,7 +147,7 @@ PARAM_SPECS: list[tuple] = [
      "edge_jump anomaly: a detected edge that moves more than this many "
      "pixels between neighbouring measured columns (tilt-corrected) is "
      "flagged — usually a boundary latching onto a reflection or shadow. "
-     "Default 10.",
+     "Default 20 (calibrated on the MasP2 set).",
      1.0, 1.0, 100.0, "%.0f"),
     ("gap_frac", "Missing-stretch fraction", "float",
      "large_gap anomaly: flag the image when the longest stretch of "
@@ -157,7 +157,8 @@ PARAM_SPECS: list[tuple] = [
     ("step_frac", "Diameter step fraction", "float",
      "diameter_step anomaly: flag when the diameter level shifts by more "
      "than this fraction of the image's median diameter between adjacent "
-     "windows — a sudden persistent shift, not gradual taper. Default 0.05.",
+     "windows — a sudden persistent shift, not gradual taper. Default 0.25 "
+     "(calibrated on the MasP2 set; smooth real variation reaches ~0.20).",
      0.01, 0.01, 1.0, "%.2f"),
     ("rep_dev_frac", "Replicate deviation fraction", "float",
      "replicate_outlier: flag a replicate whose median diameter deviates "

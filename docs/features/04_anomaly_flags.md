@@ -57,7 +57,7 @@ x1, slope, cfg)` runs at the end of `qc.run_qc` and attaches an
   *valid* columns and detrend with the refit centerline slope
   (`residual = Δy − slope·Δx`, the same Theil-Sen slope QC fits for the
   centre-deviation check; `band.slope` fallback when < 10 valid centres).
-  `|residual| > jump_thresh_px` (default 10) flags the later column of the
+  `|residual| > jump_thresh_px` (default 20) flags the later column of the
   pair. Diffing valid neighbours means a gap cannot hide a jump; detrending
   keeps a tilted fibre from false-flagging across that gap.
 - **large_gap** — longest run of invalid columns inside the band span, as a
@@ -67,7 +67,7 @@ x1, slope, cfg)` runs at the end of `qc.run_qc` and attaches an
   slide along `diameter_smooth` (stride `window/25`); the shift is
   `|median(right) − median(left)| / global median`. The maximum forms a
   plateau around a genuine level shift, so the reported `step_col` is the
-  plateau centre; `> step_frac` (default 0.05) flags. Spans shorter than two
+  plateau centre; `> step_frac` (default 0.25) flags. Spans shorter than two
   windows skip the check (`step_frac = NaN`). A linear taper moves both
   window medians together and stays below threshold.
 - **replicate_outlier** — at aggregation (`run_aggregate.main`) and in the GUI
@@ -89,9 +89,14 @@ selected groups), and it is written even when exclusions leave nothing to
 register — precisely then it is the record of why.
 
 ## Caveats
-- Thresholds were chosen by design reasoning, not calibrated on the full
-  dataset; expect to tune `jump_thresh_px`/`step_frac` once real bad photos
-  are run through them.
+- `jump_thresh_px`/`step_frac` defaults were calibrated on the 141-image
+  MasP2 set (2026-08-04) by visually inspecting profiles/overlays across the
+  evidence range: smooth real along-fibre variation reaches step_frac ≈ 0.20
+  while confirmed anomalies start at ≈ 0.28, and jumps ≥ 20 px were all
+  genuine boundary instability. At these defaults ~46% of MasP2 images carry
+  at least one flag — an honest reflection of that dataset's photo quality
+  (study 01), not over-triggering. A different microscope/sample may need
+  re-tuning via the GUI knobs.
 - `diameter_step` needs a span of at least `2·step_window_px` (200 px default)
   — short fibres skip the check silently (`step_frac` = null in the meta).
 - `replicate_outlier` is silent for groups with fewer than 3 usable medians,
