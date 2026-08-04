@@ -3,7 +3,16 @@ Status: active
 Started: 2026-08-03
 
 ## 2026-08-04
-**What I did** — Reviewed the Task 5 M5 A/B outcome (null result on real
+**What I did** — (later in the day) Merged `main` into the branch
+(`git merge main`, commit `d6addb3`): main had gained the anomaly-flag
+feature line (12 commits, `anomaly.py` + aggregate/GUI wiring). Resolved 5
+conflicts (`compute.py` meta, `gui_app.py` docstring + checkbox branch,
+three READMEs) by keeping both feature lines side by side. Then mined the
+existing A/B outputs (`fibrecv_output/ab_refine_off` vs `ab_refine_on`) with
+a scratchpad script to pick showcase cases for the owner's visual acceptance:
+biggest per-image |Δdiameter|, biggest group-std wins/losses, largest fitted
+σ, lowest refine coverage.
+(Earlier) Reviewed the Task 5 M5 A/B outcome (null result on real
 MasP2 data) and decided `refine_on` should not default to on until a proper
 focus-sweep study validates it. Flipped `CONFIG.refine_on` `True` → `False`
 in `src/fibrecv/config.py` and swept every doc/help-text spot that stated or
@@ -25,7 +34,12 @@ positions along it, not repeat shots of the same spot. Corrected
 `registration_uncertain` interpretation, the §3.4 heterogeneity discussion,
 and the Discussion/Limitations framing) accordingly — no numbers, table
 values, or PASS/FAIL verdicts touched.
-**What I observed** — `uv run pytest -q` → 124 passed (same count as before
+**What I observed** — Post-merge suite: 155 passed (124 ours + 31 from the
+anomaly line). Acceptance-case shortlist from the A/B outputs: biggest movers
+`7_3_3` (−8.0 µm, σ≈10), `10_8_3` (−7.6), `4_6_3` (−7.0); group-std wins
+`4_6` (6.13→2.42 µm), `7_1` (7.53→3.63); regressions `7_4` (4.40→6.96 µm),
+`10_4` (4.36→6.72); heavy-defocus/low-coverage `9_7_*` (σ≈16, coverage
+0.29–0.80). Earlier: `uv run pytest -q` → 124 passed (same count as before
 the change). No test needed a loosened assertion, only an explicit
 `refine_on=True`/`replace(CONFIG(), refine_on=True, ...)` on tests that were
 implicitly relying on the old default. Naming semantics (owner, 2026-08-04,
