@@ -85,6 +85,7 @@ import streamlit as st  # noqa: E402
 import streamlit.components.v1 as components  # noqa: E402
 
 from fibrecv import run_aggregate  # noqa: E402
+from fibrecv.anomaly import detect_replicate_outliers, exclusion_reason  # noqa: E402
 from fibrecv.compute import compute_measurement  # noqa: E402
 from fibrecv.config import CONFIG  # noqa: E402
 from fibrecv.io_utils import (  # noqa: E402
@@ -136,6 +137,34 @@ PARAM_SPECS: list[tuple] = [
      "microscope + camera combination. Default 1.3680 (the original "
      "calibrated setup).",
      0.001, 0.1, 10.0, "%.4f"),
+    ("jump_thresh_px", "Edge jump threshold (px)", "float",
+     "edge_jump anomaly: a detected edge that moves more than this many "
+     "pixels between neighbouring measured columns (tilt-corrected) is "
+     "flagged — usually a boundary latching onto a reflection or shadow. "
+     "Default 10.",
+     1.0, 1.0, 100.0, "%.0f"),
+    ("gap_frac", "Missing-stretch fraction", "float",
+     "large_gap anomaly: flag the image when the longest stretch of "
+     "unmeasurable columns exceeds this fraction of the fibre span — long "
+     "gaps usually mean focus or lighting problems. Default 0.10.",
+     0.01, 0.01, 1.0, "%.2f"),
+    ("step_frac", "Diameter step fraction", "float",
+     "diameter_step anomaly: flag when the diameter level shifts by more "
+     "than this fraction of the image's median diameter between adjacent "
+     "windows — a sudden persistent shift, not gradual taper. Default 0.05.",
+     0.01, 0.01, 1.0, "%.2f"),
+    ("rep_dev_frac", "Replicate deviation fraction", "float",
+     "replicate_outlier: flag a replicate whose median diameter deviates "
+     "from the group median by more than this fraction. Advisory only — it "
+     "never excludes, since diameter genuinely varies along a fibre. "
+     "Default 0.25.",
+     0.05, 0.05, 2.0, "%.2f"),
+    ("anomaly_exclude", "Exclude flagged images from group stats", "bool",
+     "When on, images with edge_jump / large_gap / diameter_step anomalies "
+     "are dropped from registration and the group mean, like band_mismatch. "
+     "Off = anomalies are advisory badges only. replicate_outlier never "
+     "excludes either way.",
+     None, None, None, None),
 ]
 
 # names of int-typed visible fields (so widgets return int, not float)
@@ -315,7 +344,8 @@ def export_group(reps: list[dict], out_root: str | Path, cfg: CONFIG) -> str:
         "--out", str(out_root), "--groups", group,
         "--ppu", str(cfg.ppu), "--max-shift", str(cfg.max_shift),
         "--min-corr", str(cfg.min_corr), "--min-coverage", str(cfg.min_coverage),
-    ])
+        "--rep-dev-frac", str(cfg.rep_dev_frac),
+    ] + (["--anomaly-exclude"] if cfg.anomaly_exclude else []))
     return group
 
 
@@ -343,7 +373,8 @@ def export_all_groups(grouped_reps: dict[str, list[dict]], out_root: str | Path,
             "--out", str(out_root), "--groups", *groups,
             "--ppu", str(cfg.ppu), "--max-shift", str(cfg.max_shift),
             "--min-corr", str(cfg.min_corr), "--min-coverage", str(cfg.min_coverage),
-        ])
+            "--rep-dev-frac", str(cfg.rep_dev_frac),
+        ] + (["--anomaly-exclude"] if cfg.anomaly_exclude else []))
     return groups
 
 
@@ -416,7 +447,8 @@ def run_batch(
         "--out", str(out_root), "--all",
         "--ppu", str(cfg.ppu), "--max-shift", str(cfg.max_shift),
         "--min-corr", str(cfg.min_corr), "--min-coverage", str(cfg.min_coverage),
-    ])
+        "--rep-dev-frac", str(cfg.rep_dev_frac),
+    ] + (["--anomaly-exclude"] if cfg.anomaly_exclude else []))
     master_path = out_root / "summary" / "master_summary.csv"
     master = pd.read_csv(master_path) if master_path.exists() else pd.DataFrame()
     return master, results
@@ -430,7 +462,8 @@ def _group_mean_um(reps: list[dict], cfg: CONFIG) -> float | None:
     for rep in reps:
         mr = rep["mr"]
         res, bnd = mr.res, mr.bnd
-        if res.band_mismatch or res.coverage < cfg.min_coverage:
+        if exclusion_reason(res.band_mismatch, res.coverage,
+                            res.anomaly.flags, cfg) is not None:
             continue
         W = rep["rgb"].shape[1]
         span = slice(bnd.x0, bnd.x1 + 1)
@@ -678,6 +711,8 @@ def _param_form() -> None:
         for (name, label, kind, help_txt, step, lo, hi, fmt) in PARAM_SPECS:
             if name == "ppu":
                 st.markdown("**Calibration**")
+            elif name == "jump_thresh_px":
+                st.markdown("**Anomaly flags**")
             key = f"p_{name}_v{ver}"
             cur = applied[name]
             if kind == "slider":
@@ -688,6 +723,9 @@ def _param_form() -> None:
                 new_vals[name] = int(st.number_input(
                     label, min_value=int(lo), max_value=int(hi),
                     value=int(cur), step=int(step), help=help_txt, key=key))
+            elif kind == "bool":
+                new_vals[name] = bool(st.checkbox(
+                    label, value=bool(cur), help=help_txt, key=key))
             else:  # float
                 kwargs = dict(min_value=float(lo), max_value=float(hi),
                               value=float(cur), step=float(step), help=help_txt, key=key)
@@ -1147,6 +1185,9 @@ def _render_replicate(rep: dict, cfg: CONFIG) -> None:
         flags.append("low_confidence")
     if res.band_mismatch:
         flags.append("band_mismatch")
+    flags.extend(res.anomaly.flags)
+    if rep.get("rep_outlier"):
+        flags.append("replicate_outlier")
     flags_txt = ", ".join(flags) if flags else "none"
     # rep["idx"] (position within the group) disambiguates names that collide
     # after sanitisation, e.g. "masp2 1_1_1.png" and "masp2_1_1_1.png" both
@@ -1338,12 +1379,16 @@ def _render_per_image_stats(reps: list[dict]) -> None:
         mr = rep["mr"]
         d = mr.diameter_um
         ok = bool(np.isfinite(d).any())
+        anomalies = list(mr.res.anomaly.flags)
+        if rep.get("rep_outlier"):
+            anomalies.append("replicate_outlier")
         rows.append({
             "image": mr.name,
             "mean Ø (µm)": float(np.nanmean(d)) if ok else np.nan,
             "std (µm)": float(np.nanstd(d)) if ok else np.nan,
             "median Ø (µm)": float(np.nanmedian(d)) if ok else np.nan,
             "coverage (%)": mr.res.coverage * 100.0,
+            "anomalies": "; ".join(anomalies) if anomalies else "—",
         })
     st.markdown("**Per-image statistics** — each picture's own fibre, before "
                 "registration")
@@ -1374,12 +1419,10 @@ def _render_group(reps: list[dict], cfg: CONFIG,
     for rep in reps:
         mr = rep["mr"]
         res, bnd = mr.res, mr.bnd
-        if res.band_mismatch:
-            dropped.append(f"{mr.name} (band_mismatch)")
-            continue
-        if res.coverage < cfg.min_coverage:
-            dropped.append(f"{mr.name} (coverage {_fmt(res.coverage, 'coverage')} "
-                           f"< {_fmt(cfg.min_coverage, 'coverage')})")
+        reason = exclusion_reason(res.band_mismatch, res.coverage,
+                                  res.anomaly.flags, cfg)
+        if reason is not None:
+            dropped.append(f"{mr.name} ({reason})")
             continue
         W = rep["rgb"].shape[1]
         span = slice(bnd.x0, bnd.x1 + 1)
@@ -1759,6 +1802,15 @@ def main() -> None:
             rep["mr"], rep["edited_top"], rep["edited_bot"] = \
                 apply_manual_edits(rep["mr"], edits, cfg)
 
+    # group-level replicate_outlier check (advisory: badges/table only, never
+    # exclusion) — after manual edits so corrected medians feed the comparison
+    rep_devs, rep_outliers = detect_replicate_outliers(
+        {rep["name"]: rep["mr"].meta.get("median_diameter_um") for rep in reps},
+        cfg)
+    for rep in reps:
+        rep["rep_dev"] = rep_devs.get(rep["name"])
+        rep["rep_outlier"] = rep["name"] in rep_outliers
+
     # main area
     if not reps:
         st.info("Pick a folder + group, or upload images, to begin.")
@@ -1770,8 +1822,13 @@ def main() -> None:
         st.subheader(
             f"01 Replicates — group {group_label}" if group_label
             else "01 Replicates (uploaded)", anchor="replicates")
-        tabs = st.tabs([f"Rep {r['mr'].replicate}" if r["mr"].replicate is not None
-                        else r["name"] for r in reps])
+        def _tab_label(r: dict) -> str:
+            base = (f"Rep {r['mr'].replicate}"
+                    if r["mr"].replicate is not None else r["name"])
+            warn = r["mr"].res.anomaly.flags or r.get("rep_outlier")
+            return f"⚠ {base}" if warn else base
+
+        tabs = st.tabs([_tab_label(r) for r in reps])
         for tab, rep in zip(tabs, reps):
             with tab:
                 _render_replicate(rep, cfg)
