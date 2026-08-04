@@ -93,7 +93,8 @@ register — precisely then it is the record of why.
   MasP2 set (2026-08-04) by visually inspecting profiles/overlays across the
   evidence range: smooth real along-fibre variation reaches step_frac ≈ 0.20
   while confirmed anomalies start at ≈ 0.28, and jumps ≥ 20 px were all
-  genuine boundary instability. At these defaults ~46% of MasP2 images carry
+  genuine boundary instability (the 0.25 default sits between the two with a
+  small safety margin below the confirmed-anomaly floor). At these defaults ~46% of MasP2 images carry
   at least one flag — an honest reflection of that dataset's photo quality
   (study 01), not over-triggering. A different microscope/sample may need
   re-tuning via the GUI knobs.

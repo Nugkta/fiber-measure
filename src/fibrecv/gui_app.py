@@ -789,15 +789,16 @@ def _param_form() -> None:
                 new_vals[name] = float(st.number_input(label, **kwargs))
 
         # anomaly knobs (the tail of PARAM_SPECS) fold into their own expander
-        split = next(i for i, s in enumerate(PARAM_SPECS)
-                     if s[0] == "jump_thresh_px")
+        split = next((i for i, s in enumerate(PARAM_SPECS)
+                      if s[0] == "jump_thresh_px"), len(PARAM_SPECS))
         for spec in PARAM_SPECS[:split]:
             if spec[0] == "ppu":
                 st.markdown("**Calibration**")
             _render_spec(spec)
-        with st.expander("Anomaly flags", expanded=False):
-            for spec in PARAM_SPECS[split:]:
-                _render_spec(spec)
+        if split < len(PARAM_SPECS):
+            with st.expander("Anomaly flags", expanded=False):
+                for spec in PARAM_SPECS[split:]:
+                    _render_spec(spec)
         c1, c2 = st.columns(2)
         apply = c1.form_submit_button("Apply", type="primary", width="stretch")
         reset = c2.form_submit_button("Reset to defaults", width="stretch")

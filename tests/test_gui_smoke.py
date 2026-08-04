@@ -128,11 +128,16 @@ def test_anomaly_flags_surface_in_gui(anomaly_folder: Path):
     captions = " | ".join(str(c.value) for c in at.caption)
     assert "QC-dropped" not in captions
 
-    # flip the exclude switch: rep 2 must now be dropped with an anomaly reason
-    at.session_state["cfg_dict"] = {
-        **at.session_state["cfg_dict"], "anomaly_exclude": True}
+    # flip the exclude switch through the REAL widget path (checkbox inside
+    # the expander inside the form, then Apply): rep 2 must be dropped with
+    # an anomaly reason
+    exclude_cb = next(cb for cb in at.sidebar.checkbox
+                      if cb.key and "anomaly_exclude" in cb.key)
+    exclude_cb.set_value(True)
+    next(b for b in at.sidebar.button if b.label == "Apply").click()
     at.run()
     assert not at.exception
+    assert at.session_state["cfg_dict"]["anomaly_exclude"] is True
     captions = " | ".join(str(c.value) for c in at.caption)
     assert "QC-dropped" in captions
     assert "test 1_1_2" in captions and "anomaly" in captions
