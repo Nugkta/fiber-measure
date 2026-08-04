@@ -242,6 +242,7 @@ def apply_manual_edits(
         "low_confidence": bool(new_res.low_confidence),
         "band_mismatch": bool(new_res.band_mismatch),
         "flag_counts": {str(k): int(v) for k, v in flag_counts.items()},
+        "anomaly": new_res.anomaly.as_dict(),
         "median_diameter_um": (float(np.nanmedian(diameter_um))
                                if new_res.valid.any() else None),
         "manual_edit": {

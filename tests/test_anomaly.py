@@ -213,6 +213,78 @@ def test_replicate_outlier_never_excludes():
     assert exclusion_reason(False, 0.9, ["replicate_outlier"], cfg) is None
 
 
+# --- meta JSON (compute + manual_edit) -------------------------------------
+
+_META_KEYS = {
+    "flags", "jump_cols", "max_jump_px", "n_jumps",
+    "longest_gap_frac", "gap_start_col", "step_frac", "step_col",
+}
+
+
+def test_compute_meta_carries_anomaly_dict():
+    from fibrecv.compute import compute_measurement
+
+    rng = np.random.default_rng(0)
+    rgb = np.empty((300, 800, 3), dtype=np.float32)
+    rgb[:] = (0.95, 0.45, 0.65)          # saturated pink background
+    rgb[130:170] = (0.92, 0.90, 0.91)    # pale desaturated fibre band
+    rgb += rng.normal(0.0, 0.01, rgb.shape).astype(np.float32)
+    rgb = np.clip(rgb, 0.0, 1.0)
+
+    mr = compute_measurement(rgb, CONFIG(), name="test 1_1_1")
+    assert set(mr.meta["anomaly"].keys()) == _META_KEYS
+    json.dumps(mr.meta)  # whole meta must stay JSON-safe
+
+
+def _mr_with_jump(cfg):
+    """MeasureResult whose top edge has a 15-px 20-col dent (edge_jump)."""
+    from fibrecv.band import BandResult
+    from fibrecv.compute import MeasureResult
+    from fibrecv.edges import EdgeResult
+    from fibrecv.qc import run_qc
+
+    W = 300
+    y_top = np.full(W, 100.0)
+    y_bot = np.full(W, 200.0)
+    y_top[140:160] = 85.0  # 15-px jump down at 140 and back up at 160
+    edg = EdgeResult(
+        y_top=y_top, y_bot=y_bot, diameter=y_bot - y_top,
+        amp=np.full(W, 10.0), y_core=np.full(W, 150.0),
+        flags=np.zeros(W, dtype=np.int64), half_window=80,
+    )
+    bnd = BandResult(
+        mask=np.zeros((300, W), dtype=bool), c_fit=np.full(W, 150.0),
+        slope=0.0, intercept=150.0, band_half=50.0, x0=5, x1=294,
+        centroid=np.full(W, 150.0), low_confidence=False, n_components=1,
+    )
+    res = run_qc(edg, bnd, cfg)
+    diameter_um = np.where(res.valid, res.diameter_raw / cfg.ppu, np.nan)
+    meta = {"name": "test 1_1_1", "coverage": res.coverage,
+            "anomaly": res.anomaly.as_dict()}
+    return MeasureResult(
+        rgb=None, D=None, bnd=bnd, edg=edg, res=res, diameter_um=diameter_um,
+        name="test 1_1_1", group="1_1", replicate=1, meta=meta,
+    )
+
+
+def test_manual_edit_clears_anomaly_in_res_and_meta():
+    from fibrecv.manual_edit import apply_manual_edits, empty_edits
+
+    cfg = CONFIG()
+    mr = _mr_with_jump(cfg)
+    assert "edge_jump" in mr.res.anomaly.flags
+    assert "edge_jump" in mr.meta["anomaly"]["flags"]
+
+    edits = empty_edits()
+    # redraw the dented range back to 100; anchors extend past the dent so
+    # the ramp's diluted ends land on already-correct columns
+    edits["top"] = [[(120.0, 100.0), (180.0, 100.0)]]
+    new_mr, _, _ = apply_manual_edits(mr, edits, cfg)
+    assert "edge_jump" not in new_mr.res.anomaly.flags
+    assert "edge_jump" not in new_mr.meta["anomaly"]["flags"]
+    json.dumps(new_mr.meta)
+
+
 # --- as_dict ---------------------------------------------------------------
 
 def test_as_dict_json_safe_and_capped():

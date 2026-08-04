@@ -105,6 +105,7 @@ def compute_measurement(rgb: np.ndarray, cfg: CONFIG, name: str | None = None) -
         "low_confidence": bool(res.low_confidence),
         "band_mismatch": bool(res.band_mismatch),
         "flag_counts": {str(k): int(v) for k, v in flag_counts.items()},
+        "anomaly": res.anomaly.as_dict(),
         "median_diameter_um": float(np.nanmedian(diameter_um)) if res.valid.any() else None,
         "params": cfg.as_dict(),
     }
