@@ -16,16 +16,45 @@ bullet), `docs/superpowers/specs/2026-08-03-esf-edge-refinement-design.md`
 no numbers/verdicts changed). Made 14 tests in `tests/test_refine.py`
 explicit about `refine_on` (they exercised the on-path via the bare `CONFIG()`
 default; now set `refine_on=True` explicitly since it is no longer the
-default) — no assertions weakened. Ran the full suite.
+default) — no assertions weakened. Ran the full suite. Later the same day,
+the project owner clarified the MasP2 image-naming semantics: `X_Y_Z.jpg` is
+condition (`X`) / sample-fibre number (`Y`) / position along that fibre
+(`Z`), so a group `X_Y` is **one fibre** and its 2–3 images are different
+positions along it, not repeat shots of the same spot. Corrected
+`docs/report/01_esf_edge_consistency.md` (the dataset/method section, the
+`registration_uncertain` interpretation, the §3.4 heterogeneity discussion,
+and the Discussion/Limitations framing) accordingly — no numbers, table
+values, or PASS/FAIL verdicts touched.
 **What I observed** — `uv run pytest -q` → 124 passed (same count as before
 the change). No test needed a loosened assertion, only an explicit
 `refine_on=True`/`replace(CONFIG(), refine_on=True, ...)` on tests that were
-implicitly relying on the old default.
+implicitly relying on the old default. Naming semantics (owner, 2026-08-04,
+facts as stated): `X_Y_Z.jpg` → X = experimental condition, Y = sample
+(fibre) number under that condition, Z = position along that fibre. A group
+(`X_Y`) is therefore one fibre imaged at 2–3 different positions, not the
+same spot re-photographed.
 **What I think it means** — Confidence: high. The flip is purely a
 configuration/documentation change — the algorithm itself is untouched and
 still passes every synthetic ground-truth test — so refinement remains fully
 available and correct, just opt-in (`--refine` / GUI checkbox) rather than
-on by default, pending the focus-sweep study recommended in the report.
+on by default, pending the focus-sweep study recommended in the report. The
+naming correction withdraws the report's `registration_uncertain` reading
+(33–36/46 groups) as an acquisition defect — that check assumed a group's
+images share close to the same field of view, which by the true semantics
+they never do, so it was never a meaningful diagnostic here. It does not
+change the study's verdict: within-group spread now mixes real along-fibre
+variation with measurement/acquisition noise, and per the owner's stated
+expectation that along-fibre variation is small ("a bit of difference but not
+much"), the ~23% median spread is still believed to be dominated by noise
+upstream of the edge estimator, not by taper — so the primary metric's noise
+floor still swamps the ~1–3 µm refine effect, and all acceptance verdicts and
+numbers in the report are unchanged. Confidence: medium-high that noise
+dominates over real taper (matches the owner's stated expectation, but
+unquantified without new data); high that the registration-based reading is
+withdrawn (a direct consequence of the corrected semantics). Evidence that
+would change this reading: the focus-sweep / marked-segment validation
+already recommended in the report, which would separate real along-fibre
+variation from measurement noise directly.
 **Next** — Design and run the focus-sweep validation (same marked segment,
 deliberate focus settings) recommended in `docs/report/01_esf_edge_consistency.md`
 §5/§6 before reconsidering the default.

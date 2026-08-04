@@ -11,10 +11,13 @@ study measured by hand — but it does **not** improve replicate-to-replicate
 diameter consistency on MasP2. The between-replicate spread falls in 23 of 46
 groups and rises in the other 23 (sign test p = 1.00). The study's hypothesis
 is **not supported on this dataset**, and the reason is visible in the data:
-the replicates within a group do not show the same fibre thickness to begin
-with (median spread of replicate medians 22.9%), so the metric's noise floor
-(~9–11 µm) is an order of magnitude larger than the edge-placement effect the
-refinement can remove (~1–3 µm).
+the images within a group are different positions along one fibre, not
+repeat shots of one spot (owner clarification, 2026-08-04) — and per-position
+diameters still disagree far more than expected for a healthy fibre (median
+spread of per-position medians 22.9%), so the metric's noise floor (~9–11 µm)
+is an order of magnitude larger than the edge-placement effect the refinement
+can remove (~1–3 µm), pointing to measurement/acquisition noise upstream of
+the edge estimator rather than genuine taper.
 
 ---
 
@@ -49,14 +52,21 @@ This report is the A/B experiment (M5) that answers it.
 
 ### 2.1 Dataset
 
-`/Users/stan/Documents/UOM/spins/Images MasP2` (read-only), 144 JPEGs. 141 of
-them parse into **47 groups × 3 replicates**: `3_1`–`3_5`, `4_2`–`4_8`,
+`/Users/stan/Documents/UOM/spins/Images MasP2` (read-only), 144 JPEGs, named
+`X_Y_Z.jpg` where **X = experimental condition, Y = sample (fibre) number
+under that condition, Z = position along that fibre** (owner clarification,
+2026-08-04). A "group" is one `X_Y` — one fibre — and its 2–3 images are
+different positions along that fibre, **not** repeat shots of the same spot.
+141 of them parse into **47 groups × 3 positions**: `3_1`–`3_5`, `4_2`–`4_8`,
 `7_1`–`7_10`, `8_1`–`8_10`, `9_5`–`9_9`, `10_1`–`10_10`. Three files
-(`teste`, `teste2`, `teste3`) have no group/replicate in their names; they are
+(`teste`, `teste2`, `teste3`) have no group/position in their names; they are
 measured but excluded from all group statistics.
 
-By the project's locked assumption the three replicates of a group are the
-same fibre segment re-photographed, so their diameters should agree.
+The owner's domain expectation is that diameter varies only a little from
+position to position along a healthy fibre ("a bit of difference but not
+much"), so within-group agreement is still a meaningful thing to expect —
+just not for the reason (an identical segment re-photographed) originally
+assumed here; see §3.4 for how this affects the interpretation.
 
 ### 2.2 Runs
 
@@ -83,11 +93,12 @@ over 144 images.
 ### 2.3 Metrics
 
 - **Primary** — within-group between-replicate standard deviation (ddof = 1)
-  of the **per-image mean diameter in µm**, computed per group, off vs on. A
-  replicate enters only if it is usable in **both** arms (no `band_mismatch`,
-  QC coverage ≥ 0.5), so the two arms always compare the same replicate set.
-  46 of 47 groups qualify; group `7_7` is dropped because two of its three
-  replicates are `band_mismatch` in both arms.
+  of the **per-image mean diameter in µm** — i.e. across the positions imaged
+  along one fibre in a group — computed per group, off vs on. An image
+  enters only if it is usable in **both** arms (no `band_mismatch`, QC
+  coverage ≥ 0.5), so the two arms always compare the same image set. 46 of
+  47 groups qualify; group `7_7` is dropped because two of its three images
+  are `band_mismatch` in both arms.
 - **Secondary** — `run_aggregate`'s pooled pointwise between-replicate std
   (registration-aware); detrended along-fibre noise `std(raw − smooth)`;
   refinement coverage (refined columns / anchor columns); fitted σ; QC flag
@@ -252,9 +263,10 @@ Between-replicate std of the per-image mean diameter, 46 groups:
   (mean 2.94 → **3.34** µm — refinement makes the already-consistent groups
   slightly *less* consistent).
 
-Per-group table (µm; `rep_spread` = spread of the three replicate median
-diameters as a fraction of their mean — a measure of how much the replicates
-disagree about the fibre itself):
+Per-group table (µm; `rep_spread` = spread of the three per-position median
+diameters as a fraction of their mean — a measure of how much diameter
+varies across the positions imaged along that fibre, combining real
+along-fibre variation with measurement noise):
 
 | group | n | mean Ø | OFF | ON | Δ | rep_spread |
 |---|---|---|---|---|---|---|
@@ -310,31 +322,44 @@ Refinement does move the numbers — the per-image mean diameter changes by
 +3.85, largest single change 8.04 µm). The changes are simply not *coherent
 within a group*: they are as likely to push two replicates apart as together.
 
-### 3.4 Why: the replicates disagree about the fibre, not about the edge
+### 3.4 Why: within-group spread swamps the refine effect
 
 The metric's floor is set by the dataset, not by the estimator. Across the 46
-groups the median spread of the three replicate median diameters is **22.9%**
-of their mean, and 16 groups exceed 30%. Examples from the off arm:
+groups the median spread of the three per-position median diameters is
+**22.9%** of their mean, and 16 groups exceed 30%. Examples from the off arm:
 
-| group | replicate medians (µm) |
+| group | per-position medians (µm) |
 |---|---|
 | 3_5 | 33.2 / 58.9 / 79.2 |
 | 8_8 | 57.1 / 45.2 / 100.5 |
 | 10_10 | 43.7 / 49.8 / 62.4 |
 
 Differences of 20–55 µm cannot be edge placement: the whole erf correction is
-2.46 px ≈ 1.8 µm per side. Either the replicates are photographs of different
-stretches of a strongly tapered fibre, or of different fibres. `run_aggregate`
-agrees — its cross-correlation registration reports
-`registration_uncertain = True` for 36 of 46 groups.
+2.46 px ≈ 1.8 µm per side. **Correction (owner, 2026-08-04):** a group's
+images are different positions along one fibre, not repeat shots of the same
+spot — so, in principle, these differences could be real along-fibre taper.
+But the owner's domain expectation is that such variation is small ("a bit of
+difference but not much"), and differences of this size (`rep_spread` up to
+81.8% in `8_8`, §3.3 table) are far larger than that, so the dominant contributor
+is most plausibly measurement/acquisition noise upstream of the edge
+estimator, not genuine taper. `run_aggregate`'s `registration_uncertain =
+True` flag (36 of 46 groups) is **not** informative here, and this report's
+earlier reliance on it as an acquisition-defect signal is withdrawn: that
+check assumes a group's images share close to the same field of view, which
+by the true naming semantics they never do (each image is a different
+position) — so it was never measuring an acquisition defect, only the
+(expected) framing difference between positions.
 
-Restricting to the groups where the replicates *do* look like the same fibre
-does not rescue the result:
+Restricting to groups whose per-position medians happen to agree closely, or
+where `run_aggregate`'s registration reported high confidence (which under
+the corrected semantics reflects incidental framing overlap between two
+positions, not "same fibre" — every group is already one fibre), does not
+rescue the result:
 
 | subset | n | OFF mean (µm) | ON mean (µm) | improved |
 |---|---|---|---|---|
-| replicate medians agree within 10% | 10 | 4.291 | 4.864 | 3/10 (p = 0.34) |
-| replicate medians agree within 20% | 20 | 5.559 | 5.631 | 8/20 (p = 0.50) |
+| per-position medians agree within 10% | 10 | 4.291 | 4.864 | 3/10 (p = 0.34) |
+| per-position medians agree within 20% | 20 | 5.559 | 5.631 | 8/20 (p = 0.50) |
 | registration certain in both arms | 10 | 11.494 (pooled pointwise) | 10.710 | 5/10 (p = 1.00) |
 
 **Mechanism check.** Within a group, the measured diameter *does* rise with
@@ -361,7 +386,11 @@ the stage.
 **Registration-aware spread.** `run_aggregate`'s pooled pointwise
 between-replicate std over the overlap: off mean 13.733 µm (median 10.963),
 on mean 13.377 µm (median 11.066); 24/46 groups improve (p = 0.883). Same
-null result as the primary metric.
+null result as the primary metric. (This statistic's "registration" and
+"overlap" framing presumed a group's images shared close to the same field of
+view — under the corrected semantics, §3.4, they do not, so read this as a
+secondary numeric corroboration of the primary result, not as a
+registration-quality diagnostic.)
 
 **QC is unharmed.** Both arms give identical `band_mismatch` (7),
 `low_confidence` (9) and `coverage < 50%` (3) counts. Mean QC coverage rises
@@ -388,9 +417,12 @@ consistency on this dataset.
 **The hypothesis is not supported here, but it is not refuted either.** The
 experiment as designed cannot resolve a 1–3 µm effect inside a 9–11 µm noise
 floor. What the data actually rule out is that focus-dependent edge placement
-is a *dominant* driver of replicate disagreement on MasP2 — it is not; it is
-at most a minor term next to the fact that the three replicates of a group are
-not measuring the same piece of fibre.
+is a *dominant* driver of within-group disagreement on MasP2 — it is not; it
+is at most a minor term next to the within-group spread itself, which mixes
+real along-fibre variation between positions with measurement/acquisition
+noise. Per the owner's domain expectation that along-fibre variation is
+small, the 22.9% median spread points mostly to noise upstream of the edge
+estimator, not to genuine taper (§3.4).
 
 **What the study did establish.**
 
@@ -436,10 +468,13 @@ by default — real-image benefit unproven here, so refinement becomes opt-in
 
 ## 6. Limitations
 
-- **The primary metric is confounded by the sample.** Replicate framing and
-  genuine taper dominate it (median replicate spread 22.9%). Every conclusion
-  about "no improvement" is a statement about effect size relative to that
-  floor, not proof that the erf midpoint is wrong.
+- **The primary metric is confounded by the sample.** Within-group spread
+  mixes real along-fibre variation (between positions on one fibre) with
+  measurement/acquisition noise (median spread 22.9%); per the owner's
+  domain expectation that along-fibre variation is small, the noise term is
+  believed to dominate (§3.4). Every conclusion about "no improvement" is a
+  statement about effect size relative to that floor, not proof that the erf
+  midpoint is wrong.
 - **Partial coverage means a blended estimator.** At 89.6% coverage, ~10% of
   columns in the "on" arm still carry the legacy fixed-threshold edge, and
   low-coverage walls (p10: 59.6% top, 79.8% bottom) are substantially legacy.
