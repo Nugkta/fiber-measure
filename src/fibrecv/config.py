@@ -102,6 +102,24 @@ class CONFIG:
     savgol_window: int = 31    # Savitzky-Golay window (odd)
     savgol_poly: int = 3       # Savitzky-Golay polynomial order
 
+    # --- anomaly flagging (advisory image/group checks; see anomaly.py) ---
+    jump_thresh_px: float = 10.0  # edge_jump: slope-detrended edge displacement
+    #                               between consecutive valid columns above this
+    gap_frac: float = 0.10     # large_gap: longest invalid run > this fraction
+    #                            of the fibre span
+    step_frac: float = 0.05    # diameter_step: adjacent-window median shift
+    #                            > this fraction of the global median diameter
+    step_window_px: int = 100  # window for the diameter_step two-median scan
+    #                            (config-only; span < 2*window skips the check)
+    rep_dev_frac: float = 0.25  # replicate_outlier: |median - group median| /
+    #                             group median above this. Advisory ONLY (never
+    #                             excludes): replicates are different positions
+    #                             on the same sample, and diameter genuinely
+    #                             varies along a fibre
+    anomaly_exclude: bool = False  # True -> image-level anomalies exclude a
+    #                                replicate from registration, like
+    #                                band_mismatch (replicate_outlier never does)
+
     # --- replicate registration ---
     max_shift: int = 400       # bound on cross-correlation lag (px)
     min_corr: float = 0.3      # normalised corr-peak below this -> registration_uncertain
