@@ -18,9 +18,9 @@ The frozen-ish ``CONFIG`` dataclass carrying every tunable parameter, plus the
 
 Pos
 ---
-Bottom of the dependency graph. Imported by features, band, edges, qc, overlay,
-register, measure and both run_* CLIs. Changing a default here changes the whole
-pipeline's behaviour; the load-bearing strictness knob is ``edge_frac``.
+Bottom of the dependency graph. Imported by features, band, edges, qc, anomaly,
+overlay, register, measure and both run_* CLIs. Changing a default here changes
+the whole pipeline's behaviour; the load-bearing strictness knob is ``edge_frac``.
 """
 
 from __future__ import annotations
@@ -142,6 +142,27 @@ class CONFIG:
     median_k: int = 11         # median-filter kernel for the smoothed profile (odd)
     savgol_window: int = 31    # Savitzky-Golay window (odd)
     savgol_poly: int = 3       # Savitzky-Golay polynomial order
+
+    # --- anomaly flagging (advisory image/group checks; see anomaly.py) ---
+    # jump/step thresholds calibrated on the 141-image MasP2 set (2026-08-04):
+    # visual inspection put the real/false boundary at ~20 px jumps and ~0.25
+    # window-median shift (smooth along-fibre variation reaches ~0.20)
+    jump_thresh_px: float = 20.0  # edge_jump: slope-detrended edge displacement
+    #                               between consecutive valid columns above this
+    gap_frac: float = 0.10     # large_gap: longest invalid run > this fraction
+    #                            of the fibre span
+    step_frac: float = 0.25    # diameter_step: adjacent-window median shift
+    #                            > this fraction of the global median diameter
+    step_window_px: int = 100  # window for the diameter_step two-median scan
+    #                            (config-only; span < 2*window skips the check)
+    rep_dev_frac: float = 0.25  # replicate_outlier: |median - group median| /
+    #                             group median above this. Advisory ONLY (never
+    #                             excludes): replicates are different positions
+    #                             on the same sample, and diameter genuinely
+    #                             varies along a fibre
+    anomaly_exclude: bool = False  # True -> image-level anomalies exclude a
+    #                                replicate from registration, like
+    #                                band_mismatch (replicate_outlier never does)
 
     # --- replicate registration ---
     max_shift: int = 400       # bound on cross-correlation lag (px)

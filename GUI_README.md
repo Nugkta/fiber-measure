@@ -88,7 +88,8 @@ each one once data is loaded.
   export needs names ending in numbers to derive a group label.
 
 **Sidebar — Detection** (parameters)
-- Five knobs are exposed; everything else uses the validated defaults (the CLI
+- Five boundary/refinement/calibration knobs plus the anomaly-flag section
+  below are exposed; everything else uses the validated defaults (the CLI
   retains full parameter control):
   - **`edge_z`** (slider) — where on the fibre wall the boundary is drawn:
     higher = higher up the wall = further inside the fibre = thinner reading;
@@ -110,6 +111,13 @@ each one once data is loaded.
   - **`ppu`** (Calibration) — camera pixels per micron; every µm value is
     px / ppu. Change it if your images come from a different
     microscope/magnification.
+- A collapsed **Anomaly flags** expander holds the four advisory-warning thresholds
+  (edge-jump px, missing-stretch fraction, diameter-step fraction, replicate
+  deviation fraction) and the **exclude** checkbox that makes flagged images
+  drop out of the group statistics (off by default — flags are advisory).
+  Flagged replicates get a `⚠` tab prefix, the anomaly names in the flags
+  badge and an `anomalies` column in the per-image stats table; see
+  `docs/features/04_anomaly_flags.md`.
 - Edits are **staged**: change what you want, then click **Apply** to re-render
   (a few seconds for a group). **Reset to defaults** restores the calibrated
   values.

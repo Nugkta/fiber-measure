@@ -19,7 +19,9 @@ Inputs
 Output
 ------
 - ``apply_manual_edits`` -> a NEW ``MeasureResult`` (the input is never mutated,
-  so ``st.cache_data`` entries stay pristine) plus per-column edited masks.
+  so ``st.cache_data`` entries stay pristine) plus per-column edited masks. The
+  QC re-run refreshes the meta's QC fields including the ``"anomaly"``
+  sub-dict, so a corrected boundary clears its anomaly flags.
 - ``corrected_boundary`` / ``display_to_native`` / ``has_edits`` /
   ``empty_edits``: the small pure pieces the GUI composes.
 
@@ -242,6 +244,7 @@ def apply_manual_edits(
         "low_confidence": bool(new_res.low_confidence),
         "band_mismatch": bool(new_res.band_mismatch),
         "flag_counts": {str(k): int(v) for k, v in flag_counts.items()},
+        "anomaly": new_res.anomaly.as_dict(),
         "median_diameter_um": (float(np.nanmedian(diameter_um))
                                if new_res.valid.any() else None),
         "manual_edit": {

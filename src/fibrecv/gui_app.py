@@ -18,7 +18,9 @@ Inputs
   auto-grouped via ``parse_name``'s trailing-numbers rule, with unparseable
   names collected in an "ungrouped" bucket.
 - The three boundary knobs (``edge_z``/``edge_frac``/``wcol``), the
-  ``refine_on`` erf edge-refinement toggle and the ``ppu`` calibration, edited
+  ``refine_on`` erf edge-refinement toggle, the ``ppu`` calibration, and the
+  anomaly-flag thresholds (``jump_thresh_px``/``gap_frac``/``step_frac``/
+  ``rep_dev_frac``) plus the ``anomaly_exclude`` checkbox, edited
   in a sidebar form and applied on demand; all other ``CONFIG`` fields stay at
   the validated defaults.
 - An output-folder path for export/batch.
@@ -28,7 +30,11 @@ Output
 - Live, in-memory preview: full-res boundary overlays, per-replicate diameter
   profiles (with a sigma(x) fit-quality trace overlaid when refinement ran),
   and a registered mean+/-std group curve -- all redrawn when the user
-  changes parameters and clicks Apply (no disk writes for preview).
+  changes parameters and clicks Apply (no disk writes for preview). Anomalous
+  measurements are surfaced as a "⚠" replicate-tab prefix, the anomaly names in
+  the amber flags badge and the per-image stats' ``anomalies`` column; with
+  ``anomaly_exclude`` on they drop the replicate from registration via the same
+  ``anomaly.exclusion_reason`` policy the CLI aggregator uses.
 - Manual boundary correction: per replicate, the user can click anchor points
   on a zoomed strip (or nudge a whole line) to redraw the detected top/bottom
   boundary where detection fails. Points are grouped into independent sets,
@@ -87,6 +93,7 @@ import streamlit as st  # noqa: E402
 import streamlit.components.v1 as components  # noqa: E402
 
 from fibrecv import run_aggregate  # noqa: E402
+from fibrecv.anomaly import detect_replicate_outliers, exclusion_reason  # noqa: E402
 from fibrecv.compute import compute_measurement  # noqa: E402
 from fibrecv.config import CONFIG  # noqa: E402
 from fibrecv.io_utils import (  # noqa: E402
@@ -144,6 +151,35 @@ PARAM_SPECS: list[tuple] = [
      "microscope + camera combination. Default 1.3680 (the original "
      "calibrated setup).",
      0.001, 0.1, 10.0, "%.4f"),
+    ("jump_thresh_px", "Edge jump threshold (px)", "float",
+     "edge_jump anomaly: a detected edge that moves more than this many "
+     "pixels between neighbouring measured columns (tilt-corrected) is "
+     "flagged — usually a boundary latching onto a reflection or shadow. "
+     "Default 20 (calibrated on the MasP2 set).",
+     1.0, 1.0, 100.0, "%.0f"),
+    ("gap_frac", "Missing-stretch fraction", "float",
+     "large_gap anomaly: flag the image when the longest stretch of "
+     "unmeasurable columns exceeds this fraction of the fibre span — long "
+     "gaps usually mean focus or lighting problems. Default 0.10.",
+     0.01, 0.01, 1.0, "%.2f"),
+    ("step_frac", "Diameter step fraction", "float",
+     "diameter_step anomaly: flag when the diameter level shifts by more "
+     "than this fraction of the image's median diameter between adjacent "
+     "windows — a sudden persistent shift, not gradual taper. Default 0.25 "
+     "(calibrated on the MasP2 set; smooth real variation reaches ~0.20).",
+     0.01, 0.01, 1.0, "%.2f"),
+    ("rep_dev_frac", "Replicate deviation fraction", "float",
+     "replicate_outlier: flag a replicate whose median diameter deviates "
+     "from the group median by more than this fraction. Advisory only — it "
+     "never excludes, since diameter genuinely varies along a fibre. "
+     "Default 0.25.",
+     0.05, 0.05, 2.0, "%.2f"),
+    ("anomaly_exclude", "Exclude flagged images from group stats", "bool",
+     "When on, images with edge_jump / large_gap / diameter_step anomalies "
+     "are dropped from registration and the group mean, like band_mismatch. "
+     "Off = anomalies are advisory badges only. replicate_outlier never "
+     "excludes either way.",
+     None, None, None, None),
 ]
 
 # names of int-typed visible fields (so widgets return int, not float)
@@ -165,6 +201,56 @@ def _cfg_from_items(cfg_items: tuple) -> CONFIG:
         if k in d:
             d[k] = int(round(d[k]))
     return replace(CONFIG(), **d)
+
+
+# internal flag name -> human-readable display label. The raw snake_case names
+# stay in the meta JSON / per_image_summary.csv (stable machine schema); every
+# user-facing surface (badge, stats table, dropped caption) shows these labels.
+_FLAG_LABELS: dict[str, str] = {
+    "low_confidence": "low confidence",
+    "band_mismatch": "band mismatch",
+    "edge_jump": "edge jump",
+    "large_gap": "large gap",
+    "diameter_step": "diameter step",
+    "replicate_outlier": "deviant replicate",
+}
+
+# the flags badge's help tooltip: every flag this app can raise, in one place
+_FLAGS_HELP = (
+    "Everything this app can warn about for one image:\n"
+    "- **low confidence** — too few columns could be measured (low coverage) "
+    "or the band detection itself is doubtful; treat this image's numbers "
+    "with care.\n"
+    "- **band mismatch** — the measured diameter disagrees badly with the "
+    "coarse band width, so the detector probably locked onto a reflection or "
+    "shadow instead of the fibre walls. Always excluded from group stats.\n"
+    "- **edge jump** — a boundary line jumps suddenly between neighbouring "
+    "columns, usually because it briefly grabbed a reflection or shadow.\n"
+    "- **large gap** — a long stretch of the fibre could not be measured at "
+    "all (focus or lighting problems).\n"
+    "- **diameter step** — the diameter shifts to a different level "
+    "mid-image instead of varying smoothly; often a focus change or an "
+    "overlapping object.\n"
+    "- **deviant replicate** — this image's median diameter sits far from "
+    "its group's median. Advisory only: diameter genuinely varies along a "
+    "fibre, so this never excludes the image.\n\n"
+    "The last four are advisory photo-quality warnings: consider re-taking "
+    "the photo, or fix the boundary under *Edit boundaries*. They exclude an "
+    "image from the group stats only when *Exclude flagged images* is on "
+    "(deviant replicate never excludes)."
+)
+
+
+def _flag_labels(flags: list[str]) -> list[str]:
+    """Map internal flag names to their display labels (unknown -> as-is)."""
+    return [_FLAG_LABELS.get(f, f) for f in flags]
+
+
+def _friendly_reason(reason: str) -> str:
+    """Rewrite raw flag names inside an exclusion reason for display."""
+    for raw, label in _FLAG_LABELS.items():
+        reason = reason.replace(raw, label)
+    return reason
 
 
 # kind -> (format spec, unit suffix); the single source of display precision
@@ -323,7 +409,8 @@ def export_group(reps: list[dict], out_root: str | Path, cfg: CONFIG) -> str:
         "--out", str(out_root), "--groups", group,
         "--ppu", str(cfg.ppu), "--max-shift", str(cfg.max_shift),
         "--min-corr", str(cfg.min_corr), "--min-coverage", str(cfg.min_coverage),
-    ])
+        "--rep-dev-frac", str(cfg.rep_dev_frac),
+    ] + (["--anomaly-exclude"] if cfg.anomaly_exclude else []))
     return group
 
 
@@ -351,7 +438,8 @@ def export_all_groups(grouped_reps: dict[str, list[dict]], out_root: str | Path,
             "--out", str(out_root), "--groups", *groups,
             "--ppu", str(cfg.ppu), "--max-shift", str(cfg.max_shift),
             "--min-corr", str(cfg.min_corr), "--min-coverage", str(cfg.min_coverage),
-        ])
+            "--rep-dev-frac", str(cfg.rep_dev_frac),
+        ] + (["--anomaly-exclude"] if cfg.anomaly_exclude else []))
     return groups
 
 
@@ -424,7 +512,8 @@ def run_batch(
         "--out", str(out_root), "--all",
         "--ppu", str(cfg.ppu), "--max-shift", str(cfg.max_shift),
         "--min-corr", str(cfg.min_corr), "--min-coverage", str(cfg.min_coverage),
-    ])
+        "--rep-dev-frac", str(cfg.rep_dev_frac),
+    ] + (["--anomaly-exclude"] if cfg.anomaly_exclude else []))
     master_path = out_root / "summary" / "master_summary.csv"
     master = pd.read_csv(master_path) if master_path.exists() else pd.DataFrame()
     return master, results
@@ -438,7 +527,8 @@ def _group_mean_um(reps: list[dict], cfg: CONFIG) -> float | None:
     for rep in reps:
         mr = rep["mr"]
         res, bnd = mr.res, mr.bnd
-        if res.band_mismatch or res.coverage < cfg.min_coverage:
+        if exclusion_reason(res.band_mismatch, res.coverage,
+                            res.anomaly.flags, cfg) is not None:
             continue
         W = rep["rgb"].shape[1]
         span = slice(bnd.x0, bnd.x1 + 1)
@@ -725,9 +815,9 @@ def _param_form() -> None:
     with st.sidebar.form("params", clear_on_submit=False):
         st.markdown("**Parameters** — edit, then click **Apply** to re-render.")
         new_vals: dict = {}
-        for (name, label, kind, help_txt, step, lo, hi, fmt) in PARAM_SPECS:
-            if name == "ppu":
-                st.markdown("**Calibration**")
+
+        def _render_spec(spec: tuple) -> None:
+            name, label, kind, help_txt, step, lo, hi, fmt = spec
             key = f"p_{name}_v{ver}"
             # .get fallback: session state may predate this field (e.g. refine_on
             # added after the session's cfg_dict was created) -- never KeyError.
@@ -741,14 +831,26 @@ def _param_form() -> None:
                     label, min_value=int(lo), max_value=int(hi),
                     value=int(cur), step=int(step), help=help_txt, key=key))
             elif kind == "bool":
-                new_vals[name] = st.checkbox(
-                    label, value=bool(cur), help=help_txt, key=key)
+                new_vals[name] = bool(st.checkbox(
+                    label, value=bool(cur), help=help_txt, key=key))
             else:  # float
                 kwargs = dict(min_value=float(lo), max_value=float(hi),
                               value=float(cur), step=float(step), help=help_txt, key=key)
                 if fmt:
                     kwargs["format"] = fmt
                 new_vals[name] = float(st.number_input(label, **kwargs))
+
+        # anomaly knobs (the tail of PARAM_SPECS) fold into their own expander
+        split = next((i for i, s in enumerate(PARAM_SPECS)
+                      if s[0] == "jump_thresh_px"), len(PARAM_SPECS))
+        for spec in PARAM_SPECS[:split]:
+            if spec[0] == "ppu":
+                st.markdown("**Calibration**")
+            _render_spec(spec)
+        if split < len(PARAM_SPECS):
+            with st.expander("Anomaly flags", expanded=False):
+                for spec in PARAM_SPECS[split:]:
+                    _render_spec(spec)
         c1, c2 = st.columns(2)
         apply = c1.form_submit_button("Apply", type="primary", width="stretch")
         reset = c2.form_submit_button("Reset to defaults", width="stretch")
@@ -1202,7 +1304,10 @@ def _render_replicate(rep: dict, cfg: CONFIG) -> None:
         flags.append("low_confidence")
     if res.band_mismatch:
         flags.append("band_mismatch")
-    flags_txt = ", ".join(flags) if flags else "none"
+    flags.extend(res.anomaly.flags)
+    if rep.get("rep_outlier"):
+        flags.append("replicate_outlier")
+    flags_txt = ", ".join(_flag_labels(flags)) if flags else "none"
     # rep["idx"] (position within the group) disambiguates names that collide
     # after sanitisation, e.g. "masp2 1_1_1.png" and "masp2_1_1_1.png" both
     # reduce to "masp2_1_1_1_png" via _safe_key alone -> StreamlitDuplicateElementKey.
@@ -1223,7 +1328,7 @@ def _render_replicate(rep: dict, cfg: CONFIG) -> None:
                       else f"status_warn_flags_{safe_name}")
         with c[5]:
             with st.container(key=status_key):
-                st.metric("flags", flags_txt, help=f"Full flags: {flags_txt}")
+                st.metric("flags", flags_txt, help=_FLAGS_HELP)
 
     _render_edit_expander(rep)
 
@@ -1393,12 +1498,16 @@ def _render_per_image_stats(reps: list[dict]) -> None:
         mr = rep["mr"]
         d = mr.diameter_um
         ok = bool(np.isfinite(d).any())
+        anomalies = _flag_labels(mr.res.anomaly.flags)
+        if rep.get("rep_outlier"):
+            anomalies.append(_FLAG_LABELS["replicate_outlier"])
         rows.append({
             "image": mr.name,
             "mean Ø (µm)": float(np.nanmean(d)) if ok else np.nan,
             "std (µm)": float(np.nanstd(d)) if ok else np.nan,
             "median Ø (µm)": float(np.nanmedian(d)) if ok else np.nan,
             "coverage (%)": mr.res.coverage * 100.0,
+            "anomalies": "; ".join(anomalies) if anomalies else "—",
         })
     st.markdown("**Per-image statistics** — each picture's own fibre, before "
                 "registration")
@@ -1429,12 +1538,10 @@ def _render_group(reps: list[dict], cfg: CONFIG,
     for rep in reps:
         mr = rep["mr"]
         res, bnd = mr.res, mr.bnd
-        if res.band_mismatch:
-            dropped.append(f"{mr.name} (band_mismatch)")
-            continue
-        if res.coverage < cfg.min_coverage:
-            dropped.append(f"{mr.name} (coverage {_fmt(res.coverage, 'coverage')} "
-                           f"< {_fmt(cfg.min_coverage, 'coverage')})")
+        reason = exclusion_reason(res.band_mismatch, res.coverage,
+                                  res.anomaly.flags, cfg)
+        if reason is not None:
+            dropped.append(f"{mr.name} ({_friendly_reason(reason)})")
             continue
         W = rep["rgb"].shape[1]
         span = slice(bnd.x0, bnd.x1 + 1)
@@ -1814,6 +1921,16 @@ def main() -> None:
             rep["mr"], rep["edited_top"], rep["edited_bot"] = \
                 apply_manual_edits(rep["mr"], edits, cfg)
 
+    # group-level replicate_outlier check (advisory: badges/table only, never
+    # exclusion) — after manual edits so corrected medians feed the comparison;
+    # keyed by idx, not name: uploaded files can share a stem
+    rep_devs, rep_outliers = detect_replicate_outliers(
+        {rep["idx"]: rep["mr"].meta.get("median_diameter_um") for rep in reps},
+        cfg)
+    for rep in reps:
+        rep["rep_dev"] = rep_devs.get(rep["idx"])
+        rep["rep_outlier"] = rep["idx"] in rep_outliers
+
     # main area
     if not reps:
         st.info("Pick a folder + group, or upload images, to begin.")
@@ -1825,8 +1942,13 @@ def main() -> None:
         st.subheader(
             f"01 Replicates — group {group_label}" if group_label
             else "01 Replicates (uploaded)", anchor="replicates")
-        tabs = st.tabs([f"Rep {r['mr'].replicate}" if r["mr"].replicate is not None
-                        else r["name"] for r in reps])
+        def _tab_label(r: dict) -> str:
+            base = (f"Rep {r['mr'].replicate}"
+                    if r["mr"].replicate is not None else r["name"])
+            warn = r["mr"].res.anomaly.flags or r.get("rep_outlier")
+            return f"⚠ {base}" if warn else base
+
+        tabs = st.tabs([_tab_label(r) for r in reps])
         for tab, rep in zip(tabs, reps):
             with tab:
                 _render_replicate(rep, cfg)

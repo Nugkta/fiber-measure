@@ -26,6 +26,10 @@ neighbourhood average follows the fitted centerline and the vertical chord is
 rescaled by cos(tilt), so inclined fibres (validated to ~45°) are not
 overestimated — see
 [docs/features/01_tilt_corrected_diameter.md](docs/features/01_tilt_corrected_diameter.md).
+Suspicious measurements (edge jumps, long unmeasurable gaps, mid-image
+diameter steps, deviant replicates) are flagged — advisorily by default — in
+the GUI, the meta JSONs and `summary/per_image_summary.csv`; see
+[docs/features/04_anomaly_flags.md](docs/features/04_anomaly_flags.md).
 
 ## Install
 
