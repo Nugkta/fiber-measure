@@ -95,8 +95,15 @@ class CONFIG:
     window_pad: int = 10
 
     # --- erf edge refinement ---
-    refine_on: bool = True        # refit each wall as a blurred step and shift to its
-    #                                midpoint (spec default; --no-refine is the A/B control)
+    refine_on: bool = False       # refit each wall as a blurred step and shift to its
+    #                                midpoint (spec default was on; --refine/--no-refine
+    #                                is the A/B control either way)
+    #                                Owner decision 2026-08-04: study 01's full-set A/B
+    #                                found the real-image benefit unproven (23/46 groups
+    #                                improved, sign p=1.00; ~11% of the focus bias
+    #                                removed; along-fibre noise +24%) -- opt-in via
+    #                                --refine / the GUI checkbox until a focus-sweep
+    #                                study validates it. See docs/report/01_esf_edge_consistency.md.
     refine_block: int = 16        # column block width for the batched profile fit (px)
     refine_out: float = 35.0      # outward profile half-window, perpendicular px
     refine_in_frac: float = 0.8   # inward half-window as a fraction of band_half*cth

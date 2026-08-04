@@ -147,6 +147,16 @@ offsets ≤ ~6 px/side, residuals 3–7%).
 > `docs/report/01_esf_edge_consistency.md` §3.1. The other nine defaults are
 > unchanged.
 
+> **Revised after Task 5 / owner decision (2026-08-04):** `refine_on` was
+> flipped **`True` → `False`**. The full-set A/B (same report, §5) returned a
+> null result on real MasP2 data — 23/46 replicate groups improved (sign
+> p = 1.00), only ~11% of the focus-dependent bias removed, along-fibre noise
+> +24% — while every synthetic ground-truth test still passes. The stage is
+> now opt-in (`--refine` / GUI checkbox) pending a controlled focus-sweep
+> validation; `--no-refine` remains bit-identical to the pre-refinement
+> pipeline. The other nine defaults, and `refine_relmax=0.15` above, are
+> unchanged.
+
 ## Diagnostics
 
 - meta JSON gains a `refine` sub-dict: enabled flag, per-side block pass

@@ -102,8 +102,11 @@ each one once data is loaded.
     Default 41.
   - **`refine_on`** (checkbox) — erf edge-refinement: refits each detected
     wall as a Gaussian-blurred step and shifts the boundary to the fitted
-    midpoint (sub-pixel, blur-invariant); on by default. Turn it off to
-    reproduce the legacy (pre-refinement) boundary exactly — the A/B control.
+    midpoint (sub-pixel, blur-invariant); **off by default** — study 01's
+    full-set A/B found the real-image benefit unproven, so this is opt-in
+    until a focus-sweep study validates it (see
+    `docs/report/01_esf_edge_consistency.md`). Check it to turn refinement
+    on; leave it unchecked to keep the legacy boundary — the A/B control.
   - **`ppu`** (Calibration) — camera pixels per micron; every µm value is
     px / ppu. Change it if your images come from a different
     microscope/magnification.

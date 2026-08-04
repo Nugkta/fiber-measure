@@ -173,7 +173,7 @@ def test_measure_result_constructs_without_ref():
 # meta "refine" sub-dict                                                      #
 # --------------------------------------------------------------------------- #
 def test_meta_refine_subdict_placement_and_json_safety():
-    cfg = CONFIG()
+    cfg = replace(CONFIG(), refine_on=True)  # exercises the on-path meta shape
     rgb = _blurred_fibre(sigma_px=2.0)
     mr = compute_measurement(rgb, cfg, name="synthetic")
 
@@ -209,7 +209,7 @@ def test_meta_refine_subdict_placement_and_json_safety():
 
 def test_meta_refine_stats_are_none_safe_when_nothing_is_refined():
     """Coverage must be 0.0 (never NaN) and the medians None when no fit passes."""
-    cfg = replace(CONFIG(), refine_sigma_min=100.0)  # no fit can ever pass
+    cfg = replace(CONFIG(), refine_on=True, refine_sigma_min=100.0)  # no fit can ever pass
     rgb = _blurred_fibre(sigma_px=2.0)
     mr = compute_measurement(rgb, cfg, name="synthetic")
 
@@ -479,7 +479,7 @@ def test_refine_recovers_a_known_offset_and_recomputes_the_diameter():
     consumes that array directly -- a refinement that moves y_top/y_bot but
     leaves the stale diameter behind would change nothing downstream.
     """
-    cfg = CONFIG()
+    cfg = replace(CONFIG(), refine_on=True)
     D, bnd, edg = _slab_case(shift=3.0, sigma=3.0)
     edg2, ref = refine_edges(D, edg, bnd, cfg)
 
@@ -510,7 +510,7 @@ def test_perpendicular_offsets_are_converted_to_vertical_shifts_exactly_once():
     by 0.83 px -- far outside the fit's ~0.05 px noise -- so an offset applied
     unconverted, or converted twice, moves the wall off its true row.
     """
-    cfg = CONFIG()
+    cfg = replace(CONFIG(), refine_on=True)
     slope, shift = 0.6, 5.0
     D, bnd, edg = _slab_case(H=320, top=120.0, bot=200.0, slope=slope, shift=shift)
     _m, cth = tilt_geometry(bnd.slope)
@@ -551,7 +551,7 @@ def test_perpendicular_offsets_are_converted_to_vertical_shifts_exactly_once():
 
 
 def test_a_two_block_hole_is_bridged_and_a_three_block_hole_is_not():
-    cfg = CONFIG()
+    cfg = replace(CONFIG(), refine_on=True)
     for n_bad, bridged in ((2, True), (3, False)):
         D, bnd, edg = _slab_case()
         bad = slice(4 * 16, (4 + n_bad) * 16)
@@ -571,7 +571,7 @@ def test_a_two_block_hole_is_bridged_and_a_three_block_hole_is_not():
 @pytest.mark.parametrize("n_flagged, attempted", [(4, 10), (5, 9)])
 def test_a_block_below_the_column_quorum_is_skipped(n_flagged, attempted):
     """>= 70% of a block's 16 columns must be anchors (11 is not enough, 12 is)."""
-    cfg = CONFIG()
+    cfg = replace(CONFIG(), refine_on=True)
     D, bnd, edg = _slab_case()
     edg.flags[32:32 + n_flagged] = 4  # block 2 loses n_flagged anchor columns
     edg2, ref = refine_edges(D, edg, bnd, cfg)
@@ -580,7 +580,7 @@ def test_a_block_below_the_column_quorum_is_skipped(n_flagged, attempted):
 
 
 def test_flagged_columns_never_move_even_inside_a_refined_chain():
-    cfg = CONFIG()
+    cfg = replace(CONFIG(), refine_on=True)
     D, bnd, edg = _slab_case()
     flagged = np.zeros(edg.flags.size, dtype=bool)
     flagged[[70, 71]] = True          # mid-chain, so interpolation covers them
@@ -599,7 +599,7 @@ def test_flagged_columns_never_move_even_inside_a_refined_chain():
 
 
 def test_no_extrapolation_beyond_the_outermost_passing_centres():
-    cfg = CONFIG()
+    cfg = replace(CONFIG(), refine_on=True)
     D, bnd, edg = _slab_case()
     edg2, ref = refine_edges(D, edg, bnd, cfg)
     # block centres are 8 .. 152; nothing outside that span may move
@@ -610,7 +610,7 @@ def test_no_extrapolation_beyond_the_outermost_passing_centres():
 
 
 def test_all_fits_failing_leaves_the_edges_untouched():
-    cfg = replace(CONFIG(), refine_sigma_min=100.0)  # no fit can clear the gate
+    cfg = replace(CONFIG(), refine_on=True, refine_sigma_min=100.0)  # no fit can clear the gate
     D, bnd, edg = _slab_case()
     edg2, ref = refine_edges(D, edg, bnd, cfg)
 
@@ -628,7 +628,7 @@ def test_border_clipped_columns_are_dropped_before_the_quorum():
     Clipping the sample rows instead would silently fit replicated border rows.
     The other wall, whose window is entirely inside, must still be refined.
     """
-    cfg = CONFIG()
+    cfg = replace(CONFIG(), refine_on=True)
     D, bnd, edg = _slab_case(top=20.0, bot=100.0)  # top anchor at row 17, out = 35
     assert 17.0 - cfg.refine_out < 0.0
     edg2, ref = refine_edges(D, edg, bnd, cfg)
@@ -674,7 +674,7 @@ def test_refined_diameter_is_independent_of_the_rendered_blur():
     The legacy fixed level walks down the wall as the blur grows, so its
     measured width grows with sigma; the erf midpoint does not.
     """
-    on, off = CONFIG(), replace(CONFIG(), refine_on=False)
+    on, off = replace(CONFIG(), refine_on=True), replace(CONFIG(), refine_on=False)
     sigmas = (2.0, 6.0, 12.0)
     imgs = {s: _blurred_fibre(sigma_px=s, noise=D_NOISE) for s in sigmas}
 
@@ -694,7 +694,7 @@ def test_refined_diameter_is_independent_of_the_rendered_blur():
 def test_refined_diameter_is_tilt_invariant(angle):
     """Mirrors test_edges_tilt.py:96-112 with refinement on: the perpendicular
     frame must survive the extra stage (2% pairwise tolerance)."""
-    cfg = CONFIG()
+    cfg = replace(CONFIG(), refine_on=True)
     ref = _median_diameter_px(_blurred_fibre(sigma_px=4.0, noise=D_NOISE), cfg)
     got = _median_diameter_px(
         _blurred_fibre(sigma_px=4.0, angle_deg=angle, noise=D_NOISE), cfg
@@ -705,7 +705,8 @@ def test_refined_diameter_is_tilt_invariant(angle):
 @pytest.mark.parametrize("sigma", [2.0, 6.0, 12.0])
 def test_sigma_map_recovers_the_rendered_blur(sigma):
     """sigma(x) is the focus map the GUI plots -- it must mean what it says."""
-    mr = compute_measurement(_blurred_fibre(sigma_px=sigma, noise=D_NOISE), CONFIG(), "syn")
+    cfg = replace(CONFIG(), refine_on=True)
+    mr = compute_measurement(_blurred_fibre(sigma_px=sigma, noise=D_NOISE), cfg, "syn")
     refine_meta = mr.meta["refine"]
     for key in ("median_sigma_top", "median_sigma_bot"):
         assert refine_meta[key] == pytest.approx(sigma, rel=0.2), (
@@ -724,7 +725,7 @@ def test_unrefined_columns_keep_their_legacy_edges_and_flags():
     actually makes: edges and flags of unrefined columns are untouched.)
     """
     rgb = _blurred_fibre(sigma_px=4.0, noise=D_NOISE)
-    mr_on = compute_measurement(rgb, CONFIG(), "syn")
+    mr_on = compute_measurement(rgb, replace(CONFIG(), refine_on=True), "syn")
     mr_off = compute_measurement(rgb, replace(CONFIG(), refine_on=False), "syn")
 
     unrefined = ~(mr_on.ref.refined_top | mr_on.ref.refined_bot)

@@ -430,6 +430,10 @@ and adds ~0.15 s/image. That call is left to the project owner; nothing in
 this report requires flipping the default, and `--no-refine` reproduces the
 old numbers bit-identically.
 
+**Decision (2026-08-04):** the project owner flipped `refine_on` to `False`
+by default — real-image benefit unproven here, so refinement becomes opt-in
+(`--refine` / GUI checkbox) until a focus-sweep study validates it.
+
 ## 6. Limitations
 
 - **The primary metric is confounded by the sample.** Replicate framing and

@@ -14,7 +14,8 @@ background colour, so thresholds are self-normalising per image and robust to
 illumination changes. Boundaries are placed by per-column edge detection with
 wall/shadow discrimination, then optionally refined sub-pixel by refitting
 each wall as a Gaussian-blurred step (erf) and shifting to its fitted
-midpoint — see
+midpoint — opt-in (`--refine` / GUI checkbox), off by default pending a
+focus-sweep validation — see
 [docs/features/03_esf_edge_refinement.md](docs/features/03_esf_edge_refinement.md)
 (the full-set A/B validation of that stage, including what it does and does
 not fix, is

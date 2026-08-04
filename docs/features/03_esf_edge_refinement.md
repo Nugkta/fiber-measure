@@ -19,9 +19,12 @@ detected wall, in blocks of columns, as a Gaussian-blurred step and moves
 the boundary to the fitted 50% midpoint, which by the knife-edge principle
 is invariant to the blur width. Where a block's fit doesn't pass its
 quality gates, the column keeps its original (legacy) edge unchanged. The
-stage is on by default (`refine_on=True`) and is bit-identical to the old
-pipeline when turned off, so it is both the shipped behaviour and its own
-A/B control.
+stage is **off by default** (`refine_on=False`) — the full-set A/B in
+`docs/report/01_esf_edge_consistency.md` found the real-image benefit
+unproven, so as of the owner decision on 2026-08-04 it is opt-in via
+`--refine` / the GUI checkbox pending a focus-sweep study. It is
+bit-identical to the old pipeline when off, so it is both the current
+shipped default and its own A/B control.
 
 ## Design choices
 
@@ -67,8 +70,10 @@ A/B control.
   contributes a replicated-border sample to a block's mean profile, and
   never counts toward the quorum either.
 - **`refine_on=True` at landing** (the design spec's default); `--no-refine`
-  / `refine_on=False` is the deliberate A/B control for the Task 5
-  validation, not a fallback for uncertainty.
+  / `refine_on=False` was the deliberate A/B control for the Task 5
+  validation, not a fallback for uncertainty. **Flipped to `refine_on=False`
+  on 2026-08-04** (owner decision, after Task 5 returned a null result on
+  real data) — `--refine` / `refine_on=True` is now the opt-in arm instead.
 - **float32 throughout** (NEP-50 promotion rules), so the refined
   `diameter` matches the dtype/rounding semantics of `edges.py`'s own
   diameter computation (`edges.py:359`) — no numeric drift from a dtype

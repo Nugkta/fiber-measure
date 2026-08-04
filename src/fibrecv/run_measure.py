@@ -149,8 +149,9 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--rise-min", dest="rise_min", type=float, default=None,
                     help="minimum z-rise of a wall run")
     ap.add_argument("--refine", action=argparse.BooleanOptionalAction, default=None,
-                    help="erf edge-refinement stage (default: on, per CONFIG.refine_on); "
-                         "--no-refine reproduces the pre-refinement edges bit-identically")
+                    help="erf edge-refinement stage (default: off, per CONFIG.refine_on -- "
+                         "opt-in pending focus-sweep validation, study 01); --refine turns it "
+                         "on, --no-refine reproduces the legacy edges bit-identically")
     args = ap.parse_args(argv)
 
     cfg = build_config(args)

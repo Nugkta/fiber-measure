@@ -2,6 +2,34 @@ Hypothesis: Refitting each detected wall as a Gaussian-blurred step (erf) and mo
 Status: active
 Started: 2026-08-03
 
+## 2026-08-04
+**What I did** — Reviewed the Task 5 M5 A/B outcome (null result on real
+MasP2 data) and decided `refine_on` should not default to on until a proper
+focus-sweep study validates it. Flipped `CONFIG.refine_on` `True` → `False`
+in `src/fibrecv/config.py` and swept every doc/help-text spot that stated or
+implied the default was on: `run_measure.py` `--refine` help text,
+`GUI_README.md` checkbox description, `README.md` one-liner,
+`docs/features/03_esf_edge_refinement.md` (behaviour paragraph + design-choice
+bullet), `docs/superpowers/specs/2026-08-03-esf-edge-refinement-design.md`
+(new revision footnote, historical body left untouched), and
+`docs/report/01_esf_edge_consistency.md` §5 (appended the decision sentence,
+no numbers/verdicts changed). Made 14 tests in `tests/test_refine.py`
+explicit about `refine_on` (they exercised the on-path via the bare `CONFIG()`
+default; now set `refine_on=True` explicitly since it is no longer the
+default) — no assertions weakened. Ran the full suite.
+**What I observed** — `uv run pytest -q` → 124 passed (same count as before
+the change). No test needed a loosened assertion, only an explicit
+`refine_on=True`/`replace(CONFIG(), refine_on=True, ...)` on tests that were
+implicitly relying on the old default.
+**What I think it means** — Confidence: high. The flip is purely a
+configuration/documentation change — the algorithm itself is untouched and
+still passes every synthetic ground-truth test — so refinement remains fully
+available and correct, just opt-in (`--refine` / GUI checkbox) rather than
+on by default, pending the focus-sweep study recommended in the report.
+**Next** — Design and run the focus-sweep validation (same marked segment,
+deliberate focus settings) recommended in `docs/report/01_esf_edge_consistency.md`
+§5/§6 before reconsidering the default.
+
 ## 2026-08-03
 **What I did** — Assessed the "sharp air/silk step blurred by the optical PSF" idea on real data before any implementation. Wrote two throwaway analysis scripts (session scratchpad, since removed per repo policy): (1) ran the existing pipeline (`fibrecv.compute.compute_measurement`, default `CONFIG`) on `masp2 10_1_1.jpg`, `10_5_1.jpg`, `10_10_1.jpg` from `/Users/stan/Documents/UOM/spins/Images MasP2`, built edge-aligned 64-column mean profiles around each detected wall (aligned per column on the detected edge to avoid tilt smear; window −35 px outside → min(0.8·band_half, 28) px inside), and fitted the 4-parameter erf model `I(y) = a + (b−a)·½[1+erf((y−y0)/(√2σ))]`; (2) repeated the fits on three channels — saturation S, linearised R−G, linearised G — and compared fitted midpoints y0 pairwise on blocks where both fits had relative residual < 8%.
 
