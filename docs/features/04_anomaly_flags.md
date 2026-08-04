@@ -15,6 +15,10 @@ everywhere a user looks: a `⚠` prefix on the replicate's GUI tab, the anomaly
 names in the amber flags badge and in a new `anomalies` column of the per-image
 stats table, an `"anomaly"` sub-dict in every per-image meta JSON, and a new
 `summary/per_image_summary.csv` with one row per image (excluded ones included).
+GUI surfaces show human-readable labels ("diameter step", "deviant replicate",
+mapped via `gui_app._FLAG_LABELS`, with every possible flag explained in the
+badge's help tooltip); the raw snake_case names remain the stable machine
+schema in the meta JSON and CSV outputs.
 Flags are advisory by default; an `anomaly_exclude` switch (GUI checkbox /
 `--anomaly-exclude` CLI flag) makes image-level anomalies drop the replicate
 from registration, exactly like `band_mismatch` does.

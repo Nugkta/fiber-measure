@@ -194,6 +194,56 @@ def _cfg_from_items(cfg_items: tuple) -> CONFIG:
     return replace(CONFIG(), **d)
 
 
+# internal flag name -> human-readable display label. The raw snake_case names
+# stay in the meta JSON / per_image_summary.csv (stable machine schema); every
+# user-facing surface (badge, stats table, dropped caption) shows these labels.
+_FLAG_LABELS: dict[str, str] = {
+    "low_confidence": "low confidence",
+    "band_mismatch": "band mismatch",
+    "edge_jump": "edge jump",
+    "large_gap": "large gap",
+    "diameter_step": "diameter step",
+    "replicate_outlier": "deviant replicate",
+}
+
+# the flags badge's help tooltip: every flag this app can raise, in one place
+_FLAGS_HELP = (
+    "Everything this app can warn about for one image:\n"
+    "- **low confidence** — too few columns could be measured (low coverage) "
+    "or the band detection itself is doubtful; treat this image's numbers "
+    "with care.\n"
+    "- **band mismatch** — the measured diameter disagrees badly with the "
+    "coarse band width, so the detector probably locked onto a reflection or "
+    "shadow instead of the fibre walls. Always excluded from group stats.\n"
+    "- **edge jump** — a boundary line jumps suddenly between neighbouring "
+    "columns, usually because it briefly grabbed a reflection or shadow.\n"
+    "- **large gap** — a long stretch of the fibre could not be measured at "
+    "all (focus or lighting problems).\n"
+    "- **diameter step** — the diameter shifts to a different level "
+    "mid-image instead of varying smoothly; often a focus change or an "
+    "overlapping object.\n"
+    "- **deviant replicate** — this image's median diameter sits far from "
+    "its group's median. Advisory only: diameter genuinely varies along a "
+    "fibre, so this never excludes the image.\n\n"
+    "The last four are advisory photo-quality warnings: consider re-taking "
+    "the photo, or fix the boundary under *Edit boundaries*. They exclude an "
+    "image from the group stats only when *Exclude flagged images* is on "
+    "(deviant replicate never excludes)."
+)
+
+
+def _flag_labels(flags: list[str]) -> list[str]:
+    """Map internal flag names to their display labels (unknown -> as-is)."""
+    return [_FLAG_LABELS.get(f, f) for f in flags]
+
+
+def _friendly_reason(reason: str) -> str:
+    """Rewrite raw flag names inside an exclusion reason for display."""
+    for raw, label in _FLAG_LABELS.items():
+        reason = reason.replace(raw, label)
+    return reason
+
+
 # kind -> (format spec, unit suffix); the single source of display precision
 # for every metric/caption number in the app, so the same quantity is never
 # shown at two different precisions.
@@ -1194,7 +1244,7 @@ def _render_replicate(rep: dict, cfg: CONFIG) -> None:
     flags.extend(res.anomaly.flags)
     if rep.get("rep_outlier"):
         flags.append("replicate_outlier")
-    flags_txt = ", ".join(flags) if flags else "none"
+    flags_txt = ", ".join(_flag_labels(flags)) if flags else "none"
     # rep["idx"] (position within the group) disambiguates names that collide
     # after sanitisation, e.g. "masp2 1_1_1.png" and "masp2_1_1_1.png" both
     # reduce to "masp2_1_1_1_png" via _safe_key alone -> StreamlitDuplicateElementKey.
@@ -1215,7 +1265,7 @@ def _render_replicate(rep: dict, cfg: CONFIG) -> None:
                       else f"status_warn_flags_{safe_name}")
         with c[5]:
             with st.container(key=status_key):
-                st.metric("flags", flags_txt, help=f"Full flags: {flags_txt}")
+                st.metric("flags", flags_txt, help=_FLAGS_HELP)
 
     _render_edit_expander(rep)
 
@@ -1385,9 +1435,9 @@ def _render_per_image_stats(reps: list[dict]) -> None:
         mr = rep["mr"]
         d = mr.diameter_um
         ok = bool(np.isfinite(d).any())
-        anomalies = list(mr.res.anomaly.flags)
+        anomalies = _flag_labels(mr.res.anomaly.flags)
         if rep.get("rep_outlier"):
-            anomalies.append("replicate_outlier")
+            anomalies.append(_FLAG_LABELS["replicate_outlier"])
         rows.append({
             "image": mr.name,
             "mean Ø (µm)": float(np.nanmean(d)) if ok else np.nan,
@@ -1428,7 +1478,7 @@ def _render_group(reps: list[dict], cfg: CONFIG,
         reason = exclusion_reason(res.band_mismatch, res.coverage,
                                   res.anomaly.flags, cfg)
         if reason is not None:
-            dropped.append(f"{mr.name} ({reason})")
+            dropped.append(f"{mr.name} ({_friendly_reason(reason)})")
             continue
         W = rep["rgb"].shape[1]
         span = slice(bnd.x0, bnd.x1 + 1)

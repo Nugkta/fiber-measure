@@ -108,14 +108,16 @@ def test_anomaly_flags_surface_in_gui(anomaly_folder: Path):
     assert any(not lbl.startswith("⚠") for lbl in tab_labels), tab_labels
 
     # flags badge on rep 2 names the anomaly
+    # human-readable label in the badge, never the raw snake_case flag name
     flags_vals = [m.value for m in at.metric if m.label == "flags"]
-    assert any("diameter_step" in v for v in flags_vals), flags_vals
+    assert any("diameter step" in v for v in flags_vals), flags_vals
+    assert not any("diameter_step" in v for v in flags_vals), flags_vals
 
-    # per-image stats table gained the anomalies column
+    # per-image stats table gained the anomalies column (readable labels too)
     tables = [df.value for df in at.dataframe]
     stats = [t for t in tables if "anomalies" in t.columns]
     assert stats, "anomalies column missing from per-image stats"
-    assert stats[0]["anomalies"].str.contains("diameter_step").any()
+    assert stats[0]["anomalies"].str.contains("diameter step").any()
 
     # advisory by default: nothing dropped from registration
     captions = " | ".join(str(c.value) for c in at.caption)
