@@ -1,9 +1,16 @@
 Hypothesis: Refitting each detected wall as a Gaussian-blurred step (erf) and moving the boundary to the fitted 50% midpoint removes the focus-dependent edge-placement bias, measurably reducing replicate-to-replicate diameter spread on MasP2 versus the current fixed-threshold edge.
-Status: active
+Status: done
 Started: 2026-08-03
 
 ## 2026-08-04
-**What I did** — (later in the day) Merged `main` into the branch
+**What I did** — (closure) After the visual acceptance below, the owner
+rejected the method outright ("这个做法就拉了") and directed: push the
+branch, keep it unmerged as the failed-attempt record, return to `main`.
+Set this study's Status to done (here + metalabbook row re-worded), added
+report §7 "Final verdict — owner visual acceptance" to
+`docs/report/01_esf_edge_consistency.md`, pushed
+`worktree-esf-edge-refinement` to origin.
+(Earlier, later in the day) Merged `main` into the branch
 (`git merge main`, commit `d6addb3`): main had gained the anomaly-flag
 feature line (12 commits, `anomaly.py` + aggregate/GUI wiring). Resolved 5
 conflicts (`compute.py` meta, `gui_app.py` docstring + checkbox branch,

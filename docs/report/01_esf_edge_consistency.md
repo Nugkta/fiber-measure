@@ -501,6 +501,39 @@ by default — real-image benefit unproven here, so refinement becomes opt-in
 - Sign tests treat groups as independent, which they are for different fibres
   but not necessarily across the `A_*` batches.
 
+## 7. Final verdict — owner visual acceptance (2026-08-04)
+
+Written after §4–§6; this section supersedes their "unproven, not refuted"
+framing. The owner inspected the A/B overlays directly (groups `4_6` and
+`7_1` — the two largest group-std "wins" — plus further images) and rejected
+the refined boundaries on sight, on two grounds, both of which turn out to be
+corroborated by the A/B numbers:
+
+1. **Inward bite.** Refined boundaries sit visibly inside the fibre's
+   apparent edge. Mechanism: the 50%-midpoint placement is only "the true
+   edge" for a blurred *step*; a cylinder's projected profile is a shouldered
+   ramp, so the midpoint lands inside the geometric tangent edge. This
+   matches the systematically negative shifts of the largest movers (−7 to
+   −8 µm, §3.3). The group-std improvements were three positions of one
+   fibre moving inward *together* — consistent, not correct.
+2. **Wiggle.** Refined boundaries oscillate at the ~16 px block scale
+   ("弯弯曲曲"). Quantified post-hoc: column-to-column jitter (std of the
+   first difference of `diameter_px_smooth`) rises from a median 0.130 px/col
+   (off) to 0.218 px/col (on), ratio 1.55×, rougher in 140/144 images, worst
+   3.2–3.7×. Mechanism: the legacy edge is smoothed over `wcol=41` columns,
+   while refine adds per-16-column block-fit offsets linearly interpolated
+   between noisy block centres with no smoothing of the offset field. This
+   is the visual counterpart of the +24% detrended along-fibre noise (§3.4).
+
+**Disposition.** The method as specified (erf 50%-midpoint placement,
+unsmoothed block offsets) is rejected for real MasP2 images, not merely
+unproven. `refine_on=False` remains the shipped default; the branch
+`worktree-esf-edge-refinement` is pushed and kept unmerged as the record of
+the attempt. If the idea is ever revived, the two identified fixes are: a
+placement convention matched to the cylinder profile (not the 50% midpoint)
+and smoothing/regularisation of the offset field (or wider blocks). Study
+closed as **done** (hypothesis answered in the negative for this dataset).
+
 ---
 
 ### Reproducing
