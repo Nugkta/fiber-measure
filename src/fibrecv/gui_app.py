@@ -133,9 +133,9 @@ PARAM_SPECS: list[tuple] = [
      1, 1, 201, None),
     ("refine_on", "Edge refinement (refine_on)", "bool",
      "Refit each detected wall as a blurred step edge and shift the boundary "
-     "to the fitted midpoint (sub-pixel). Improves accuracy on soft/blurred "
-     "walls; turn off to reproduce the legacy (pre-refinement) boundary "
-     "exactly. Default on.",
+     "to the fitted midpoint (sub-pixel). Accurate on synthetic ground truth; "
+     "real-image benefit still under validation (study 01). Default off; "
+     "leave off to keep the legacy (pre-refinement) boundary exactly.",
      None, None, None, None),
     ("ppu", "Pixels per micron (ppu)", "float",
      "Calibration: camera pixels per micron; diameters in µm = pixels / ppu, "
