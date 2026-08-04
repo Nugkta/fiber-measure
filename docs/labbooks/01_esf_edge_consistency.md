@@ -39,7 +39,13 @@ anomaly line). Acceptance-case shortlist from the A/B outputs: biggest movers
 `7_3_3` (−8.0 µm, σ≈10), `10_8_3` (−7.6), `4_6_3` (−7.0); group-std wins
 `4_6` (6.13→2.42 µm), `7_1` (7.53→3.63); regressions `7_4` (4.40→6.96 µm),
 `10_4` (4.36→6.72); heavy-defocus/low-coverage `9_7_*` (σ≈16, coverage
-0.29–0.80). Earlier: `uv run pytest -q` → 124 passed (same count as before
+0.29–0.80). Owner's visual acceptance (overlays of `4_6`, `7_1`, plus a
+screenshot): refined boundaries look wiggly ("弯弯曲曲") and sit inside the
+visible fibre edge — read as anti-optimisation. Quantified the wiggle:
+column-to-column jitter (std of the first difference of
+`diameter_px_smooth`) rises from median 0.130 px/col (off) to 0.218 px/col
+(on) — ratio 1.55×, rougher in 140/144 images, worst cases 3.2–3.7×
+(`10_6_1`, `10_10_3`, `8_10_3`, `7_5_1`). Earlier: `uv run pytest -q` → 124 passed (same count as before
 the change). No test needed a loosened assertion, only an explicit
 `refine_on=True`/`replace(CONFIG(), refine_on=True, ...)` on tests that were
 implicitly relying on the old default. Naming semantics (owner, 2026-08-04,
@@ -47,7 +53,22 @@ facts as stated): `X_Y_Z.jpg` → X = experimental condition, Y = sample
 (fibre) number under that condition, Z = position along that fibre. A group
 (`X_Y`) is therefore one fibre imaged at 2–3 different positions, not the
 same spot re-photographed.
-**What I think it means** — Confidence: high. The flip is purely a
+**What I think it means** — On the visual acceptance: confidence medium-high
+that the erf-midpoint placement is wrong for these images, not just unproven.
+Two independent visual defects, both corroborated by A/B numbers: (1) the
+inward bite — the 50% midpoint convention assumes a step edge, but a
+cylinder's projected profile is a shouldered ramp, so the midpoint lands
+inside the visible tangent edge (matches the systematically negative Δ of
+the big movers); (2) the wiggle — the legacy line is smoothed over
+`wcol=41` columns, while refine adds a per-16-column-block fitted offset,
+linearly interpolated between noisy block centres with no smoothing of the
+offset field, injecting ~16-px-scale jitter (matches the 1.55× median
+column-jitter ratio and the study's +24% along-fibre noise). The group-std
+"wins" were three positions moving inward together — consistent, not
+correct. Evidence that would change this: a profile-level check showing the
+midpoint actually at the physical tangent edge, or a focus sweep where the
+midpoint is stable and the legacy edge is not. On the earlier default flip:
+confidence high. The flip is purely a
 configuration/documentation change — the algorithm itself is untouched and
 still passes every synthetic ground-truth test — so refinement remains fully
 available and correct, just opt-in (`--refine` / GUI checkbox) rather than
