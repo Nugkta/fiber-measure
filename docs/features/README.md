@@ -16,3 +16,7 @@ What it does / Design choices / Algorithm details / Caveats (see CLAUDE.md).
   Streamlit GUI: violet-accent theme, numbered card sections + jump menu,
   shared `_fmt`/`_styled_fig` formatting/plot policy; detection logic and
   exports unchanged.
+- `04_anomaly_flags.md` — current — advisory anomaly flagging: edge_jump /
+  large_gap / diameter_step per image + replicate_outlier per group, the
+  `anomaly_exclude` switch, `"anomaly"` meta sub-dict and
+  `summary/per_image_summary.csv`.

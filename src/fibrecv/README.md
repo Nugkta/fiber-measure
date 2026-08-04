@@ -25,8 +25,13 @@ Streamlit GUI) that call the same core so CLI and GUI outputs match.
 - `edges.py` — current — per-column tight-inner-edge detection producing
   sub-pixel top/bottom boundaries and the tilt-corrected perpendicular
   diameter (`EdgeResult`, `detect_edges`).
+- `anomaly.py` — current — pure anomaly detectors: per-image edge_jump /
+  large_gap / diameter_step (`detect_image_anomalies` → `AnomalyResult`),
+  group-level `detect_replicate_outliers`, and the shared `exclusion_reason`
+  drop policy used by both `run_aggregate` and the GUI.
 - `qc.py` — current — outlier rejection, smoothing and coverage gating on
-  the raw edge diameters (`QCResult`).
+  the raw edge diameters (`QCResult`), plus the advisory anomaly pass
+  (`QCResult.anomaly`, detectors in `anomaly.py`).
 - `compute.py` — current — pure per-image compute core chaining
   features → band → edges → qc with no file I/O (`compute_measurement`);
   shared by the CLI and the GUI so preview == CLI output.
@@ -43,7 +48,9 @@ Streamlit GUI) that call the same core so CLI and GUI outputs match.
 - `run_measure.py` — current — CLI, stage 1: measures a glob of images in
   parallel (`ProcessPoolExecutor`), writing per-image artifacts.
 - `run_aggregate.py` — current — CLI, stage 2: groups per-image profiles by
-  sample and builds the registered averages + `master_summary.csv`.
+  sample and builds the registered averages + `master_summary.csv` +
+  `per_image_summary.csv` (every image with its anomaly flags and
+  exclusion reason; `--anomaly-exclude` turns flags into exclusions).
 - `tensile.py` — current — tensile (stress-strain) CSV/Excel ingestion and
   single-fibre metric computation (modulus, toughness, break point) from a
   fibre's measured mean diameter.

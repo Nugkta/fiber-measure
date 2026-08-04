@@ -19,7 +19,9 @@ Inputs
 Output
 ------
 - ``apply_manual_edits`` -> a NEW ``MeasureResult`` (the input is never mutated,
-  so ``st.cache_data`` entries stay pristine) plus per-column edited masks.
+  so ``st.cache_data`` entries stay pristine) plus per-column edited masks. The
+  QC re-run refreshes the meta's QC fields including the ``"anomaly"``
+  sub-dict, so a corrected boundary clears its anomaly flags.
 - ``corrected_boundary`` / ``display_to_native`` / ``has_edits`` /
   ``empty_edits``: the small pure pieces the GUI composes.
 

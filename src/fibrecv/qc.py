@@ -2,7 +2,8 @@
 
 Dependencies
 ------------
-``numpy``, ``scipy.ndimage.median_filter``, ``scipy.signal.savgol_filter``.
+``numpy``, ``scipy.ndimage.median_filter``, ``scipy.signal.savgol_filter``,
+plus ``.anomaly`` for the advisory image-level anomaly detectors.
 
 Inputs
 ------
@@ -16,8 +17,9 @@ Output
 ------
 ``QCResult`` with ``diameter_raw`` (NaN where rejected), ``diameter_smooth``
 (median + Savitzky-Golay on a gap-filled series), ``valid`` and ``interpolated``
-boolean masks, per-column ``reason`` flags, and scalar ``coverage`` /
-``low_confidence``.
+boolean masks, per-column ``reason`` flags, scalar ``coverage`` /
+``low_confidence``, and the advisory ``anomaly`` result (edge_jump /
+large_gap / diameter_step -- never affects validity).
 
 Pos
 ---

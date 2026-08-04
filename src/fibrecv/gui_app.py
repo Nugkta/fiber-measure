@@ -17,16 +17,22 @@ Inputs
 - Images from a local folder OR any number of uploaded files; both are
   auto-grouped via ``parse_name``'s trailing-numbers rule, with unparseable
   names collected in an "ungrouped" bucket.
-- The three boundary knobs (``edge_z``/``edge_frac``/``wcol``) plus the ``ppu``
-  calibration, edited in a sidebar form and applied on demand; all other
-  ``CONFIG`` fields stay at the validated defaults.
+- The three boundary knobs (``edge_z``/``edge_frac``/``wcol``), the ``ppu``
+  calibration, and the anomaly-flag thresholds (``jump_thresh_px``/``gap_frac``/
+  ``step_frac``/``rep_dev_frac``) plus the ``anomaly_exclude`` checkbox, edited
+  in a sidebar form and applied on demand; all other ``CONFIG`` fields stay at
+  the validated defaults.
 - An output-folder path for export/batch.
 
 Output
 ------
 - Live, in-memory preview: full-res boundary overlays, per-replicate diameter
   profiles, and a registered mean+/-std group curve -- all redrawn when the user
-  changes parameters and clicks Apply (no disk writes for preview).
+  changes parameters and clicks Apply (no disk writes for preview). Anomalous
+  measurements are surfaced as a "⚠" replicate-tab prefix, the anomaly names in
+  the amber flags badge and the per-image stats' ``anomalies`` column; with
+  ``anomaly_exclude`` on they drop the replicate from registration via the same
+  ``anomaly.exclusion_reason`` policy the CLI aggregator uses.
 - Manual boundary correction: per replicate, the user can click anchor points
   on a zoomed strip (or nudge a whole line) to redraw the detected top/bottom
   boundary where detection fails. Points are grouped into independent sets,

@@ -17,7 +17,8 @@ Output
 ``compute_measurement(rgb, cfg, name=None)`` -> ``MeasureResult`` bundling the
 desaturation map ``D``, the ``BandResult``/``EdgeResult``/``QCResult`` objects,
 the per-column ``diameter_um`` array, the parsed ``name``/``group``/``replicate``
-and the diagnostics ``meta`` dict -- all in memory, nothing written.
+and the diagnostics ``meta`` dict (including the JSON-safe ``"anomaly"``
+sub-dict from QC) -- all in memory, nothing written.
 
 Pos
 ---

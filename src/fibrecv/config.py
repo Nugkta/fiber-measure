@@ -18,9 +18,9 @@ The frozen-ish ``CONFIG`` dataclass carrying every tunable parameter, plus the
 
 Pos
 ---
-Bottom of the dependency graph. Imported by features, band, edges, qc, overlay,
-register, measure and both run_* CLIs. Changing a default here changes the whole
-pipeline's behaviour; the load-bearing strictness knob is ``edge_frac``.
+Bottom of the dependency graph. Imported by features, band, edges, qc, anomaly,
+overlay, register, measure and both run_* CLIs. Changing a default here changes
+the whole pipeline's behaviour; the load-bearing strictness knob is ``edge_frac``.
 """
 
 from __future__ import annotations

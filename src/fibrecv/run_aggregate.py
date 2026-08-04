@@ -9,14 +9,16 @@ Inputs
 ------
 Command-line flags: ``--out`` (output root holding ``per_image/``), selector
 (``--groups`` / ``--all``), and a few CONFIG overrides (``--ppu``, ``--max-shift``,
-``--min-corr``, ``--min-coverage``).
+``--min-corr``, ``--min-coverage``, ``--rep-dev-frac``, ``--anomaly-exclude``).
 
 Output
 ------
 Per A_B sample: ``per_sample/csv/sample_<A_B>_registered.csv`` (mean+/-std curve),
 ``per_sample/plots/sample_<A_B>_registered.png`` (mean + +/-std band),
-``per_sample/shifts/sample_<A_B>_shifts.json``, and one row per sample in
-``summary/master_summary.csv``.
+``per_sample/shifts/sample_<A_B>_shifts.json``, one row per sample in
+``summary/master_summary.csv``, and one row per image (excluded ones included,
+with anomaly flags + replicate_outlier deviations and the exclusion reason) in
+``summary/per_image_summary.csv``.
 
 Pos
 ---
