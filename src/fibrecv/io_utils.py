@@ -182,11 +182,16 @@ def _sort_key(path: Path):
 
 
 def load_rgb(path: str | Path) -> np.ndarray:
-    """Load a JPEG as float32 RGB in [0, 1], shape (H, W, 3).
+    """Load an image as float32 RGB in [0, 1], shape (H, W, 3).
 
     Drops an alpha channel if present and promotes greyscale to 3 channels.
+    Falls back to the pillow plugin when the default reader fails (e.g.
+    LZW-compressed Zeiss TIFFs, which tifffile refuses without imagecodecs).
     """
-    arr = iio.imread(path)
+    try:
+        arr = iio.imread(path)
+    except Exception:
+        arr = iio.imread(path, plugin="pillow")
     arr = np.asarray(arr)
     if arr.ndim == 2:
         arr = np.repeat(arr[:, :, None], 3, axis=2)

@@ -66,6 +66,25 @@ def test_select_images_groups_filter(tmp_path):
     assert [p.name for p in select_images(args)] == ["sampleA 10_5_1.png"]
 
 
+def test_load_rgb_lzw_tiff(tmp_path):
+    """LZW-compressed TIFFs (Zeiss export) must load via the pillow fallback."""
+    import numpy as np
+    from PIL import Image
+
+    from fibrecv.io_utils import load_rgb
+
+    rgb = np.zeros((12, 10, 3), dtype=np.uint8)
+    rgb[4:8, :, :] = 200
+    path = tmp_path / "C1_01_a1_part1.tiff"
+    Image.fromarray(rgb).save(path, compression="tiff_lzw")
+
+    arr = load_rgb(path)
+    assert arr.shape == (12, 10, 3)
+    assert arr.dtype == np.float32
+    assert 0.0 <= arr.min() and arr.max() <= 1.0
+    assert abs(arr[5, 5, 0] - 200 / 255) < 1e-6
+
+
 def test_run_aggregate_non_numeric_group(tmp_path):
     """run_aggregate.main must not crash on non-numeric group labels (e.g. IMG)."""
     import json
