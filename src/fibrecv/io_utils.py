@@ -16,6 +16,10 @@ Output
 - ``discover_images(root, glob)`` -> sorted list of ``Path`` to image files.
 - ``parse_name(path)`` -> ``(group, replicate)`` from the trailing run of
   numbers in the stem (last number = replicate, the rest = group).
+- ``parse_multiangle_name(path)`` -> ``MultiAngleKey`` for the strict
+  ``<cond>_<fiber>_a<angle>_part<part>[s]`` multi-angle convention (C1).
+- ``multiangle_group(key)`` -> ``(group, replicate)`` adapter;
+  ``discover_multiangle(root)`` -> ``{(fiber, part): {angle: Path}}``.
 - ``load_rgb(path)`` -> float32 array in [0, 1], shape (H, W, 3).
 
 Pos
@@ -27,6 +31,7 @@ by both CLIs (discovery + grouping). Knows the dataset's naming convention.
 from __future__ import annotations
 
 import re
+from dataclasses import dataclass
 from pathlib import Path
 
 import imageio.v3 as iio
@@ -88,6 +93,83 @@ def parse_name(path: str | Path) -> tuple[str, int]:
     if not prefix:
         raise ValueError(f"unrecognised image name: {path!r}")
     return prefix, replicate
+
+
+# Strict multi-angle convention: <cond>_<fiber>_a<angle>_part<part>[s]
+# e.g. "C1_01_a1_part1.tiff" (image) / "C1_01_a1_part1s.tiff" (scale-bar twin).
+_MULTIANGLE_RE = re.compile(
+    r"^(?P<cond>[A-Za-z]+\d*)_(?P<fiber>\d{1,3})_a(?P<angle>\d)"
+    r"_part(?P<part>\d)(?P<s>s?)$")
+
+
+@dataclass(frozen=True)
+class MultiAngleKey:
+    """Parsed identity of one multi-angle shot.
+
+    ``scalebar`` is True for the burned-in scale-bar twin ("s" suffix).
+    """
+
+    condition: str
+    fiber: int
+    angle: int
+    part: int
+    scalebar: bool
+
+
+def parse_multiangle_name(path: str | Path) -> MultiAngleKey:
+    """Parse a multi-angle image name into a ``MultiAngleKey``.
+
+    Strict: the stem must match ``<cond>_<fiber>_a<angle>_part<part>[s]``
+    exactly (no ``par5``-style truncations). Raises ``ValueError`` otherwise.
+    """
+    stem = Path(path).stem.strip()
+    m = _MULTIANGLE_RE.match(stem)
+    if m is None:
+        raise ValueError(f"unrecognised multi-angle image name: {path!r}")
+    return MultiAngleKey(
+        condition=m.group("cond"),
+        fiber=int(m.group("fiber")),
+        angle=int(m.group("angle")),
+        part=int(m.group("part")),
+        scalebar=bool(m.group("s")),
+    )
+
+
+def multiangle_group(key: MultiAngleKey) -> tuple[str, int]:
+    """Adapt a ``MultiAngleKey`` to the ``(group, replicate)`` shape.
+
+    The group is ``"<cond>_<ff>_a<angle>"`` (zero-padded fiber) and the
+    replicate is the part number, so multi-angle shots can flow through
+    code written for ``parse_name``'s 2-tuple.
+    """
+    return (f"{key.condition}_{key.fiber:02d}_a{key.angle}", key.part)
+
+
+def discover_multiangle(
+    root: str | Path, condition: str | None = None,
+) -> dict[tuple[int, int], dict[int, Path]]:
+    """Map ``(fiber, part) -> {angle: path}`` for plain multi-angle images.
+
+    Scale-bar twins ("s" suffix), XML sidecars and non-matching names are
+    skipped. A missing angle is simply an absent key, never an error. With
+    ``condition`` set, other conditions are skipped too (recommended when a
+    directory mixes conditions — the returned key omits the condition).
+    """
+    root = Path(root)
+    out: dict[tuple[int, int], dict[int, Path]] = {}
+    for path in sorted(root.iterdir()):
+        if not path.is_file() or path.suffix.lower() not in IMAGE_SUFFIXES:
+            continue
+        try:
+            key = parse_multiangle_name(path)
+        except ValueError:
+            continue
+        if key.scalebar:
+            continue
+        if condition is not None and key.condition != condition:
+            continue
+        out.setdefault((key.fiber, key.part), {})[key.angle] = path
+    return out
 
 
 def _sort_key(path: Path):
