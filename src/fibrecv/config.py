@@ -132,6 +132,13 @@ class CONFIG:
     max_shift: int = 400       # bound on cross-correlation lag (px)
     min_corr: float = 0.3      # normalised corr-peak below this -> registration_uncertain
 
+    # --- multi-angle cross-section stage (xsection.py) ---
+    # calibrated on the C1 pilot (fibers 01+08, 2026-08-15): real inter-angle
+    # stage repositioning reaches ~±800 px, and ~10% of cross-angle pairs are
+    # genuinely unalignable (near-flat width profiles) -> gate + zero-fallback
+    xsec_min_corr: float = 0.2   # corr-peak gate for cross-angle alignment
+    xsec_max_shift: int = 800    # cross-angle lag bound (px)
+
     # --- tensile (stress-strain) analysis ---
     # The tensile tester records only crosshead displacement (ΔL) and force, so
     # strain = ΔL / gauge_length. Cross-section A = π(d/2)² uses the matched image
