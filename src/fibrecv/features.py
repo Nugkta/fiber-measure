@@ -50,16 +50,33 @@ def estimate_bg(S: np.ndarray, cfg: CONFIG) -> tuple[float, float]:
 
 
 def rgb_to_desaturation(rgb: np.ndarray, cfg: CONFIG) -> tuple[np.ndarray, np.ndarray, float, float]:
-    """Compute the desaturation z-map ``D`` from an RGB image.
+    """Compute the feature z-map ``D`` from an RGB image (mode-dispatched).
 
-    Steps: RGB->HSV, take saturation ``S``; estimate background ``(s_bg, mad)``
-    from the margins; build ``D = (s_bg - S) / (mad_scale*MAD + eps)``.
+    ``cfg.feature_mode == "desat"`` (default, MasP2): RGB->HSV, take
+    saturation ``S``; estimate background ``(s_bg, mad)`` from the margins;
+    build ``D = (s_bg - S) / (mad_scale*MAD + eps)``.
 
-    Returns ``(D, S, s_bg, mad)``. ``D`` is float32 with the same H x W shape.
+    ``cfg.feature_mode == "bright"`` (C1, bright fibre on dark bg): the same
+    margin-row median/MAD machinery applied to brightness ``V = max(R,G,B)``,
+    with the sign flipped: ``D = (V - v_bg) / (mad_scale*MAD + eps)``.
+
+    Returns ``(D, F, f_bg, mad)`` where ``F`` is the feature channel (S or V)
+    and ``f_bg`` its background level. NB downstream meta stores ``f_bg`` under
+    the key ``"bg_S"`` even in bright mode (semantic overload; the active mode
+    is recoverable from ``meta["params"]["feature_mode"]``). ``D`` is float32
+    with the same H x W shape. Raises ``ValueError`` on an unknown mode.
     """
-    hsv = rgb2hsv(rgb)
-    S = hsv[:, :, 1].astype(np.float32)
-    s_bg, mad = estimate_bg(S, cfg)
-    denom = cfg.mad_scale * mad + cfg.eps
-    D = ((s_bg - S) / denom).astype(np.float32)
-    return D, S, s_bg, mad
+    if cfg.feature_mode == "desat":
+        hsv = rgb2hsv(rgb)
+        S = hsv[:, :, 1].astype(np.float32)
+        s_bg, mad = estimate_bg(S, cfg)
+        denom = cfg.mad_scale * mad + cfg.eps
+        D = ((s_bg - S) / denom).astype(np.float32)
+        return D, S, s_bg, mad
+    if cfg.feature_mode == "bright":
+        V = rgb.max(axis=2).astype(np.float32)
+        v_bg, mad = estimate_bg(V, cfg)
+        denom = cfg.mad_scale * mad + cfg.eps
+        D = ((V - v_bg) / denom).astype(np.float32)
+        return D, V, v_bg, mad
+    raise ValueError(f"unknown feature_mode: {cfg.feature_mode!r}")

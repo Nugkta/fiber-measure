@@ -41,7 +41,12 @@ class CONFIG:
     # --- calibration ---
     ppu: float = 1.3680  # pixels per micron; diameter_um = diameter_px / ppu
 
-    # --- desaturation feature / background estimate ---
+    # --- feature map / background estimate ---
+    feature_mode: str = "desat"  # "desat": HSV desaturation z-map (MasP2 look,
+    #                              pale fibre on saturated bg) | "bright":
+    #                              brightness z-map (C1 look, bright fibre on
+    #                              dark bg). Everything downstream of the z-map
+    #                              is feature-agnostic.
     margin: float = 0.12       # top+bottom fraction of rows treated as background
     eps: float = 1e-6          # numerical floor
     mad_scale: float = 1.4826  # MAD -> sigma conversion for the robust z-map

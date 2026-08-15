@@ -44,6 +44,7 @@ def build_config(args: argparse.Namespace) -> CONFIG:
     """Override CONFIG defaults from CLI flags (only those explicitly set)."""
     cfg = CONFIG()
     overrides = {
+        "feature_mode": args.feature_mode,
         "ppu": args.ppu,
         "edge_z": args.edge_z,
         "edge_frac": args.edge_frac,
@@ -125,6 +126,10 @@ def main(argv: list[str] | None = None) -> int:
     sel.add_argument("--all", action="store_true", help="all discovered images")
     ap.add_argument("--jobs", type=int, default=4, help="parallel processes")
     # CONFIG overrides (None -> keep calibrated default)
+    ap.add_argument("--feature-mode", dest="feature_mode",
+                    choices=["desat", "bright"], default=None,
+                    help='z-map feature: "desat" (MasP2 pale-on-pink, default) '
+                         'or "bright" (C1 bright-on-dark)')
     ap.add_argument("--ppu", type=float, default=None)
     ap.add_argument("--edge-z", dest="edge_z", type=float, default=None,
                     help="strictness knob (absolute z above bg); higher -> tighter")
