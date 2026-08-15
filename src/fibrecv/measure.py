@@ -91,6 +91,11 @@ def write_measurement(rgb, mr, cfg: CONFIG, out_root: str | Path) -> dict:
             "diameter_um": mr.diameter_um[span],
             "valid": res.valid[span].astype(int),
             "interpolated": res.interpolated[span].astype(int),
+            # additive columns (2026-08-15): per-column edge positions, NaN
+            # where the column is invalid; used by the xsection stage for
+            # focus/asymmetry diagnostics
+            "y_top_px": np.where(res.valid[span], edg.y_top[span], np.nan),
+            "y_bot_px": np.where(res.valid[span], edg.y_bot[span], np.nan),
         }
     )
     df.to_csv(paths["csv"], index=False)
