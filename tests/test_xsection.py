@@ -372,6 +372,45 @@ def test_predict_phi_transfer_noisy_beats_circle():
     assert np.sqrt(np.nanmean(err_ell ** 2)) < 0.5 * np.sqrt(np.nanmean(err_circ ** 2))
 
 
+def test_predict_phi_transfer_bisector_direction_skipped_not_garbage():
+    # phi = 30 deg bisects the kept pair {0, 60} used when direction 3
+    # (120 deg) is dropped: both kept z values coincide, the (c0, R) solve is
+    # rank 1, and an unguarded lstsq returns a minimum-norm answer that is
+    # ~29 px wrong on EXACT widths. Degenerate columns must be NaN, not emitted.
+    W = tile_W(ellipse_widths(110.0, 80.0, 30.0), n=8)
+    err_ell, err_circ, phi_hat = predict_phi_transfer(W)
+    assert phi_dist(phi_hat, 30.0) < 1e-6
+    even = np.zeros(8, bool)
+    even[0::2] = True
+    assert np.isnan(err_ell[[2, 5]][:, even]).all()
+    # the two non-degenerate directions stay exact
+    assert np.allclose(err_ell[[0, 1, 3, 4]][:, even], 0.0, atol=1e-7)
+
+
+def test_predict_phi_transfer_near_bisector_guard_band():
+    even = np.zeros(8, bool)
+    even[0::2] = True
+    # 2 deg off the bisector: z-spread ~0.12 < _MIN_Z_SPREAD -> still skipped
+    W = tile_W(ellipse_widths(110.0, 80.0, 32.0), n=8)
+    err_ell, _, _ = predict_phi_transfer(W)
+    assert np.isnan(err_ell[[2, 5]][:, even]).all()
+    # 10 deg off: z-spread ~0.59 -> solved, and exactly
+    W2 = tile_W(ellipse_widths(110.0, 80.0, 40.0), n=8)
+    err_ell2, _, _ = predict_phi_transfer(W2)
+    assert np.allclose(err_ell2[[2, 5]][:, even], 0.0, atol=1e-7)
+
+
+def test_predict_phi_transfer_unsolvable_returns_nan_phi():
+    # every odd column misses direction 3 entirely -> no solvable phi fit;
+    # phi_hat must be NaN (never a silent 0.0) and both error arrays all-NaN
+    W = tile_W(ellipse_widths(110.0, 80.0, 35.0), n=8)
+    W[[2, 5], 1::2] = np.nan
+    err_ell, err_circ, phi_hat = predict_phi_transfer(W)
+    assert np.isnan(phi_hat)
+    assert np.isnan(err_ell).all()
+    assert np.isnan(err_circ).all()
+
+
 # ------------------------------------------------------- build_part_stack
 
 

@@ -270,6 +270,16 @@ def predict_anisotropy(W: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     return dir_err, circ_err
 
 
+# Minimum spread of the frozen-phi regressor z = cos 2(theta - phi_hat) for
+# the two-direction (c0, R) solve to be usable. Two kept directions give
+# identical z whenever phi_hat bisects them (theta1 + theta2 = 2 phi_hat mod
+# 180 deg) — the design matrix drops to rank 1 and lstsq silently returns a
+# minimum-norm answer whose held-out prediction is garbage. The (c0, R) error
+# amplification scales as 1/spread; 0.2 skips a ~±3.3 deg band around each
+# bisector (for 60-deg-spaced kept pairs) instead of emitting it.
+_MIN_Z_SPREAD = 0.2
+
+
 def predict_phi_transfer(W: np.ndarray,
                          theta_deg: np.ndarray = NOMINAL_ANGLES_DEG
                          ) -> tuple[np.ndarray, np.ndarray, float]:
@@ -278,11 +288,15 @@ def predict_phi_transfer(W: np.ndarray,
     Phi is fitted on the ODD grid columns (all six angles, ellipticity-weighted
     coefficient average). At EVEN columns each direction d is dropped (both
     repeats) in turn and ``(c0, R)`` solved from the remaining two directions
-    with phi frozen — a well-posed rank-2 solve — to predict the dropped
-    widths. Returns ``(err_ellipse, err_circle, phi_deg)`` where the error
-    arrays are (6, N), finite only at even columns with a well-posed solve;
-    the circle baseline predicts the dropped width as the mean of the widths
-    the ellipse solve used.
+    with phi frozen to predict the dropped widths. The solve is only rank 2
+    when the kept directions actually differ in ``z = cos 2(theta - phi)`` —
+    when ``phi_hat`` (near-)bisects the kept pair the two regressor values
+    coincide, so such columns are skipped (NaN) under ``_MIN_Z_SPREAD``
+    rather than solved degenerately. Returns ``(err_ellipse, err_circle,
+    phi_deg)`` where the error arrays are (6, N), finite only at even columns
+    with a well-posed solve; the circle baseline predicts the dropped width
+    as the mean of the widths the ellipse solve used. ``phi_deg`` is NaN (and
+    both error arrays all-NaN) when no odd column is solvable.
     """
     W = np.asarray(W, dtype=float)
     n_ang, n_col = W.shape
@@ -290,6 +304,9 @@ def predict_phi_transfer(W: np.ndarray,
     dir_ids = _direction_ids(theta_deg)
 
     C, solvable, _ = _fit_coeffs(W[:, 1::2], theta_deg)
+    if not solvable.any():
+        return (np.full((n_ang, n_col), np.nan),
+                np.full((n_ang, n_col), np.nan), float("nan"))
     s1 = np.nansum(C[1, solvable])
     s2 = np.nansum(C[2, solvable])
     phi_hat = float(np.degrees(np.arctan2(s2, s1) / 2.0) % 180.0)
@@ -308,7 +325,9 @@ def predict_phi_transfer(W: np.ndarray,
         keep = [k for k in range(n_ang) if dir_ids[k] != d]
         for pattern in np.unique(code):
             rows = [k for k in keep if pattern >> k & 1]
-            if len({int(dir_ids[k]) for k in rows}) < 2:
+            # rank-2 needs the kept rows to SPREAD in z, not merely to come
+            # from two directions (identical z when phi_hat bisects the pair)
+            if len(rows) < 2 or float(np.ptp(z[rows])) < _MIN_Z_SPREAD:
                 continue
             cols = np.where(code == pattern)[0]
             X = np.column_stack([np.ones(len(rows)), z[rows]])
