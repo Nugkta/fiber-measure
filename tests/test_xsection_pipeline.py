@@ -27,7 +27,7 @@ EXPECTED_SUMMARY_COLS = [
     "A_min_um2", "A_min_part", "A_min_x_px", "axis_ratio_median",
     "axis_ratio_iqr", "phi_med_deg", "hex_ratio_median", "pair_dw_frac_median",
     "A_circle_um2", "area_ratio", "uniformity", "n_uncertain_shifts",
-    "low_confidence",
+    "n_saturated_shifts", "part_rms_med_max_px", "low_confidence",
 ]
 
 

@@ -137,7 +137,12 @@ class CONFIG:
     # stage repositioning reaches ~±800 px, and ~10% of cross-angle pairs are
     # genuinely unalignable (near-flat width profiles) -> gate + zero-fallback
     xsec_min_corr: float = 0.2   # corr-peak gate for cross-angle alignment
-    xsec_max_shift: int = 800    # cross-angle lag bound (px)
+    xsec_max_shift: int = 800    # cross-angle lag bound (px); a peak ON the
+    #   boundary is flagged saturated -> zero shift + uncertain (the true lag
+    #   may lie beyond the bound, so the clamped estimate is never applied)
+    xsec_rms_flag_px: float = 6.0  # a part whose median per-column ellipse
+    #   rms residual exceeds this marks its fiber low_confidence (provisional;
+    #   pre-fix C1 run: clean parts ~2.0-2.6 px, alignment-corrupted 8.3 px)
 
     # --- tensile (stress-strain) analysis ---
     # The tensile tester records only crosshead displacement (ΔL) and force, so

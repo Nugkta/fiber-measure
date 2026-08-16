@@ -354,7 +354,10 @@ def build_part_stack(fiber: int, part: int, profiles: dict, cfg: CONFIG
     span-relative arrays would inject a silent x0 misalignment), then shifted
     onto the lowest present angle via ``estimate_shift`` under the
     xsection-specific gates ``cfg.xsec_min_corr`` / ``cfg.xsec_max_shift``.
-    A weak or absent correlation peak falls back to zero shift + uncertain.
+    A weak or absent correlation peak falls back to zero shift + uncertain;
+    so does a peak sitting on the ``±xsec_max_shift`` search boundary
+    (``saturated`` flag — the true lag may lie beyond the bound, so the
+    clamped estimate is never applied).
     Missing angles become all-NaN rows, never errors. Interior measurement
     dropouts stay NaN in the stack (``max_gap=1.5``: source columns are
     integers + a sub-pixel shift, so consecutive finite samples sit 1 px
@@ -385,15 +388,23 @@ def build_part_stack(fiber: int, part: int, profiles: dict, cfg: CONFIG
     for a in range(1, 7):
         if a not in profiles:
             shifts.append({"angle": a, "present": False, "shift_px": 0.0,
-                           "corr_peak": 0.0, "uncertain": True})
+                           "corr_peak": 0.0, "uncertain": True,
+                           "saturated": False})
             aligned.append((np.array([float(lo)]), np.array([np.nan])))
             continue
         if a == ref_angle:
-            sh, pk, unc = 0.0, 1.0, False
+            sh, pk, unc, sat = 0.0, 1.0, False, False
         else:
             sh, pk, unc = estimate_shift(padded[ref_angle], padded[a], cfg2)
+            # an argmax on the search boundary means the true peak may lie
+            # BEYOND the bound — the clamped lag carries no evidence, so
+            # treat it like a weak link (zero shift + uncertain), flagged
+            sat = abs(sh) > cfg2.max_shift - 0.5
+            if sat:
+                sh, unc = 0.0, True
         shifts.append({"angle": a, "present": True, "shift_px": float(sh),
-                       "corr_peak": float(pk), "uncertain": bool(unc)})
+                       "corr_peak": float(pk), "uncertain": bool(unc),
+                       "saturated": bool(sat)})
         aligned.append((grid0 + sh, padded[a]))
 
     grid, stack = resample_to_grid(aligned, max_gap=1.5)

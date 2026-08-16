@@ -275,6 +275,8 @@ def main(argv: list[str] | None = None) -> int:
                 "n_columns": int(st.x.size),
                 "n_valid": int(fit.valid.sum()),
                 "n_hex_degenerate": int(hex_degen.sum()),
+                "n_saturated": int(sum(1 for s in st.shifts
+                                       if s.get("saturated"))),
             }, fh, indent=2)
 
         for k in range(6):
@@ -322,7 +324,10 @@ def main(argv: list[str] | None = None) -> int:
                 dw_frac = np.abs(pair_dw) / w_dir
         n_unc = sum(1 for s in st.shifts
                     if s["present"] and s["uncertain"])
+        n_sat = sum(1 for s in st.shifts if s.get("saturated"))
         n_links = sum(1 for s in st.shifts if s["present"]) - 1
+        rms_med = (float(np.nanmedian(fit.rms_resid[fit.valid]))
+                   if fit.valid.any() else float("nan"))
         by_fiber[fiber].append({
             "part": part, "um": um,
             "x": st.x, "W_um": st.W * um,
@@ -333,10 +338,12 @@ def main(argv: list[str] | None = None) -> int:
             "hex_ratio": hex_ratio,
             "dw_frac": dw_frac,
             "n_uncertain": n_unc,
+            "n_saturated": n_sat,
+            "rms_med": rms_med,
             "n_links": max(n_links, 0),
         })
         print(f"  {name}: cols={st.x.size} valid={int(fit.valid.sum())} "
-              f"uncertain_shifts={n_unc}")
+              f"uncertain_shifts={n_unc} saturated={n_sat}")
 
     # ---- per-fiber summary --------------------------------------------
     rows = []
@@ -369,8 +376,12 @@ def main(argv: list[str] | None = None) -> int:
         A_circle = np.pi * (d_bar / 2.0) ** 2
         n_cols_total = int(sum(p["valid"].size for p in ps))
         n_unc = int(sum(p["n_uncertain"] for p in ps))
+        n_sat = int(sum(p["n_saturated"] for p in ps))
         n_links = int(sum(p["n_links"] for p in ps))
         valid_frac = n_pos / n_cols_total if n_cols_total else 0.0
+        part_rms = np.array([p["rms_med"] for p in ps])
+        rms_max = (float(np.nanmax(part_rms))
+                   if np.isfinite(part_rms).any() else float("nan"))
         rows.append({
             "fiber": fiber,
             "n_parts": len(ps),
@@ -391,8 +402,13 @@ def main(argv: list[str] | None = None) -> int:
             "area_ratio": A_mean / A_circle if np.isfinite(A_mean) else float("nan"),
             "uniformity": A_min / A_mean if np.isfinite(A_min) and A_mean else float("nan"),
             "n_uncertain_shifts": n_unc,
-            "low_confidence": bool(valid_frac < 0.5
-                                   or (n_links and n_unc / n_links > 1 / 3)),
+            "n_saturated_shifts": n_sat,
+            "part_rms_med_max_px": rms_max,
+            "low_confidence": bool(
+                valid_frac < 0.5
+                or (n_links and n_unc / n_links > 1 / 3)
+                or (np.isfinite(rms_max)
+                    and rms_max > cfg.xsec_rms_flag_px)),
         })
         print(f"fiber {fiber:02d}: A_mean={A_mean:.1f}um2 "
               f"ratio_med={rows[-1]['axis_ratio_median']:.3f} "

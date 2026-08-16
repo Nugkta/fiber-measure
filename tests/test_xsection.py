@@ -526,6 +526,34 @@ def test_build_part_stack_xsec_min_corr_wiring():
     assert abs(by_angle[2]["shift_px"] + 25.0) <= 0.5
 
 
+def test_build_part_stack_boundary_peak_saturated_not_clamped():
+    # a broad displaced bump makes the correlation rise monotonically toward
+    # the true lag (-600), so with the bound at 300 the argmax pins to the
+    # window boundary with a healthy peak value — exactly the case that used
+    # to be accepted as a confident (clamped, wrong) shift
+    x = np.arange(0, 2400, dtype=float)
+
+    def bump(center):
+        return 190.0 + 80.0 * np.exp(-0.5 * ((x - center) / 250.0) ** 2)
+
+    profiles = {a: {"x": x, "w": bump(1200.0)} for a in (1, 3, 4, 5, 6)}
+    profiles[2] = {"x": x, "w": bump(1800.0)}
+    st = build_part_stack(1, 1, profiles, CONFIG(xsec_max_shift=300))
+    by_angle = {s["angle"]: s for s in st.shifts}
+    assert by_angle[2]["saturated"]
+    assert by_angle[2]["uncertain"]
+    assert by_angle[2]["shift_px"] == 0.0
+    for a in (3, 4, 5, 6):
+        assert not by_angle[a]["saturated"] and not by_angle[a]["uncertain"]
+    # with an adequate bound the same content aligns, unflagged (a broad
+    # smooth bump recovers the lag only coarsely — window-edge bias; the
+    # precise-recovery pins live in the structured-curve tests above)
+    st2 = build_part_stack(1, 1, profiles, CONFIG(xsec_max_shift=800))
+    s2 = {s["angle"]: s for s in st2.shifts}[2]
+    assert not s2["saturated"]
+    assert abs(s2["shift_px"] + 600.0) <= 25.0
+
+
 def test_build_part_stack_max_shift_uses_xsec_bound():
     # a2's content is 600 px away: recoverable only if xsec_max_shift(800) is used
     deltas = {1: 0.0, 2: 600.0, 3: 0.0, 4: 0.0, 5: 0.0, 6: 0.0}
