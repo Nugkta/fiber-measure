@@ -345,6 +345,12 @@ def main(argv: list[str] | None = None) -> int:
         n_links = sum(1 for s in st.shifts if s["present"]) - 1
         rms_med = (float(np.nanmedian(fit.rms_resid[fit.valid]))
                    if fit.valid.any() else float("nan"))
+        # columns where a fit was even possible (all 3 directions present) —
+        # the honest valid_frac denominator; the union grid inflates with
+        # large (correct) shifts and would penalise well-aligned parts
+        Wf = np.isfinite(st.W)
+        n_measurable = int(((Wf[0] | Wf[3]) & (Wf[1] | Wf[4])
+                            & (Wf[2] | Wf[5])).sum())
         by_fiber[fiber].append({
             "part": part, "um": um,
             "x": st.x, "W_um": st.W * um,
@@ -357,6 +363,7 @@ def main(argv: list[str] | None = None) -> int:
             "n_uncertain": n_unc,
             "n_saturated": n_sat,
             "rms_med": rms_med,
+            "n_measurable": n_measurable,
             "n_links": max(n_links, 0),
         })
         print(f"  {name}: cols={st.x.size} valid={int(fit.valid.sum())} "
@@ -391,11 +398,11 @@ def main(argv: list[str] | None = None) -> int:
         W_um_all = np.concatenate([p["W_um"].ravel() for p in ps])
         d_bar = float(np.nanmean(W_um_all))
         A_circle = np.pi * (d_bar / 2.0) ** 2
-        n_cols_total = int(sum(p["valid"].size for p in ps))
+        n_meas_total = int(sum(p["n_measurable"] for p in ps))
         n_unc = int(sum(p["n_uncertain"] for p in ps))
         n_sat = int(sum(p["n_saturated"] for p in ps))
         n_links = int(sum(p["n_links"] for p in ps))
-        valid_frac = n_pos / n_cols_total if n_cols_total else 0.0
+        valid_frac = n_pos / n_meas_total if n_meas_total else 0.0
         part_rms = np.array([p["rms_med"] for p in ps])
         rms_max = (float(np.nanmax(part_rms))
                    if np.isfinite(part_rms).any() else float("nan"))
