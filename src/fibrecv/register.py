@@ -91,7 +91,8 @@ def estimate_shift(ref: np.ndarray, other: np.ndarray, cfg: CONFIG) -> tuple[flo
     return float(shift), peak, bool(uncertain)
 
 
-def resample_to_grid(aligned: list[tuple[np.ndarray, np.ndarray]]) -> tuple[np.ndarray, np.ndarray]:
+def resample_to_grid(aligned: list[tuple[np.ndarray, np.ndarray]],
+                     max_gap: float | None = None) -> tuple[np.ndarray, np.ndarray]:
     """Resample shifted profiles onto a common integer grid.
 
     ``aligned`` is a list of ``(shifted_x, values)`` pairs. Returns
@@ -99,6 +100,12 @@ def resample_to_grid(aligned: list[tuple[np.ndarray, np.ndarray]]) -> tuple[np.n
     of finite samples and ``stack[i]`` is profile ``i`` linearly interpolated
     onto it (NaN outside its own finite range). If NO profile has any finite
     value the result degrades to an empty grid and an ``(n, 0)`` stack.
+
+    With ``max_gap`` set, grid points strictly inside a gap between
+    consecutive finite samples wider than ``max_gap`` stay NaN instead of
+    being linearly bridged — interior measurement dropouts are then honest
+    missing data, not fabricated values. ``None`` (default) keeps the legacy
+    bridging behaviour that ``register_sample`` (stage 2) relies on.
     """
     spans = [(ax[np.isfinite(d)].min(), ax[np.isfinite(d)].max())
              for ax, d in aligned if np.isfinite(d).any()]
@@ -119,6 +126,10 @@ def resample_to_grid(aligned: list[tuple[np.ndarray, np.ndarray]]) -> tuple[np.n
         axf, df = axf[order], df[order]
         inside = (grid >= axf[0]) & (grid <= axf[-1])
         stack[i, inside] = np.interp(grid[inside], axf, df)
+        if max_gap is not None:
+            for j in np.where(np.diff(axf) > max_gap)[0]:
+                interior = (grid > axf[j]) & (grid < axf[j + 1])
+                stack[i, interior] = np.nan
     return grid, stack
 
 

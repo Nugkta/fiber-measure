@@ -355,7 +355,12 @@ def build_part_stack(fiber: int, part: int, profiles: dict, cfg: CONFIG
     onto the lowest present angle via ``estimate_shift`` under the
     xsection-specific gates ``cfg.xsec_min_corr`` / ``cfg.xsec_max_shift``.
     A weak or absent correlation peak falls back to zero shift + uncertain.
-    Missing angles become all-NaN rows, never errors.
+    Missing angles become all-NaN rows, never errors. Interior measurement
+    dropouts stay NaN in the stack (``max_gap=1.5``: source columns are
+    integers + a sub-pixel shift, so consecutive finite samples sit 1 px
+    apart and any wider gap means genuinely missing columns — bridging them
+    would feed fabricated widths to the ellipse fit and overcount
+    ``n_angles``).
     """
     if not profiles:
         raise ValueError(f"no profiles for fiber {fiber} part {part}")
@@ -391,6 +396,6 @@ def build_part_stack(fiber: int, part: int, profiles: dict, cfg: CONFIG
                        "corr_peak": float(pk), "uncertain": bool(unc)})
         aligned.append((grid0 + sh, padded[a]))
 
-    grid, stack = resample_to_grid(aligned)
+    grid, stack = resample_to_grid(aligned, max_gap=1.5)
     return PartStack(fiber=fiber, part=part, x=grid.astype(float),
                      W=stack, shifts=shifts)

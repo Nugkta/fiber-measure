@@ -22,6 +22,35 @@ def test_resample_to_grid_basic():
     assert np.allclose(stack[1, 1:5], [20.5, 21.5, 22.5, 23.5])
 
 
+def test_resample_to_grid_interior_gap_bridged_by_default():
+    # legacy behaviour (stage 2): interior NaN runs are linearly bridged
+    x = np.arange(11, dtype=float)
+    d = x.copy() + 10.0
+    d[4:8] = np.nan
+    grid, stack = resample_to_grid([(x, d)])
+    assert np.allclose(stack[0], x + 10.0)  # gap filled by interpolation
+
+
+def test_resample_to_grid_max_gap_masks_interior_gap():
+    x = np.arange(11, dtype=float)
+    d = x.copy() + 10.0
+    d[4:8] = np.nan  # finite neighbours at x=3 and x=8: gap of 5 px
+    grid, stack = resample_to_grid([(x, d)], max_gap=1.5)
+    assert np.isnan(stack[0, 4:8]).all()  # strictly inside the gap: NaN
+    assert np.allclose(stack[0, :4], d[:4])  # edges + finite samples intact
+    assert np.allclose(stack[0, 8:], d[8:])
+
+
+def test_resample_to_grid_max_gap_allows_subpixel_spacing():
+    # consecutive finite samples 1 px apart (integer columns + sub-pixel
+    # shift) must still interpolate normally under max_gap=1.5
+    x = np.arange(6, dtype=float) + 0.4
+    d = np.array([10., 11., 12., 13., 14., 15.])
+    grid, stack = resample_to_grid([(x, d)], max_gap=1.5)
+    inside = (grid >= x[0]) & (grid <= x[-1])
+    assert np.isfinite(stack[0, inside]).all()
+
+
 def test_resample_to_grid_all_nan_degrades():
     aligned = [(np.arange(4, dtype=float), np.full(4, np.nan)),
                (np.arange(4, dtype=float), np.full(4, np.nan))]

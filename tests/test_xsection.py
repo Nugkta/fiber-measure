@@ -447,6 +447,21 @@ def _make_profiles(deltas: dict[int, float],
     return profiles
 
 
+def test_build_part_stack_interior_gap_stays_nan():
+    # an interior dropout in one angle must stay missing in the stack —
+    # bridging it would feed fabricated widths to the ellipse fit and
+    # overcount n_angles at those columns
+    profiles = _make_profiles({a: 0.0 for a in range(1, 7)})
+    profiles[3]["w"][220:380] = np.nan  # x = 280..439 (span starts at 60)
+    st = build_part_stack(1, 1, profiles, CONFIG())
+    gap = (st.x >= 282) & (st.x <= 437)  # 2-px margin for sub-px shifts
+    assert np.isnan(st.W[2, gap]).all()
+    edges = (np.abs(st.x - 270) < 0.5) | (np.abs(st.x - 445) < 0.5)
+    assert np.isfinite(st.W[2, edges]).all()
+    # the other five angles are untouched over the same range
+    assert np.isfinite(st.W[[0, 1, 3, 4, 5]][:, gap]).all()
+
+
 def test_build_part_stack_recovers_shifts_unequal_x0():
     deltas = {1: 0.0, 2: 40.0, 3: -70.0, 4: 15.0, 5: -220.0, 6: 310.0}
     spans = {1: (60, 2400), 2: (200, 2380), 3: (0, 2100),
