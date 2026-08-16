@@ -4,6 +4,51 @@ systematically different from π(d/2)².
 Status: done
 Started: 2026-08-15
 
+## 2026-08-17
+**What I did** — Fixed the three review-confirmed defects on `worktree-multiangle-xsection`
+(commits 06d0d68 φ-transfer z-spread rank guard `_MIN_Z_SPREAD=0.2` + NaN phi_hat; 65ca145
+`resample_to_grid(max_gap=1.5)` interior-gap masking, stage 2 untouched via `None` default;
+3ad938d saturation flag: boundary peak → zero shift + `saturated`+`uncertain`, new summary
+columns `n_saturated_shifts`/`part_rms_med_max_px`, rms gate into `low_confidence` via new
+`cfg.xsec_rms_flag_px`; c2a9087 robustness batch: ET.ParseError → rc=2, dual decode error in
+`load_rgb`, garbled CSV/meta skip, headers + tests/README; bb32156 `xsec_max_shift` 800→2000;
+plus valid_frac denominator = measurable columns). Recalibrated the bound on the full C1 set
+(probe at 2000, pre-fix outputs backed up to scratchpad), re-ran stage 3 with `--validation`,
+re-ran a forced-zero-shift sensitivity run, recomputed all study statistics, regenerated the
+six report figures, and revised `docs/report/02_multiangle_xsection.md` +
+`docs/features/03_multiangle_xsection.md`. Suite: 213 tests green.
+
+**What I observed** — Bound recalibration: at 2000 px the |lag| distribution reaches
+p50=378, p95=1741, p100=1985; 7/375 links still saturate (now flagged); per-part median rms
+4.15→3.70 px; C1_04_p4 (4 formerly-clamped angles) drops 8.34→3.51 px with visually correct
+alignment. Re-run vs pre-fix: A_mean stable (±2%), grand axis-ratio median 1.127; **A_min
+moved on the corrupted fibers: 15 −16.1%, 11 −10.9%, 8 −6.8%, 13 +7.0%**; uniformity now
+0.565–0.815; A_min end-clustering 0/15 (was 5/15). **Anisotropy: 11/15 fibers, median
+reduction 11.9%, Wilcoxon p=0.048** (was 9/15, 6.5%, p=0.076); σ_pair=4.33 px=1.68 µm.
+**φ-transfer still negative with the rank guard: 24.1 vs 13.4 px median, 2/15 wins**;
+within-part φ concentration 0.75. Cross-part φ coherence Fisher p=1.3e-4 (5/15 individually).
+Hexagon 0.9058 vs 0.9051. Zero-shift sensitivity: per-part median area Δ 2.0% (max 14.3%),
+ratio 1.127→1.144. Fiber 08's per-angle residual split survives correct alignment (a1/a3
+≈ −8 px, a4/a6 ≈ +8 px). low_confidence = {01, 07, 08, 09, 13, 15}, each with one angle
+image 5–15 µm off the bundle (verified visually: C1_07_p2 a4, C1_13_p5 a6, C1_08_p3);
+`xsec_rms_flag_px=6.0` sits just below that confirmed-bad cluster (part rms p50=3.7, p90=6.6).
+
+**What I think it means** — The review findings were real and material: the alignment bug had
+been *diluting* the anisotropy signal (now significant at p<0.05) and corrupting A_min on 4
+fibers; the φ-transfer negative survives cleanly, so the twist interpretation stands; fiber
+08 is confirmed as a focus-split fiber, not an alignment artifact — v2 gate stays closed.
+The shipped conclusions change in emphasis, not direction: shape half now *significantly*
+supported, area half still negated, A_min lower and honestly flagged. Confidence: high (every
+statistic recomputed from the fixed run; thresholds calibrated with visual spot-checks).
+What would change this: collaborator-confirmed angle spacing ≠ 60°, or a one-focus reshoot
+collapsing the 7–17 px systematics.
+
+**Next** — Owner 验收 of the revised branch + report; then merge decision. Remaining
+non-blocking review findings (summary lacks a condition column; per-part-only scale gate;
+stale summary left behind on rc=2 abort; hardcoded `.tiff` sidecar path; A_circle sensitivity
+to missing angles; `phi_med_deg` is a circular mean; dof-less rms_resid) are recorded here
+and can be a small follow-up batch if the stage graduates.
+
 ## 2026-08-16
 **What I did** — Close-out (Task 13). Feature doc `docs/features/03_multiangle_xsection.md`;
 study report `docs/report/02_multiangle_xsection.md` (intro/method/results/discussion, synthetic
@@ -24,7 +69,32 @@ but uniformity (A_min) is new information. Confidence: high on the code (synthet
 208 tests), medium-high on the science (focus systematics are the accuracy ceiling). Next
 leverage: one-focus-protocol imaging, collaborator angle confirmation, C1 tensile join.
 
-## 2026-08-15
+**Addendum (same day) — owner-requested code review of the branch** (four agents: 2 Opus on
+xsection math and run_xsection/scale, 2 Sonnet on supporting changes and tests/docs/hygiene;
+key claims re-verified by hand against the code and the shipped run outputs).
+*Facts:* (1) Cross-angle shifts that saturate the `xsec_max_shift=800` search bound are accepted
+as confident: in `fibrecv_output/multiangle_c1/` 29/450 links sit at exactly ±800 with
+`uncertain=False`, touching 23/75 parts (all 5 parts of fiber 08); fibers 08, 11, 14, 15 take
+their headline `A_min` from a saturated part; all 15 summary rows say `low_confidence=False`.
+Synthetic probe: one clamped angle biases `A_min` +8.7%. (2) `predict_phi_transfer`
+(`xsection.py:311-314`) is rank-deficient when the fitted φ bisects the two kept directions
+(z=cos2(θ−φ̂) identical for both; guard only checks distinct directions) — lstsq silently returns
+a min-norm solution; probe at φ_true=30°: rmse_directional 183 vs 33 px circle baseline, i.e.
+the wrong verdict. The reported negative φ-transfer result (35.0 vs 13.6 px) is therefore partly
+suspect. (3) `resample_to_grid` linearly bridges *interior* NaN gaps, so a dropout inside one
+angle's profile becomes fabricated widths with `n_angles=6` (inherited verbatim from stage 2).
+Plus ~8 robustness majors latent on today's data (summary keyed on fiber without condition;
+scale gate per-part only; rc=2 abort leaves stale summary; `ET.ParseError` uncaught; sidecar
+path re-synthesised with hardcoded `.tiff`; `A_circle`/`area_ratio` shifts ~4% when one angle is
+excluded; pillow fallback shadows the informative first decode error) and a tail of minors
+(φ-NaN guard 1e-6 never fires under noise; `rms_resid` has no dof correction — structurally 0 at
+3 angles; `phi_med_deg` is a circular mean, not median; `area_err` all-NaN plotted as zero band).
+MasP2 regression risk, px→µm unit correctness, matplotlib/JSON hygiene, w²-algebra, hexagon
+closed form vs brute-force clip: all clean; 202 tests green.
+*Reading:* the numerical core is sound but the shipped real-data numbers for `A_min`/uniformity
+(4 fibers), fiber 08's residual pattern, and the φ-transfer verdict need a fix + stage-3 re-run
+before the branch merges. Confidence in the review findings: high (each verified with concrete
+probes). Merge decision and any reopening of the study remain with the owner.
 **CORRECTION — scale adjudication (Task 4 hard gate): the `Scaling/Items` field is the true
 scale, NOT the camera-pitch value.** The earlier reading (this labbook, planning entry below:
 "CameraPixelDistance 2.2 µm, TotalMagnification 10× → 0.22 µm/px") is wrong for these TIFFs.

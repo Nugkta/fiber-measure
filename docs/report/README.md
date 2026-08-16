@@ -8,11 +8,12 @@ discussion.
 
 ## Files
 
-- `02_multiangle_xsection.md` — current — study 02 (multi-angle
-  cross-section, C1): synthetic recovery table, real-data results (all
-  fibers elliptical, ratio med ≈1.13; A_mean within ±3% of the circular
-  assumption; anisotropy Wilcoxon p=0.076; φ-transfer negative — twist),
-  scale adjudication and discussion.
+- `02_multiangle_xsection.md` — current (revised 2026-08-16 post-review) —
+  study 02 (multi-angle cross-section, C1): synthetic recovery table,
+  real-data results (all fibers elliptical, ratio med 1.127; A_mean within
+  ±3% of the circular assumption; anisotropy Wilcoxon p=0.048 after the
+  alignment fix; φ-transfer negative — twist; uniformity 0.57–0.82 with six
+  low-confidence fibers), scale adjudication and discussion.
 - `02_xsec_anisotropy_paired.png` / `02_xsec_angle_residuals.png` /
   `02_xsec_hex_ratio.png` / `02_xsec_example_part.png` /
   `02_xsec_area_vs_circle.png` / `02_xsec_axis_ratio.png` — current — the
