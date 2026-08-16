@@ -5,7 +5,7 @@ Fibre diameter measurement from optical microscopy images.
 `fibrecv` detects the two walls of a fibre lying roughly horizontally in a
 micrograph, measures its diameter column by column, applies quality control,
 and registers repeated images of the same sample into a mean ± std diameter
-profile. It ships as a two-stage command-line pipeline plus a local
+profile. It ships as a three-stage command-line pipeline plus a local
 [Streamlit](https://streamlit.io) GUI for interactive tuning, preview, and
 batch processing.
 
@@ -22,6 +22,10 @@ Suspicious measurements (edge jumps, long unmeasurable gaps, mid-image
 diameter steps, deviant replicates) are flagged — advisorily by default — in
 the GUI, the meta JSONs and `summary/per_image_summary.csv`; see
 [docs/features/04_anomaly_flags.md](docs/features/04_anomaly_flags.md).
+Multi-angle image sets (`C1_01_a1_part1.tiff`-style, six rotation angles per
+fiber) get a third stage that fits per-position elliptical cross-sections with
+a circumscribed-hexagon QC bound instead of assuming circularity — see
+[docs/features/03_multiangle_xsection.md](docs/features/03_multiangle_xsection.md).
 
 ## Install
 
@@ -79,7 +83,15 @@ summary table:
 uv run python -m fibrecv.run_aggregate --all
 ```
 
-Both stages write to `./fibrecv_output` by default (`--out` to change).
+Stage 3 — multi-angle sets only (measure with `--feature-mode bright` first):
+per-position elliptical cross-sections in µm from the Zeiss XML sidecar scale:
+
+```bash
+uv run python -m fibrecv.run_xsection --out fibrecv_output/run \
+  --data-root "path/to/images" --scale-source items --validation
+```
+
+All stages write to `./fibrecv_output` by default (`--out` to change).
 Select a subset with `--groups 3_1 10_5` or `--glob "*_1_*.jpg"`; parallelise
 stage 1 with `--jobs N`. Every detection parameter can be overridden by flag
 (`--edge-z`, `--wcol`, ...) — see `--help` and the documented defaults in
