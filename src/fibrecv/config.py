@@ -133,16 +133,22 @@ class CONFIG:
     min_corr: float = 0.3      # normalised corr-peak below this -> registration_uncertain
 
     # --- multi-angle cross-section stage (xsection.py) ---
-    # calibrated on the C1 pilot (fibers 01+08, 2026-08-15): real inter-angle
-    # stage repositioning reaches ~±800 px, and ~10% of cross-angle pairs are
-    # genuinely unalignable (near-flat width profiles) -> gate + zero-fallback
+    # calibrated on the full C1 set (2026-08-16 recalibration): real
+    # inter-angle stage repositioning spans nearly the whole 2560 px frame —
+    # at a 2000 px search bound the |lag| distribution reaches p95=1741,
+    # p100=1985 with visually-verified alignments (e.g. C1_04_p4), and
+    # per-part median ellipse rms improved 4.15 -> 3.70 px vs the old 800
+    # bound; ~10% of pairs stay genuinely unalignable -> gate + zero-fallback
     xsec_min_corr: float = 0.2   # corr-peak gate for cross-angle alignment
-    xsec_max_shift: int = 800    # cross-angle lag bound (px); a peak ON the
+    xsec_max_shift: int = 2000   # cross-angle lag bound (px); a peak ON the
     #   boundary is flagged saturated -> zero shift + uncertain (the true lag
     #   may lie beyond the bound, so the clamped estimate is never applied)
     xsec_rms_flag_px: float = 6.0  # a part whose median per-column ellipse
-    #   rms residual exceeds this marks its fiber low_confidence (provisional;
-    #   pre-fix C1 run: clean parts ~2.0-2.6 px, alignment-corrupted 8.3 px)
+    #   rms residual exceeds this marks its fiber low_confidence. C1 @ bound
+    #   2000: p50=3.7, p90=6.6; every part >=6.4 shows one angle's widths
+    #   systematically 5-15 um off the bundle (bad single image, verified
+    #   visually on C1_07_p2 / C1_13_p5 / C1_08_p3) -> 6.0 sits just below
+    #   that confirmed-bad cluster
 
     # --- tensile (stress-strain) analysis ---
     # The tensile tester records only crosshead displacement (ΔL) and force, so
