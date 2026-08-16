@@ -190,8 +190,15 @@ def load_rgb(path: str | Path) -> np.ndarray:
     """
     try:
         arr = iio.imread(path)
-    except Exception:
-        arr = iio.imread(path, plugin="pillow")
+    except Exception as first:
+        try:
+            arr = iio.imread(path, plugin="pillow")
+        except Exception as second:
+            # keep BOTH diagnostics: pillow's own message ("can not handle
+            # the given uri") names neither the file nor the real cause
+            raise OSError(
+                f"could not decode {path}: "
+                f"[imageio] {first} / [pillow] {second}") from second
     arr = np.asarray(arr)
     if arr.ndim == 2:
         arr = np.repeat(arr[:, :, None], 3, axis=2)

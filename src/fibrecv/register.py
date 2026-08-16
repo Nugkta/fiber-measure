@@ -17,6 +17,11 @@ Output
   ``table`` is the aligned pointwise mean+/-std curve in microns, ``shifts`` are
   per-replicate lag/corr/flags, and ``summary`` is the scalar row for
   master_summary.csv.
+- ``estimate_shift(ref, other, cfg)`` and ``resample_to_grid(aligned,
+  max_gap=None)`` are also imported by ``xsection.py`` (cross-angle
+  alignment); xsection passes ``max_gap`` so interior NaN gaps stay missing
+  instead of being linearly bridged (the ``None`` default keeps the legacy
+  bridging used here).
 
 Method
 ------

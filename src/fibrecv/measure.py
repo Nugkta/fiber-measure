@@ -15,7 +15,7 @@ Output
 ------
 Writes four artifacts per image and returns a small summary dict:
   - ``overlays/<name>_overlay.png``        boundary check image
-  - ``per_image/csv/<name>_profile.csv``   x_px, diameter_px_raw/smooth, diameter_um, valid, interpolated
+  - ``per_image/csv/<name>_profile.csv``   x_px, diameter_px_raw/smooth, diameter_um, valid, interpolated, y_top_px, y_bot_px (per-column edges, NaN-invalid — the contract run_xsection builds cross-sections from)
   - ``per_image/plots/<name>_profile.png`` diameter-vs-position plot
   - ``per_image/diagnostics/<name>_meta.json`` bg_S, MAD, params, coverage, tilt, flags
 

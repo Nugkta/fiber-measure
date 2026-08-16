@@ -230,3 +230,32 @@ def test_pipeline_validation_writer(mini_tree):
     # exact ellipse: directional prediction is exact, circle baseline is not
     assert (ani["rmse_directional"] < 1e-6).all()
     assert (ani["rmse_circle"] > 1.0).all()
+
+
+def test_pipeline_truncated_sidecar_rc2_not_traceback(mini_tree):
+    # ET.ParseError subclasses SyntaxError — it must land on the rc=2 scale
+    # path like every other bad-sidecar failure, not escape as a traceback
+    out_root, data_root = mini_tree
+    (data_root / "C1_01_a3_part1.tiff_metadata.xml").write_text(
+        '<?xml version="1.0"?><ImageMetada', encoding="utf-8")
+    rc = run_xsection.main([
+        "--out", str(out_root), "--data-root", str(data_root),
+        "--scale-source", "items",
+    ])
+    assert rc == 2
+
+
+def test_pipeline_garbled_profile_csv_skipped(mini_tree, capsys):
+    # a truncated artifact from a crashed run_measure is skipped with a
+    # warning (image treated as absent), never a KeyError crash
+    out_root, data_root = mini_tree
+    csv = out_root / "per_image" / "csv" / "C1_01_a3_part1_profile.csv"
+    csv.write_text("this,is\nnot,a,profile\n")
+    rc = run_xsection.main([
+        "--out", str(out_root), "--data-root", str(data_root),
+        "--scale-source", "items",
+    ])
+    assert rc == 0
+    assert "skipping unreadable profile" in capsys.readouterr().out
+    part = pd.read_csv(out_root / "per_part" / "csv" / "xsec_C1_01_p1.csv")
+    assert part["w_a3_px"].isna().all()

@@ -13,16 +13,20 @@ Output
 ------
 - ``estimate_bg(S, cfg)`` -> ``(s_bg, mad)`` robust background saturation stats
   from the top+bottom margin rows.
-- ``rgb_to_desaturation(rgb, cfg)`` -> ``(D, S, s_bg, mad)`` where ``D`` is the
-  robust z-like desaturation map ``(s_bg - S) / (mad_scale*MAD + eps)``:
-  large-positive inside the (desaturated) fibre, ~0 in background, and
+- ``rgb_to_desaturation(rgb, cfg)`` -> ``(D, S, s_bg, mad)``, dispatching on
+  ``cfg.feature_mode`` (unknown mode -> ValueError). ``"desat"``: ``D`` is the
+  robust z-like desaturation map ``(s_bg - S) / (mad_scale*MAD + eps)``.
+  ``"bright"``: same machinery on brightness ``V = rgb.max(axis=2)`` with the
+  sign flipped (``(V - v_bg) / ...``) for bright-on-dark fibres. Either way
+  ``D`` is large-positive inside the fibre, ~0 in background, and
   self-normalising per image so faint and dark-background cases are comparable.
 
 Pos
 ---
 Second stage of the per-image pipeline (after io_utils.load_rgb). Feeds
 ``band.py`` (coarse mask + centerline) and ``edges.py`` (per-column profiles).
-Saturation -- not brightness -- is the discriminating feature (calibrated).
+Saturation is the discriminating feature for MasP2 (``"desat"``, calibrated);
+brightness is for the multi-angle C1 set (``"bright"``).
 """
 
 from __future__ import annotations

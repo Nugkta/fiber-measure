@@ -38,6 +38,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import xml.etree.ElementTree as ET
 from collections import defaultdict
 from dataclasses import replace
 from pathlib import Path
@@ -100,18 +101,31 @@ def _load_multiangle_profiles(out_root: Path, cfg: CONFIG,
         flags: list = []
         meta_path = meta_dir / f"{base}_meta.json"
         if meta_path.exists():
-            with open(meta_path) as fh:
-                meta = json.load(fh)
+            try:
+                with open(meta_path) as fh:
+                    meta = json.load(fh)
+            except ValueError as exc:  # truncated meta -> skip, don't crash
+                print(f"[WARN] skipping {base}: unreadable meta "
+                      f"({exc})")
+                continue
             coverage = meta.get("coverage")
             band_mismatch = bool(meta.get("band_mismatch"))
             flags = list((meta.get("anomaly") or {}).get("flags") or [])
         if exclusion_reason(band_mismatch, coverage, flags, cfg) is not None:
             continue
 
-        df = pd.read_csv(csv)
-        w = np.where(df["valid"].to_numpy(bool),
-                     df["diameter_px_smooth"].to_numpy(float), np.nan)
-        parts[kk][key.angle] = {"x": df["x_px"].to_numpy(float), "w": w}
+        try:
+            df = pd.read_csv(csv)
+            w = np.where(df["valid"].to_numpy(bool),
+                         df["diameter_px_smooth"].to_numpy(float), np.nan)
+            x = df["x_px"].to_numpy(float)
+        except (KeyError, ValueError, pd.errors.ParserError) as exc:
+            # a truncated/garbled artifact from a crashed run_measure must
+            # not kill the whole aggregation — skip it like an absent image
+            print(f"[WARN] skipping unreadable profile {csv.name}: "
+                  f"{type(exc).__name__}: {exc}")
+            continue
+        parts[kk][key.angle] = {"x": x, "w": w}
     return parts, seen_angles
 
 
@@ -231,7 +245,10 @@ def main(argv: list[str] | None = None) -> int:
             info, um = _part_scale(data_root, cond, fiber, part,
                                    seen_angles[(cond, fiber, part)],
                                    args.scale_source)
-        except (ValueError, FileNotFoundError, OSError) as exc:
+        except (ValueError, FileNotFoundError, OSError,
+                ET.ParseError) as exc:
+            # ET.ParseError subclasses SyntaxError, not ValueError/OSError —
+            # a truncated sidecar must land on this rc=2 path, not a traceback
             print(f"[ERROR] scale: {exc}")
             return 2
 

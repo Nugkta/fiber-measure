@@ -122,3 +122,15 @@ def test_run_aggregate_non_numeric_group(tmp_path):
     master = tmp_path / "summary" / "master_summary.csv"
     assert master.exists()
     assert "IMG" in master.read_text()
+
+
+def test_load_rgb_double_failure_reports_both_errors(tmp_path):
+    from fibrecv.io_utils import load_rgb
+
+    bad = tmp_path / "corrupt.tiff"
+    bad.write_bytes(b"definitely not an image")
+    with pytest.raises(OSError) as ei:
+        load_rgb(bad)
+    msg = str(ei.value)
+    assert "corrupt.tiff" in msg      # names the file
+    assert "imageio" in msg and "pillow" in msg  # keeps both diagnostics
