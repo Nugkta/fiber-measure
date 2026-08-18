@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Study 02 — Multi-angle cross-section (C1)</title>
+<style>
+  :root {
+    --accent: #660099;          /* UoM deep violet */
+    --accent-soft: #A78BFA;
+    --accent-bg: #F7F3FB;
+    --ink: #1E2430;
+    --muted: #64748B;
+    --hairline: #E2E8F0;
+    --card: #FFFFFF;
+    --page: #FCFBFD;
+    --good: #0F766E;
+    --warn: #B45309;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 0 16px 64px;
+    background: var(--page); color: var(--ink);
+    font: 16px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+          "Helvetica Neue", Arial, sans-serif;
+  }
+  main { max-width: 880px; margin: 0 auto; }
+  code, .mono {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 0.86em; background: var(--accent-bg);
+    border: 1px solid var(--hairline); border-radius: 4px; padding: 0 4px;
+  }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+
+  header.report {
+    border-bottom: 3px solid var(--accent);
+    padding: 40px 0 20px; margin-bottom: 28px;
+  }
+  .kicker {
+    color: var(--accent); font-size: 13px; font-weight: 600;
+    letter-spacing: 0.12em; text-transform: uppercase; margin: 0 0 6px;
+  }
+  h1 { font-size: 30px; line-height: 1.25; margin: 0 0 12px; }
+  .meta { color: var(--muted); font-size: 14px; }
+  .meta .sep { margin: 0 7px; color: var(--hairline); }
+  .badge {
+    display: inline-block; font-size: 12px; font-weight: 600;
+    padding: 1px 9px; border-radius: 999px; vertical-align: 1px;
+    border: 1px solid var(--accent-soft); color: var(--accent);
+    background: var(--accent-bg); margin-right: 6px;
+  }
+  .badge.done { border-color: #99d3c9; color: var(--good); background: #F0FAF8; }
+
+  h2 {
+    font-size: 21px; margin: 44px 0 12px; padding-top: 10px;
+    color: var(--ink);
+  }
+  h2 .num { color: var(--accent); margin-right: 10px; font-weight: 700; }
+  h3 { font-size: 16.5px; margin: 26px 0 8px; }
+  p { margin: 10px 0; }
+
+  .callout {
+    background: var(--accent-bg); border: 1px solid var(--hairline);
+    border-left: 4px solid var(--accent);
+    border-radius: 8px; padding: 14px 18px; margin: 18px 0;
+    font-size: 15px;
+  }
+  .callout .tag {
+    font-weight: 700; color: var(--accent); font-size: 12.5px;
+    letter-spacing: 0.08em; text-transform: uppercase;
+    display: block; margin-bottom: 4px;
+  }
+
+  .statrow {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 12px; margin: 22px 0;
+  }
+  .stat {
+    background: var(--card); border: 1px solid var(--hairline);
+    border-radius: 10px; padding: 14px 16px;
+  }
+  .stat .v { font-size: 22px; font-weight: 700; color: var(--accent); }
+  .stat .l { font-size: 13px; color: var(--muted); margin-top: 2px; }
+
+  table {
+    border-collapse: collapse; width: 100%; margin: 14px 0;
+    font-size: 14.5px; background: var(--card);
+  }
+  th, td {
+    border: 1px solid var(--hairline); padding: 7px 11px; text-align: left;
+  }
+  th { background: var(--accent-bg); font-weight: 600; }
+  tbody tr:nth-child(even) { background: #FAF9FC; }
+  .tablewrap { overflow-x: auto; }
+
+  figure {
+    margin: 22px 0; background: var(--card);
+    border: 1px solid var(--hairline); border-radius: 10px;
+    padding: 14px 14px 10px;
+  }
+  figure img { max-width: 100%; height: auto; display: block; margin: 0 auto; }
+  figcaption {
+    font-size: 13.5px; color: var(--muted); margin-top: 10px;
+    padding-top: 8px; border-top: 1px solid var(--hairline);
+  }
+  figcaption b { color: var(--ink); }
+
+  ul { padding-left: 22px; }
+  li { margin: 5px 0; }
+
+  footer {
+    margin-top: 56px; padding-top: 16px; border-top: 1px solid var(--hairline);
+    color: var(--muted); font-size: 13.5px;
+  }
+</style>
+</head>
+<body>
+<main>
+
+<header class="report">
+  <p class="kicker">fibrecv · lab report · study 02</p>
+  <h1>Multi-angle cross-section measurement (C1)</h1>
+  <p class="meta">
+    <span class="badge done">done</span>
+    <span class="badge">revised 2026-08-16 · post-review fixes</span><br><br>
+    Started 2026-08-15
+    <span class="sep">|</span> Labbook <code>docs/labbooks/02_multiangle_xsection.md</code>
+    <span class="sep">|</span> Feature doc <code>docs/features/03_multiangle_xsection.md</code>
+    <span class="sep">|</span> Code <code>worktree-multiangle-xsection</code>
+  </p>
+</header>
+
+<div class="callout">
+  <span class="tag">Revision note · 2026-08-16</span>
+  An owner-requested code review found three defects that contaminated the first
+  published numbers: (1)&nbsp;cross-angle shifts saturating the ±800&nbsp;px search bound
+  were accepted as confident — the true stage repositioning spans nearly the whole
+  frame, so 29/450 links were clamped and wrong; (2)&nbsp;the φ-transfer solve was
+  rank-deficient when φ̂ bisects the kept directions; (3)&nbsp;interior measurement
+  dropouts were interpolated into fabricated widths. All three are fixed (bound
+  recalibrated to 2000&nbsp;px with a saturation flag, z-spread guard, gap masking) and
+  every number and figure below is from the re-run. Net effect: <b>the anisotropy
+  test moved from marginal (p&nbsp;=&nbsp;0.076) to significant (p&nbsp;=&nbsp;0.048)</b>, the
+  weakest-link area A<sub>min</sub> dropped up to 16% on four fibers, the φ-transfer
+  negative and all other conclusions stand, and six fibers are now honestly flagged
+  low-confidence (one bad angle image each).
+</div>
+
+<div class="statrow">
+  <div class="stat"><div class="v">p = 0.048</div>
+    <div class="l">anisotropy test (paired Wilcoxon, 11/15 fibers)</div></div>
+  <div class="stat"><div class="v">1.127</div>
+    <div class="l">grand median axis ratio — every fiber elliptical</div></div>
+  <div class="stat"><div class="v">±3%</div>
+    <div class="l">circular-assumption area error (all 15 fibers)</div></div>
+  <div class="stat"><div class="v">0.57–0.82</div>
+    <div class="l">uniformity A<sub>min</sub>/A<sub>mean</sub> — the new information</div></div>
+</div>
+
+<h2><span class="num">1</span>Introduction</h2>
+<p><code>fibrecv</code> feeds <code>tensile.py</code> a circular cross-section area
+A&nbsp;=&nbsp;π(d/2)² from a single viewing direction. Young's modulus and toughness scale
+with 1/A, so any error in the circular assumption propagates one-to-one into the
+headline material properties. The C1 dataset images each of 15 fibers from six
+rotation angles (5 positions per fiber, 2560×1920 TIFF + scale-bar twin + Zeiss XML
+per shot), making the cross-section measurable instead of assumed. The planning phase
+established that a4/a5/a6 are the 180° flips of a1/a2/a3 (3 independent projection
+directions × 2 repeats); exactly-60° spacing is the working assumption pending
+collaborator confirmation.</p>
+
+<div class="callout">
+  <span class="tag">Hypothesis</span>
+  Per-position ellipse fitting of the six projections predicts held-out direction
+  widths better than the circular assumption, and yields areas systematically
+  different from π(d/2)².
+</div>
+
+<h2><span class="num">2</span>Method</h2>
+
+<h3>2.1 Per-image measurement</h3>
+<p>C1 fibers are bright on a dark background (no saturation contrast), so a
+config-selected brightness feature mode was added: the z-map is built from
+V&nbsp;=&nbsp;max(R,G,B) with the existing margin-row median/MAD normalisation; everything
+downstream of the z-map (band, edges, QC, tilt) is unchanged. All 450 images measured
+at default knobs (<code>--feature-mode bright</code> only): 0 errors, 0 low-confidence,
+coverage ≥0.8 on 449/450, no degradation on the dimmest brightness quartile.</p>
+
+<h3>2.2 Scale</h3>
+<p>The Zeiss sidecars carry two conflicting µm/px candidates: camera pixel pitch
+2.2&nbsp;µm&nbsp;/&nbsp;10× → 0.220, and <code>Scaling/Items</code> → 0.38892 (1.77× apart, 3.1× in
+area). Burned-in 100&nbsp;µm scale bars on three "s" twins measure 258.0&nbsp;px
+cap-centre-to-cap-centre → 0.3876&nbsp;µm/px, adjudicating <b>items</b> (−0.34%; camera is
++76% off). This overturns the planning-time reading; the fibers are ~46–84&nbsp;µm in
+diameter, not 41–45&nbsp;µm.</p>
+
+<h3>2.3 Cross-section fit</h3>
+<p>Per (fiber, position): the six per-angle width profiles are NaN-padded onto the
+absolute x grid, aligned by bounded cross-correlation
+(<code>xsec_max_shift=2000</code>&nbsp;px — recalibrated on the full set after the review
+showed the stage repositioning spans nearly the whole 2560&nbsp;px frame (|lag|
+p95&nbsp;=&nbsp;1741&nbsp;px, visually verified); <code>xsec_min_corr=0.2</code>), and stacked. A
+correlation peak sitting <i>on</i> the search boundary is flagged
+<i>saturated</i> and never applied (zero shift + uncertain, like a weak link);
+interior measurement dropouts stay NaN in the stack rather than being bridged by
+interpolation; a part whose median fit residual exceeds
+<code>xsec_rms_flag_px=6</code>&nbsp;px marks its fiber low-confidence (this catches single
+angle images whose widths sit 5–15&nbsp;µm off the other five — verified visually).</p>
+<p>Each aligned column is fitted in squared-width space —
+w²(θ)&nbsp;=&nbsp;c₀&nbsp;+&nbsp;c₁·cos2θ&nbsp;+&nbsp;c₂·sin2θ, exactly linear, with
+a²&nbsp;=&nbsp;(c₀+R)/4&nbsp;≥&nbsp;b²&nbsp;=&nbsp;(c₀−R)/4 — so near-circular columns degrade gracefully
+(φ→NaN) and impossible width triples (b²≤0) are invalidated, never clamped. QC:
+circumscribed-hexagon upper bound compared against the value expected for the fitted
+ellipse (the π/(2√3) anchor is exact for circles only); per-position uncertainty
+area_err&nbsp;=&nbsp;|A₁₂₃−A₄₅₆|/2 from the two half-turn exact fits.</p>
+
+<h3>2.4 Validation design</h3>
+<p>Literal leave-one-direction-out is rank-deficient (θ and θ+180° share a design
+row), and leave-one-repeat-out makes the "ellipse prediction" identically the 180°
+partner. The primary criterion is therefore the leak-free <b>anisotropy test</b>:
+predict w<sub>k</sub> by its 180° partner (directional) vs by the mean of the other
+five widths (isotropic); per-fiber pooled RMSE, paired Wilcoxon over 15 fibers, with
+the pair noise floor σ_pair&nbsp;=&nbsp;median|w<sub>k</sub>−w<sub>k+3</sub>|/√2 drawn against
+the circle RMSE only. Model form (ellipse specifically) is judged by hexagon
+consistency and a secondary φ-transfer test (φ fitted on odd columns; both repeats of
+one direction dropped at even columns; (c₀,R) re-solved with φ fixed — rank 2 only
+where the kept directions actually differ in cos&nbsp;2(θ−φ̂), so near-bisector columns
+are skipped rather than solved degenerately).</p>
+
+<h2><span class="num">3</span>Results</h2>
+
+<h3>3.1 Synthetic end-to-end proof (implementation)</h3>
+<p>Rendered bright-on-dark fibers (1200×500&nbsp;px, six angles, injected shifts
+±110&nbsp;px, realistic noise) through the full pipeline:</p>
+<div class="tablewrap">
+<table>
+  <thead><tr><th>quantity</th><th>truth (δ-corrected)</th><th>recovered</th><th>pin</th></tr></thead>
+  <tbody>
+    <tr><td>edge bias δ (circle control)</td><td>—</td><td>3.90 px/side</td><td>−1..8</td></tr>
+    <tr><td>circle axis ratio</td><td>1.000</td><td>1.0009</td><td>≤1.03</td></tr>
+    <tr><td>major axis a</td><td>217.8 px</td><td>217.8 px</td><td>—</td></tr>
+    <tr><td>minor axis b</td><td>172.8 px</td><td>172.9 px</td><td>—</td></tr>
+    <tr><td>orientation φ</td><td>35.0°</td><td>34.97°</td><td>±4°</td></tr>
+    <tr><td>area</td><td>29&nbsp;557 px²</td><td>29&nbsp;586 px² (+0.10%)</td><td>±3%</td></tr>
+    <tr><td>shifts</td><td>±110 px injected</td><td>within 2.0 px</td><td>±2.5 px</td></tr>
+    <tr><td>hex ratio vs expected-for-fit</td><td>equal</td><td>Δ ≤ 0.02</td><td>±0.02</td></tr>
+  </tbody>
+</table>
+</div>
+<p>An injected +2&nbsp;px/side half-turn asymmetry is reported by <code>area_err</code>
+within 6% of the analytic value. (Two plan pins were re-scoped and recorded in the
+labbook: the shift pin 1.5→2.5&nbsp;px — correlation edge-fill bias, width impact
+~0.2&nbsp;px; and the ×2-noise <code>area_err</code> scaling — unattainable because pipeline
+smoothing leaves a systematic floor, replaced by the direct injected-asymmetry
+test.)</p>
+
+<h3>3.2 Real data (15 fibers × 5 parts)</h3>
+
+<p><b>Shape: the sections are not circular.</b> Every fiber's median fitted axis
+ratio lies between 1.08 and 1.24 (grand median 1.127). Fitted orientation φ is
+coherent along fibers: part-mean φ concentrates far above the uniform null in 5/15
+fibers individually (Rayleigh p&lt;0.05) and at Fisher combined p&nbsp;=&nbsp;1.3×10⁻⁴ across
+the population — this cross-part test is immune to per-image focus artifacts, which
+re-randomise between parts. The hexagon QC agrees with the fitted ellipses almost
+exactly (median measured hex ratio 0.9058 vs 0.9051 expected for the fits).</p>
+
+<figure>
+  <img src="02_xsec_axis_ratio.png" alt="Per-fiber axis ratio medians with IQR">
+  <figcaption><b>Fitted axis ratios.</b> Median ± IQR/2 of the per-column ratio of
+  long to short axis (a/b) per fiber; every fiber sits above 1. Open markers are
+  low-confidence fibers.</figcaption>
+</figure>
+
+<figure>
+  <img src="02_xsec_hex_ratio.png" alt="Measured vs expected hexagon ratio">
+  <figcaption><b>Hexagon QC.</b> Measured area ratio of ellipse to circumscribed
+  hexagon (hex ratio) vs the value expected for the fitted ellipse; points on y=x
+  mean the fitted geometry is self-consistent. The dotted line is the circle-only
+  anchor π/(2√3).</figcaption>
+</figure>
+
+<p><b>The primary anisotropy test is positive and now significant.</b> With the
+alignment fixed, the directional predictor wins in 11/15 fibers; paired Wilcoxon
+p&nbsp;=&nbsp;0.048; median relative RMSE reduction 11.9% (range −15%..+29%) — the pre-fix
+run's clamped shifts had been diluting the direction signal (p&nbsp;=&nbsp;0.076). Three of
+the four fibers where the isotropic mean still wins are low-confidence (one bad angle
+image each). Both predictors sit at 7–17&nbsp;px RMSE, well above the pair noise floor
+σ_pair&nbsp;=&nbsp;4.33&nbsp;px (1.68&nbsp;µm): per-image systematics (focus state, edge bias) remain
+the dominant error. Because the directional predictor carries a 1-sample-vs-5-sample
+variance handicap (√2σ vs √1.2σ), beating the isotropic mean at all implies genuine
+direction dependence — consistent with the fitted ratios once noise inflation is
+accounted for.</p>
+
+<figure>
+  <img src="02_xsec_anisotropy_paired.png" alt="Paired anisotropy RMSE per fiber">
+  <figcaption><b>Anisotropy test (headline).</b> Per-fiber held-out width error of
+  the direction-aware predictor (blue, 180° partner) vs the direction-blind baseline
+  (orange, mean of the other five). Blue left of orange = the fiber's width depends
+  on direction. Dashed line: replicate noise floor (σ_pair), comparable to the
+  orange series only.</figcaption>
+</figure>
+
+<p><b>The φ-transfer test is negative — and now cleanly so.</b> With degenerate
+near-bisector solves excluded by the rank guard, fixed-φ predictions of a held-out
+direction are still much worse than the isotropic baseline (median pooled RMSE 24.1
+vs 13.4&nbsp;px; the directional predictor wins in only 2/15 fibers). The cause is
+visible in the fits: φ wanders within parts (circular concentration median 0.75) and
+between parts — the section orientation twists along the fiber — so a single
+per-part φ does not transfer. The same machinery passes cleanly on constant-φ
+synthetic data, so this is a property of the fibers (and the protocol's per-part
+granularity), not of the fit.</p>
+
+<p><b>Area: the circular assumption is nearly right in area, wrong in shape.</b>
+A<sub>mean</sub> is within −3.1%..+1.8% of π(d̄/2)² on every fiber — expected
+mathematically, since a circle on the mean width nearly area-matches a moderate
+ellipse (relative error ≈ −(r−1)²/(2(r+1)²) ≈ −0.4% at r=1.13). The per-fiber
+summary (<code>xsection_summary.csv</code>) also exports A<sub>harm</sub>
+(compliance-weighted harmonic mean) and A<sub>min</sub> (weakest link, 11-px
+median-guarded), which differ far more: uniformity A<sub>min</sub>/A<sub>mean</sub>
+runs 0.57–0.82 (0.64–0.82 on the nine clean fibers). The alignment fix moved
+A<sub>min</sub> materially on the fibers whose weakest part had contained a clamped
+shift (fiber 15 −16%, 11 −11%, 8 −7%, 13 +7%) — A<sub>min</sub> is the statistic
+most sensitive to alignment quality, which is why the saturation and rms flags now
+guard it.</p>
+
+<figure>
+  <img src="02_xsec_area_vs_circle.png" alt="Ellipse area vs circular assumption per fiber">
+  <figcaption><b>Ellipse area vs the circular assumption.</b> Per-fiber deviation of
+  the measured mean cross-section area from π(d̄/2)²; the grey band is ±3%. Red bars
+  are low-confidence fibers.</figcaption>
+</figure>
+
+<figure>
+  <img src="02_xsec_example_part.png" alt="Example aligned part C1_04 p4">
+  <figcaption><b>Example part (C1_04 p4).</b> Top: the six aligned width profiles —
+  this part had the largest stage repositioning (~2000&nbsp;px) and was corrupted by the
+  pre-review shift clamp; all six curves now share the same constriction and
+  recovery. Bottom: fitted area with split-half uncertainty band and the hexagon
+  upper bound.</figcaption>
+</figure>
+
+<h3>3.3 Diagnostics</h3>
+<p>v1→v2 gate CLOSED: no angle shows a consistent median signed residual across
+fibers (all ≤0.4&nbsp;px); fiber 08's ±8&nbsp;px pattern survives correct alignment and
+splits by half-turn — a focus-session signature absorbed by <code>area_err</code>, not
+an angle-offset one. Alignment sensitivity: forcing zero shifts changes per-part
+median area by 2.0% (median; worst 14.3%) and inflates the grand axis-ratio median
+1.127→1.144, i.e. alignment removes spurious anisotropy. 7/375 links remain
+uncertain — exactly the ones still saturated at the 2000&nbsp;px bound, now flagged
+instead of silently clamped. A<sub>min</sub> positions land within 10% of a span end
+in 0/15 fibers (the pre-fix mild end-clustering was an alignment artifact). Six
+fibers (01, 07, 08, 09, 13, 15) are flagged low-confidence by the rms gate; in each
+case one angle image's widths sit 5–15&nbsp;µm off the other five (verified visually on
+C1_07_p2, C1_13_p5, C1_08_p3) — their A<sub>min</sub>/uniformity values should be
+treated with caution.</p>
+
+<figure>
+  <img src="02_xsec_angle_residuals.png" alt="Per-angle median signed residuals">
+  <figcaption><b>Per-angle residual diagnostics (v2-gate evidence).</b> Median
+  signed fit residual for each (fiber, angle); no angle is systematically offset
+  across fibers, so nominal 60° spacing suffices. Fiber 08 (red) splits by
+  half-turn — focus, not geometry.</figcaption>
+</figure>
+
+<h2><span class="num">4</span>Discussion</h2>
+<p>The hypothesis splits cleanly. Its shape half is supported — after the review
+fixes, significantly on the primary test too: C1 sections are measurably elliptical
+(ratios 1.08–1.24, anisotropy Wilcoxon p&nbsp;=&nbsp;0.048) with orientation that persists —
+and twists — along each fiber, and the hexagon bound confirms the fitted geometry.
+Its headline mechanical half is largely negated: because the sections are only
+moderately elliptical, the mean-width circle recovers the AREA to within ±3%, so
+tensile properties computed from π(d̄/2)² are not badly biased for C1-like fibers.
+The practically important exports are therefore the uncertainty-aware statistics:
+A<sub>harm</sub> for compliance-type averaging and especially A<sub>min</sub>
+(uniformity 0.57–0.82), which the single-view circular pipeline cannot see at all in
+direction and undersamples along the fiber — with the caveat that A<sub>min</sub> is
+alignment- and image-quality-sensitive, so the per-fiber low-confidence flag must
+travel with it.</p>
+<p>Three limits matter for reuse. First, the per-image systematic error (focus/edge
+bias, ~2–10&nbsp;px) is the accuracy ceiling — it swamps the direction signal in the
+per-fiber Wilcoxon and is only absorbed, conservatively, by the split-half
+<code>area_err</code>; imaging both half-turns at one focus protocol would tighten
+everything. Second, φ twist means per-part ellipse parameters should be consumed per
+position, never pooled per fiber. Third, the 60° spacing is still an assumption;
+<code>theta_deg</code> is a parameter everywhere, so a corrected step is a re-run, not
+a re-write. The tensile join remains deferred until C1 tensile data exists.</p>
+
+<footer>
+  fibrecv · study 02 · sources: labbook
+  <code>docs/labbooks/02_multiangle_xsection.md</code> · run outputs
+  <code>fibrecv_output/multiangle_c1/</code> (branch worktree) · figures generated
+  from the post-review re-run of 2026-08-16.
+</footer>
+
+</main>
+</body>
+</html>
