@@ -76,7 +76,10 @@
 - Do NOT silently create a new slug or new labbook file. Ask me first: propose a slug, the hypothesis, and confirm before creating `docs/labbooks/<slug>.md` and adding the row to `docs/metalabbook.md`.
 
 ### When finishing a study
-- Write a detailed report including the intro, method, results and discussion in `docs/report/<NN>_<slug>.md`
+- Write a detailed report including the intro, method, results and discussion as **HTML** in
+  `docs/report/<NN>_<slug>/report.html` — one folder per study, holding the report plus all of
+  its evidence figures (referenced relatively). Style it well: self-contained CSS, clean-lab
+  light aesthetic with the UoM deep violet `#660099` accent, readable tables/figure captions.
 
 ### When finishing adding a new feature
 - Write (or update) `docs/features/<NN>_<slug>.md` following the template in item 3 above.
