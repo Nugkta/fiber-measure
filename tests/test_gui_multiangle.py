@@ -7,6 +7,7 @@ both halves.
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -348,6 +349,27 @@ def test_reset_in_multiangle_mode_keeps_bright():
     assert at.session_state["cfg_dict"]["edge_frac"] == pytest.approx(0.65)
 
 
+def test_multiangle_scale_survives_mode_round_trip():
+    """A hand-calibrated µm/px must survive leaving and re-entering the mode.
+
+    Streamlit drops a keyed widget's session entry on any run where the widget
+    is not rendered, so without a plain mirror key the scale would silently
+    revert to the C1 default — and it drives every µm number in the mode AND
+    the batch's --scale-source.
+    """
+    at = _in_multiangle(timeout=60)
+    scale = next(n for n in at.sidebar.number_input if n.key == "ma_um_per_px")
+    assert scale.value == pytest.approx(_MA_UM_PER_PX_DEFAULT)
+    scale.set_value(0.250000).run()
+    assert not at.exception
+
+    _mode_radio(at).set_value("Replicates").run()
+    _mode_radio(at).set_value(MULTIANGLE_MODE).run()
+    assert not at.exception
+    scale = next(n for n in at.sidebar.number_input if n.key == "ma_um_per_px")
+    assert scale.value == pytest.approx(0.250000)
+
+
 def test_multiangle_six_angles_render_and_fit(multiangle_folder: Path):
     at = _in_multiangle(multiangle_folder)
 
@@ -380,6 +402,9 @@ def test_multiangle_six_angles_render_and_fit(multiangle_folder: Path):
     captions = " | ".join(str(c.value) for c in at.caption)
     assert "µm/px (manual)" in captions
     assert "hex ratio" in captions
+    # alignment shifts render signed at the "px2" kind's 2 dp, not 1 dp: a
+    # sub-pixel shift is real information about how well the angles line up
+    assert re.search(r"a1: [+-]\d+\.\d{2} px", captions), captions
 
 
 def test_multiangle_missing_angle_warns_and_drops_split_half(

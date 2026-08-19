@@ -1627,16 +1627,28 @@ def _load_multiangle(cfg_items: tuple) -> dict:
     # CONFIG field, no compute cache key includes it, and every µm number in
     # this mode is derived from it at render time, so changing it must not
     # trigger a recompute (an Apply would).
+    #
+    # The widget's own value is seeded from (and mirrored back into) the plain
+    # session key "ma_um_per_px_value": Streamlit DROPS a keyed widget's
+    # session entry on any run where the widget is not rendered, so a trip
+    # through replicate mode would otherwise silently revert a hand-calibrated
+    # scale to the C1 default -- and this number drives every µm figure here
+    # plus the batch's --scale-source. Same mirroring trick as
+    # ``st.session_state.folder`` above; the mirror key is deliberately a
+    # DIFFERENT name from the widget key, since assigning to the widget's own
+    # key while also passing ``value=`` is what Streamlit warns about.
     out["um_per_px"] = float(st.sidebar.number_input(
         "Scale (µm per pixel)", min_value=0.000001, max_value=100.0,
-        value=_MA_UM_PER_PX_DEFAULT, step=0.001, format="%.6f",
-        key="ma_um_per_px",
+        value=float(st.session_state.get("ma_um_per_px_value",
+                                         _MA_UM_PER_PX_DEFAULT)),
+        step=0.001, format="%.6f", key="ma_um_per_px",
         help="Microns per pixel for the multi-angle images. Default "
              f"{_MA_UM_PER_PX_DEFAULT} is the C1 objective's resolved "
              "Scaling/Items value (study 03). The sidebar's ppu calibration is "
              "NOT used in this mode — every µm number here comes from this "
              "field, and the batch passes it to run_xsection as "
              "--scale-source."))
+    st.session_state.ma_um_per_px_value = out["um_per_px"]
     return out
 
 
@@ -2645,7 +2657,9 @@ def _render_xsection(pv: MultiAnglePreview, excluded: dict[int, str],
     fig = _xsec_stack_fig(pv.stack, pv.fit, um_per_px)
     st.pyplot(fig)
     plt.close(fig)
-    shift_txt = ", ".join(f"a{s['angle']}: {s['shift_px']:+.1f} px"
+    # 2 dp to match the "px2" _FMT_KINDS precision (a sub-pixel shift is real
+    # information here); the sign is kept, which _fmt cannot express
+    shift_txt = ", ".join(f"a{s['angle']}: {s['shift_px']:+.2f} px"
                           for s in pv.stack.shifts if s["present"])
     st.caption(
         "Each angle's width profile is shifted along x (cross-correlation "
@@ -2730,7 +2744,8 @@ def _render_xsection(pv: MultiAnglePreview, excluded: dict[int, str],
     st.dataframe(
         pd.DataFrame(rows), width="stretch", hide_index=True,
         column_config={
-            "shift (px)": st.column_config.NumberColumn(format="%.1f"),
+            # same 2 dp as the "px2" kind / the shift caption above
+            "shift (px)": st.column_config.NumberColumn(format="%.2f"),
             "corr peak": st.column_config.NumberColumn(format="%.3f"),
             "median signed residual (px)": st.column_config.NumberColumn(
                 format="%.2f",
