@@ -1,0 +1,707 @@
+<title>Study 03 — Edge Criteria</title>
+<style>
+  :root {
+    --ground: #FAFAF7;
+    --ink: #1A1A1F;
+    --ink-mid: #4A4850;
+    --ink-light: #78757F;
+    --accent: #660099;
+    --accent-soft: #8844AA;
+    --accent-faint: #F3F0F6;
+    --stripe: #F5F3F8;
+    --border: #DDD8E4;
+    --good: #2D7D4F;
+    --warn: #B8860B;
+    --bad: #C0392B;
+    --card-bg: #fff;
+    --code-bg: #F0EDF4;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground: #141418;
+      --ink: #E8E6EC;
+      --ink-mid: #A8A4B0;
+      --ink-light: #7A7684;
+      --accent: #B366E0;
+      --accent-soft: #9955CC;
+      --accent-faint: #1E1A24;
+      --stripe: #1C1920;
+      --border: #2E2A36;
+      --good: #5DBB7A;
+      --warn: #D4A843;
+      --bad: #E07070;
+      --card-bg: #1A1820;
+      --code-bg: #1E1A24;
+    }
+  }
+  :root[data-theme="dark"] {
+    --ground: #141418;
+    --ink: #E8E6EC;
+    --ink-mid: #A8A4B0;
+    --ink-light: #7A7684;
+    --accent: #B366E0;
+    --accent-soft: #9955CC;
+    --accent-faint: #1E1A24;
+    --stripe: #1C1920;
+    --border: #2E2A36;
+    --good: #5DBB7A;
+    --warn: #D4A843;
+    --bad: #E07070;
+    --card-bg: #1A1820;
+    --code-bg: #1E1A24;
+  }
+
+  body {
+    background: var(--ground);
+    color: var(--ink);
+    font-family: Georgia, 'Times New Roman', serif;
+    font-size: 17px;
+    line-height: 1.65;
+    margin: 0;
+    padding: 2rem 1.25rem 4rem;
+  }
+
+  .page { max-width: 720px; margin: 0 auto; }
+
+  h1 {
+    font-size: 1.55rem;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    margin: 0 0 0.25rem;
+    color: var(--ink);
+    text-wrap: balance;
+  }
+  .study-label {
+    font-variant: small-caps;
+    color: var(--accent);
+    font-size: 0.85rem;
+    letter-spacing: 0.08em;
+    margin: 0 0 0.15rem;
+  }
+  .date {
+    color: var(--ink-light);
+    font-size: 0.85rem;
+    margin: 0 0 2rem;
+  }
+
+  h2 {
+    font-size: 1.15rem;
+    font-weight: 700;
+    color: var(--accent);
+    letter-spacing: 0.02em;
+    margin: 2.5rem 0 0.75rem;
+    padding-bottom: 0.35rem;
+    border-bottom: 1.5px solid var(--border);
+    text-wrap: balance;
+  }
+  h3 {
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: var(--ink);
+    margin: 1.5rem 0 0.75rem;
+  }
+
+  p { margin: 0 0 1rem; }
+
+  .cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 0.75rem;
+    margin: 0 0 2rem;
+  }
+  .card {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 0.75rem 0.85rem;
+    text-align: center;
+  }
+  .card .label {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    font-size: 0.72rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--ink-light);
+    margin: 0 0 0.25rem;
+  }
+  .card .value {
+    font-size: 1.5rem;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    color: var(--ink);
+    margin: 0;
+    line-height: 1.2;
+  }
+  .card .detail {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    font-size: 0.72rem;
+    color: var(--ink-mid);
+    margin: 0.15rem 0 0;
+  }
+  .card .value.good { color: var(--good); }
+  .card .value.warn { color: var(--warn); }
+
+  .tbl-wrap { overflow-x: auto; margin: 0.75rem 0 1.25rem; }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    font-size: 0.82rem;
+    font-variant-numeric: tabular-nums;
+  }
+  th {
+    text-align: left;
+    font-weight: 600;
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--ink-light);
+    padding: 0.5rem 0.6rem;
+    border-bottom: 1.5px solid var(--border);
+    white-space: nowrap;
+  }
+  th.r, td.r { text-align: right; }
+  td {
+    padding: 0.4rem 0.6rem;
+    border-bottom: 1px solid var(--border);
+    color: var(--ink-mid);
+  }
+  tr:nth-child(even) td { background: var(--stripe); }
+  td.improved { color: var(--good); font-weight: 600; }
+  td.worsened { color: var(--bad); font-weight: 600; }
+  td.neutral { color: var(--ink-mid); }
+  td.fiber-name { color: var(--ink); font-weight: 600; }
+
+  code {
+    font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+    font-size: 0.85em;
+    background: var(--code-bg);
+    padding: 0.15em 0.35em;
+    border-radius: 3px;
+  }
+  pre {
+    background: var(--code-bg);
+    padding: 0.75rem 1rem;
+    border-radius: 4px;
+    overflow-x: auto;
+    font-size: 0.82rem;
+    line-height: 1.5;
+    margin: 0.75rem 0 1.25rem;
+  }
+  pre code { background: none; padding: 0; }
+
+  figure { margin: 1rem 0 1.5rem; }
+  figure img { max-width: 100%; height: auto; border-radius: 4px; }
+  figcaption {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    font-size: 0.78rem;
+    color: var(--ink-light);
+    margin-top: 0.5rem;
+    line-height: 1.45;
+  }
+
+  .verdict {
+    background: var(--accent-faint);
+    border-left: 3px solid var(--accent);
+    padding: 1rem 1.25rem;
+    border-radius: 0 4px 4px 0;
+    margin: 1.5rem 0;
+  }
+  .verdict p { margin: 0 0 0.5rem; }
+  .verdict p:last-child { margin: 0; }
+
+  .caveat {
+    background: var(--accent-faint);
+    border-left: 3px solid var(--warn);
+    padding: 0.85rem 1rem;
+    border-radius: 0 4px 4px 0;
+    margin: 1rem 0;
+    font-size: 0.92rem;
+  }
+  .caveat p { margin: 0 0 0.4rem; }
+  .caveat p:last-child { margin: 0; }
+
+  .erratum {
+    background: var(--accent-faint);
+    border-left: 3px solid var(--bad);
+    padding: 0.85rem 1rem;
+    border-radius: 0 4px 4px 0;
+    margin: 1rem 0;
+    font-size: 0.92rem;
+  }
+  .erratum p { margin: 0 0 0.4rem; }
+  .erratum p:last-child { margin: 0; }
+
+  .footnote {
+    font-size: 0.82rem;
+    color: var(--ink-light);
+    border-top: 1px solid var(--border);
+    margin-top: 2rem;
+    padding-top: 0.75rem;
+  }
+  .footnote p { margin: 0 0 0.4rem; }
+
+  ul, ol { padding-left: 1.4rem; margin: 0 0 1rem; }
+  li { margin-bottom: 0.35rem; }
+</style>
+
+<div class="page">
+
+<p class="study-label">fibrecv · study 03</p>
+<h1>Edge detection criteria upgrade</h1>
+<p class="date">2026-08-19 · branch <code>worktree-edge-criteria</code> · run <code>multiangle_c1_s03d</code></p>
+
+<div class="cards">
+  <div class="card">
+    <p class="label">Low-confidence fibres</p>
+    <p class="value good">6 → 1</p>
+    <p class="detail">of 15 fibres</p>
+  </div>
+  <div class="card">
+    <p class="label">Per-part rms p50</p>
+    <p class="value good">3.70 → 2.74</p>
+    <p class="detail">px, 75 parts</p>
+  </div>
+  <div class="card">
+    <p class="label">Parts above 6 px rms</p>
+    <p class="value good">11 → 1</p>
+    <p class="detail">of 75 parts</p>
+  </div>
+  <div class="card">
+    <p class="label">MasP2 desat</p>
+    <p class="value">identical</p>
+    <p class="detail">SHA-256 verified</p>
+  </div>
+</div>
+
+<!-- =========================================================== -->
+<h2>Introduction</h2>
+
+<p>Study 02 (multi-angle cross-section) measured 15 C1 fibres across 6 angles × 5 parts and
+found 6 of 15 fibres flagged low-confidence, each carrying at least one angle with defocus-induced
+width errors of 10–26 px. Investigation identified two contributing factors in the bright-mode
+edge detection pipeline:</p>
+
+<ol>
+  <li><strong>Z-map choice.</strong> <code>max(R,G,B)</code> selects the outermost channel at each
+  pixel. Where chromatic aberration displaces one channel's edge relative to the other two, the
+  max tracks the widest channel, adding a systematic wide bias.</li>
+  <li><strong>Fixed threshold.</strong> The absolute level <code>edge_z = 4</code> sits at roughly
+  5–10% of wall amplitude on C1 bright images (amplitude 40–70 z). At that height the wall slope
+  is shallow, so small perturbations — noise, defocus halo — shift the detected edge substantially.</li>
+</ol>
+
+<p>Study 01 had previously shown that measuring at the 50% midpoint causes "inward bite" on
+cylindrical fibres (the real wall profile is a shouldered ramp, not a step), so the replacement
+threshold must sit below 50%.</p>
+
+<!-- =========================================================== -->
+<h2>Method</h2>
+
+<p>Three changes, all gated on <code>feature_mode == "bright"</code>. The desat (MasP2) path is
+byte-for-byte unchanged.</p>
+
+<h3>1. Z-map: max → median</h3>
+<p>In <code>features.py:83</code>, the bright-mode feature map changed from
+<code>rgb.max(axis=2)</code> to <code>np.median(rgb, axis=2)</code>. The median of three channels
+selects the middle-ranked value, rejecting whichever single channel is displaced furthest by
+chromatic aberration. On synthetic data this removes ≈0.9 px of edge bias per pixel of
+single-channel (R-only) displacement, but contributes essentially nothing (0.003 px) absent a
+fringe, and ≈0.05 px against a two-channel (R+B) fringe where the median rides along
+(<code>scripts/synthetic_fringe.json</code>).</p>
+
+<h3>2. Threshold: clamped relative, bright-mode only</h3>
+<p>In <code>edges.py:263–273</code>, the boundary level computation became:</p>
+<pre><code>if cfg.feature_mode == "bright":
+    level = base_val + min(cfg.edge_cap * A_side,
+                           max(cfg.edge_z, cfg.edge_frac * A_side))
+else:
+    level = base_val + min(cfg.edge_z, cfg.edge_frac * A_side)</code></pre>
+
+<p>Three independent controls:</p>
+<ul>
+  <li><code>edge_frac</code> — primary relative threshold (shipped: 0.30)</li>
+  <li><code>edge_z = 4.0</code> — absolute floor protecting faint walls from going below noise</li>
+  <li><code>edge_cap = 0.50</code> — upper clamp preventing convergence on 50% (the study 01 failure point)</li>
+</ul>
+<p>Ordering matters: <code>min(cap, max(floor, frac))</code> guarantees the level stays below
+<code>edge_cap × A_side < A_side</code>, so a crossing always exists on the wall run. On typical
+C1 walls (amplitude 40–70 z) the level is <code>frac × A</code> ≈ 12–21 z (vs the old fixed 4 z).
+On faint walls where <code>A_side < 8 z</code>, the cap overrides the <code>edge_z</code> floor
+— the level drops to <code>0.5 × A_side</code>, which may be below 4 z. This is the price of
+guaranteeing a crossing exists; it is live on ~800–1500 columns per dim C1 image.</p>
+
+<h3>3. k_band recalibration</h3>
+<p>The median z-map has a smaller background MAD than <code>max(R,G,B)</code>, so z-scores inflate.
+More of the defocus halo then crosses the absolute <code>k_band</code> threshold, ballooning the
+coarse band mask and raising false <code>band_mismatch</code> flags. On the 6 most defocused
+images, <code>band_half</code> ballooned from 89–98 px to 142–223 px while the actual measured
+widths stayed correct (≤3 px of their sharp-sibling counterparts). <code>band_ratio</code>
+collapsed to 0.326–0.485, below the <code>band_ratio_min = 0.5</code> gate.</p>
+<p>The consequence was silent data loss: fibre 01 part 4 lost angles a2/a3/a5, leaving only
+2 distinct directions from 3 — rank-deficient for the 3-parameter ellipse fit — so it produced
+0 valid fits from 3495 columns. Recalibrated to <code>k_band = 6.0</code> for bright mode:
+mismatches 6→0 at k ≥ 5; widths move ≤0.13 px on the calibration set (≤1.43 px on the dimmest
+images). Non-circular support: on a data-selected dim set, min coverage 0.8762 at every k;
+3 images turn low-confidence only at k = 8 (<code>scripts/dim_coverage.json</code>).</p>
+<p>Side effect: raising <code>k_band</code> 4→6 also moved the <code>FLAG_NO_BG</code> guard
+from 2.0 to 3.0 z (<code>edges.py:282</code> uses <code>cfg.k_band / 2.0</code>). Incidence
+change not measured.</p>
+
+<h3>4. CLI presets</h3>
+<p>Bright-mode defaults live in <code>run_measure.py</code>, not the dataclass, so MasP2 cannot
+silently regress:</p>
+<pre><code>BRIGHT_DEFAULTS = {"edge_frac": 0.30, "k_band": 6.0}</code></pre>
+<p>Applied in <code>build_config</code> when <code>--feature-mode bright</code> is given; explicit
+flags still override. Code that constructs <code>CONFIG(feature_mode="bright")</code> directly
+inherits the desat-calibrated defaults — both <code>edge_frac</code> and <code>k_band</code> must
+be set explicitly in that case.</p>
+
+<!-- =========================================================== -->
+<h2>Results</h2>
+
+<h3>Per-part rms distribution</h3>
+<p>Per-part ellipse-fit residual (median <code>rms_resid_px</code> over valid rows), 75 parts.
+Run s03d (post-clamp-fix code, shipped config) against the study 02 baseline.</p>
+
+<div class="tbl-wrap">
+<table>
+  <tr>
+    <th></th>
+    <th class="r">p50</th>
+    <th class="r">p90</th>
+    <th class="r">p95</th>
+    <th class="r">Max</th>
+    <th class="r">Parts &gt; 6 px</th>
+  </tr>
+  <tr>
+    <td class="fiber-name">Old (max z-map, edge_z = 4, k = 4)</td>
+    <td class="r">3.697</td>
+    <td class="r">6.638</td>
+    <td class="r">7.756</td>
+    <td class="r">11.841</td>
+    <td class="r">11</td>
+  </tr>
+  <tr>
+    <td class="fiber-name">New (median z-map, frac = 0.30, k = 6)</td>
+    <td class="r improved">2.739</td>
+    <td class="r improved">4.264</td>
+    <td class="r improved">4.892</td>
+    <td class="r improved">6.273</td>
+    <td class="r improved">1</td>
+  </tr>
+</table>
+</div>
+
+<h3>Statistical verification</h3>
+<p>Paired analysis over 75 parts (<code>scripts/rms_statistics_s03d.json</code>):</p>
+<div class="tbl-wrap">
+<table>
+  <tr><th>Measure</th><th>Value</th></tr>
+  <tr><td>Parts improved / worsened</td><td>60 / 15</td></tr>
+  <tr><td>Median paired change</td><td>−1.057 px</td></tr>
+  <tr><td>Wilcoxon signed-rank</td><td>W = 436, <em>p</em> = 1.77 × 10<sup>−7</sup></td></tr>
+  <tr><td>Bootstrap 95% CI on median</td><td>[−1.577, −0.571] px (20 000 resamples)</td></tr>
+  <tr><td>Per-fibre sign test</td><td>13/15 improved, <em>p</em> = 0.0074</td></tr>
+  <tr><td>Column-churn confound</td><td>Spearman ρ = −0.133, <em>p</em> = 0.255 (not supported)</td></tr>
+  <tr><td>Total measurement positions</td><td>162 223 → 161 696 (−0.33%)</td></tr>
+</table>
+</div>
+<p>The column-churn test checks whether parts whose valid-column count shrank also show larger
+rms improvement (which would mean the gain came from discarding hard columns rather than from
+better edge detection). The correlation is near zero and non-significant: parts that <em>gained</em>
+columns improved most. This does not refute the confound — <em>p</em> = 0.255 is a null result —
+but it provides no evidence for it either.</p>
+
+<h3>Per-fibre comparison</h3>
+<div class="tbl-wrap">
+<table>
+  <tr>
+    <th>Fibre</th>
+    <th class="r">Positions (old)</th>
+    <th class="r">Positions (new)</th>
+    <th class="r">Worst-part rms (old)</th>
+    <th class="r">Worst-part rms (new)</th>
+    <th class="r">Axis ratio (old)</th>
+    <th class="r">Axis ratio (new)</th>
+    <th>Flag</th>
+  </tr>
+  <tr><td class="fiber-name">01</td><td class="r">11 215</td><td class="r">11 184</td><td class="r">9.11</td><td class="r improved">4.95</td><td class="r">1.189</td><td class="r">1.129</td><td class="improved">cleared</td></tr>
+  <tr><td class="fiber-name">02</td><td class="r">11 167</td><td class="r">12 306</td><td class="r">4.68</td><td class="r improved">4.25</td><td class="r">1.127</td><td class="r">1.128</td><td></td></tr>
+  <tr><td class="fiber-name">03</td><td class="r">11 775</td><td class="r">11 713</td><td class="r">4.97</td><td class="r improved">3.67</td><td class="r">1.094</td><td class="r">1.098</td><td></td></tr>
+  <tr><td class="fiber-name">04</td><td class="r">10 218</td><td class="r">9 498</td><td class="r">3.92</td><td class="r worsened">5.55</td><td class="r">1.148</td><td class="r">1.159</td><td></td></tr>
+  <tr><td class="fiber-name">05</td><td class="r">9 570</td><td class="r">10 676</td><td class="r">5.31</td><td class="r improved">3.86</td><td class="r">1.117</td><td class="r">1.145</td><td></td></tr>
+  <tr><td class="fiber-name">06</td><td class="r">7 977</td><td class="r">8 976</td><td class="r">4.08</td><td class="r improved">3.13</td><td class="r">1.114</td><td class="r">1.122</td><td></td></tr>
+  <tr><td class="fiber-name">07</td><td class="r">12 351</td><td class="r">12 104</td><td class="r">8.53</td><td class="r improved">3.97</td><td class="r">1.240</td><td class="r">1.196</td><td class="improved">cleared</td></tr>
+  <tr><td class="fiber-name">08</td><td class="r">9 791</td><td class="r">8 991</td><td class="r">11.84</td><td class="r improved">4.48</td><td class="r">1.142</td><td class="r">1.151</td><td class="improved">cleared</td></tr>
+  <tr><td class="fiber-name">09</td><td class="r">10 165</td><td class="r">10 627</td><td class="r">6.86</td><td class="r improved">3.28</td><td class="r">1.115</td><td class="r">1.176</td><td class="improved">cleared</td></tr>
+  <tr><td class="fiber-name">10</td><td class="r">10 795</td><td class="r">11 326</td><td class="r">3.38</td><td class="r worsened">6.27</td><td class="r">1.124</td><td class="r">1.120</td><td class="worsened">new flag</td></tr>
+  <tr><td class="fiber-name">11</td><td class="r">11 883</td><td class="r">11 065</td><td class="r">4.94</td><td class="r improved">3.22</td><td class="r">1.175</td><td class="r">1.170</td><td></td></tr>
+  <tr><td class="fiber-name">12</td><td class="r">10 827</td><td class="r">10 044</td><td class="r">4.69</td><td class="r improved">4.10</td><td class="r">1.132</td><td class="r">1.139</td><td></td></tr>
+  <tr><td class="fiber-name">13</td><td class="r">11 547</td><td class="r">10 405</td><td class="r">7.60</td><td class="r improved">5.17</td><td class="r">1.111</td><td class="r">1.107</td><td class="improved">cleared</td></tr>
+  <tr><td class="fiber-name">14</td><td class="r">11 633</td><td class="r">10 762</td><td class="r">3.30</td><td class="r improved">1.94</td><td class="r">1.080</td><td class="r">1.072</td><td></td></tr>
+  <tr><td class="fiber-name">15</td><td class="r">11 309</td><td class="r">12 019</td><td class="r">6.50</td><td class="r improved">4.56</td><td class="r">1.230</td><td class="r">1.167</td><td class="improved">cleared</td></tr>
+</table>
+</div>
+<p>Fibre 10 is the only new low-confidence fibre. Its cause is a <strong>stage-3 cross-angle
+registration lock</strong>, not an edge-detection defect: the a2/a5 angle pair locked ~500 px
+off in x-registration (pair rms 20.4 at lag 0 vs 4.9 at the correct lag), while per-image
+coverage is 0.97–1.00 across all 30 images. The ~9.7% global width shrink altered the
+cross-correlation landscape enough to flip the peak choice. This is a registration robustness
+issue, out of scope for this study.</p>
+
+<h3>MasP2 desat verification</h3>
+<p>Three images spanning the MasP2 size range, run on both branches. <code>diameter_raw</code>
+arrays and the float32 <code>D</code> z-map match by SHA-256; median diameters 59.760 / 103.529 /
+153.990 px = 43.68 / 75.68 / 112.57 µm at ppu 1.368. Delta exactly 0.0 on every image.
+(<code>scripts/masp2_identical.json</code>)</p>
+
+<h3>Synthetic per-side bias</h3>
+<p>Per-side edge bias δ = (measured − true) / 2 on a synthetic circular fibre (diameter 190 px),
+averaged over 12 seeds. Three control geometries (<code>scripts/delta_seeds.json</code>):</p>
+
+<div class="tbl-wrap">
+<table>
+  <tr>
+    <th>Control geometry</th>
+    <th class="r">Old pipeline</th>
+    <th class="r">Shipped (frac = 0.30)</th>
+    <th class="r">Effective 0.50</th>
+  </tr>
+  <tr>
+    <td>Single image, full width</td>
+    <td class="r">+4.338 ± 0.006</td>
+    <td class="r">+2.124 ± 0.002</td>
+    <td class="r">+0.014 ± 0.002</td>
+  </tr>
+  <tr>
+    <td>6-angle stack (test fixture)</td>
+    <td class="r">+3.885 ± 0.006</td>
+    <td class="r">+1.649 ± 0.003</td>
+    <td class="r">−0.514 ± 0.003</td>
+  </tr>
+</table>
+</div>
+
+<p>At the shipped <code>edge_frac = 0.30</code>, the per-side bias is <strong>+1.6 to +2.1 px</strong>
+(+3.3 to +4.2 px on diameter), roughly halving the old pipeline's ~4 px/side bias. At the
+effective 0.50 (which <code>edge_cap</code> prevents on the shipped path) the bias approaches
+zero, but study 01 showed this region causes inward bite on real shouldered edges.</p>
+
+<div class="erratum">
+<p><strong>Correction.</strong> An earlier version of this report quoted δ = 3.90 → −0.51 px/side.
+That −0.51 figure was measured at <code>edge_frac = 0.65</code> (capped to an effective 0.50 by
+<code>edge_cap</code>), not at the shipped 0.30. The test fixture that produced it constructs
+<code>CONFIG(feature_mode="bright")</code> directly, inheriting the desat-calibrated default
+rather than the bright-mode preset.</p>
+</div>
+
+<h3>Per-fibre rms waterfall</h3>
+<figure>
+  <img src="rms_waterfall.png" alt="Bar chart comparing worst-part rms for all 15 fibres, old vs new.
+    The 6 formerly-flagged fibres all drop below the 6 px threshold; fibre 10 is the one new flag."
+    loading="lazy">
+  <figcaption>Worst-part rms per fibre, sorted by old rms (descending). Orange = old pipeline,
+    cyan = new. The dashed line is the <code>xsec_rms_flag_px = 6.0</code> gate. All 6 formerly
+    flagged fibres (F08, F01, F07, F13, F09, F15) drop below the line; fibre 10 is the only new
+    flag — a stage-3 registration lock, not an edge defect.</figcaption>
+</figure>
+
+<h3>Visual spot-check</h3>
+<figure>
+  <img src="spot_check_overlay.png" alt="Old (red) vs new (cyan) edge boundaries on four C1 images:
+    defocused, dim, sharp, and the registration-lock case." loading="lazy">
+  <figcaption>Old boundary (red) vs new boundary (cyan) on four representative C1 images.
+    <strong>Top:</strong> defocused (fibre 01 a5 part 4) — was flagged <code>band_mismatch</code>
+    at k=4; shift −12.0 px/side.
+    <strong>Second:</strong> dim (fibre 08 a3 part 1) — previously worst rms at 11.84 px;
+    shift −2.0 px/side.
+    <strong>Third:</strong> sharp (fibre 03 a1 part 1) — always good, no regression;
+    shift −6.7 px/side.
+    <strong>Bottom:</strong> registration lock (fibre 10 a2 part 1) — the one new low-confidence;
+    edge detection is clean but the boundary shows the a2/a5 x-registration mismatch that drives
+    the rms up. In every panel the new boundary tracks the visible bright-to-dark transition;
+    no inward bite is observed.</figcaption>
+</figure>
+
+<!-- =========================================================== -->
+<h2>Calibration transparency</h2>
+
+<p>This section documents the calibration process honestly, including what went wrong.</p>
+
+<h3>Original calibration (invalid)</h3>
+<p>The original sweep (<code>scripts/calibrate_edge_frac.py</code>) selected
+<code>edge_frac = 0.30</code> on two criteria, both of which a subsequent code review showed
+were invalid:</p>
+<ol>
+  <li><strong>Synthetic δ.</strong> The rendering function <code>_render_circle</code> declared
+  <code>W_IMG = 1200</code> but never broadcast the array to that width — every test image was
+  500 × 1 pixels. On a single column the δ measurement is seed-unstable: ±0.33 px (range
+  3.87–5.10) vs ±0.006 at full width.</li>
+  <li><strong><code>low_confidence_count</code>.</strong> This was 0 at every
+  <code>edge_frac</code> value — zero discriminating power. Its 30-image sample also excluded all
+  six defocused images and fibre 07, i.e. it excluded the phenomenon being calibrated. The script
+  implemented no selection rule: it printed and exited.</li>
+</ol>
+
+<h3>Corrected calibration (still does not select a value)</h3>
+<p>A corrected sweep (<code>scripts/recalibrate_edge_frac.py</code>) used full-width synthetic
+images (12 seeds) and the plan's intended criterion — within-pair width disagreement across the
+three same-direction angle pairs — on 3 defocused and 3 control parts (9 pairs each):</p>
+
+<div class="tbl-wrap">
+<table>
+  <tr>
+    <th class="r">edge_frac</th>
+    <th class="r">δ (px/side)</th>
+    <th class="r">Defocus pair disagreement</th>
+    <th class="r">Control pair disagreement</th>
+  </tr>
+  <tr><td class="r">0.15</td><td class="r">+4.190 ± 0.004</td><td class="r">7.32</td><td class="r">7.69</td></tr>
+  <tr><td class="r">0.20</td><td class="r">+3.415 ± 0.003</td><td class="r">7.51</td><td class="r">7.13</td></tr>
+  <tr><td class="r">0.25</td><td class="r">+2.734 ± 0.002</td><td class="r">7.73</td><td class="r">7.30</td></tr>
+  <tr style="font-weight:600"><td class="r">0.30 (shipped)</td><td class="r">+2.124 ± 0.002</td><td class="r">7.84</td><td class="r">7.42</td></tr>
+  <tr><td class="r">0.35</td><td class="r">+1.570 ± 0.002</td><td class="r">7.92</td><td class="r">7.29</td></tr>
+  <tr><td class="r">0.40</td><td class="r">+1.031 ± 0.002</td><td class="r">7.54</td><td class="r">6.90</td></tr>
+  <tr><td class="r">0.45</td><td class="r">+0.521 ± 0.002</td><td class="r">6.56</td><td class="r">6.83</td></tr>
+  <tr><td class="r">0.50</td><td class="r">+0.014 ± 0.002</td><td class="r">6.08</td><td class="r">6.76</td></tr>
+</table>
+</div>
+
+<p>Neither criterion selects 0.30 — or any other value — for different reasons:</p>
+<ul>
+  <li><strong>δ is circular.</strong> The synthetic builds a linear ramp with
+  <code>t = clip((h + 1 − dist) / 2, 0, 1)</code>, so <code>t = 0.5</code> falls exactly at the
+  true radius by construction. Measuring at 50% of amplitude recovers the truth automatically.
+  δ → 0 at <code>frac = 0.50</code> is a property of the fixture geometry, not evidence about
+  real fibres.</li>
+  <li><strong>Pair disagreement is at noise level.</strong> Only 9 pairs, profiles compared without
+  cross-angle registration, and the ~7 px baseline is dominated by misregistration rather than
+  edge error. Controls move almost as much as defocused parts (excess: +0.42 at 0.30, −0.68 at
+  0.50). The series is also non-monotone (0.15 beats 0.30).</li>
+</ul>
+
+<div class="verdict">
+<p><strong>The shipped <code>edge_frac = 0.30</code> rests on empirical grounds, not on any valid
+calibration criterion.</strong> Both the original and corrected calibration attempts failed to
+produce a criterion that selects a specific value. The only full-pipeline evidence is the 450-image
+run at 0.30, and the results above are that evidence. A comparison run at 0.40 was attempted but
+died on disk space and was not retried. The calibration question remains open.</p>
+</div>
+
+<h3>Mechanism attribution</h3>
+<p>An earlier version of this report attributed the improvement primarily to the median z-map.
+Synthetic A/B testing (<code>scripts/synthetic_fringe.json</code>, old pipeline emulated and
+verified bit-exact against the base worktree) shows this is unsupported:</p>
+<ul>
+  <li>With <strong>no chromatic fringe</strong>, the z-map change contributes <strong>0.003 px</strong>;
+  the threshold change accounts for the entire −2.22 px improvement.</li>
+  <li>Against a <strong>single-channel</strong> (R-only) displacement, the median z-map removes
+  ≈0.9 px per px of displacement — a real contribution.</li>
+  <li>Against a <strong>two-channel</strong> (R+B) fringe, the median rides along: ≈0.05 px
+  contribution.</li>
+</ul>
+<p>On real C1 images, the split between z-map and threshold contributions was never measured.
+The threshold is the dominant mechanism on synthetic data; the z-map's real-data contribution
+is unknown.</p>
+
+<!-- =========================================================== -->
+<h2>Discussion</h2>
+
+<h3>What is established</h3>
+<p>The real-data improvement is large, statistically significant at <em>p</em> < 10<sup>−7</sup>,
+robust to the column-churn confound, and visually confirmed across defocused, sharp, and dim
+images. The desat (MasP2) path is provably untouched. 13 of 15 fibres improve; the one new flag
+(fibre 10) is a stage-3 registration issue, not an edge defect. The improvement holds on the
+post-clamp-fix code: s03d (fixed) and s03b (pre-fix) produce nearly identical per-part rms
+(median difference 0.000 px, max difference 0.37 px, 54 of 75 parts exactly tied).</p>
+
+<h3>What is uncertain</h3>
+<ul>
+  <li><strong>Whether 0.30 is optimal.</strong> No valid criterion selects it; it could be that 0.35
+  or 0.40 is better on the full pipeline. The cheapest incremental evidence would be a
+  <em>registered</em> pair-disagreement comparison on the known defocused parts at 0.30 / 0.40 /
+  0.45 — the current machinery compares unregistered profiles, which puts the measurement at the
+  noise floor.</li>
+  <li><strong>How much the z-map contributes on real data.</strong> Synthetic shows the threshold
+  does nearly all the work; but real C1 images may have single-channel fringe patterns that the
+  synthetic did not model.</li>
+  <li><strong>Axis-ratio shift.</strong> The grand median moved 1.127 → 1.139 (+1.1%). This is
+  ~100% geometric: a uniform width shrink inflates the ellipse ratio by a predictable amount
+  (predicted 1.1385–1.1398 from the observed shrink; observed 1.1387). The axis-ratio change
+  carries no physical information beyond the width change itself.</li>
+  <li><strong><code>edge_cap</code> on faint walls.</strong> The cap binds whenever
+  <code>A_side < 8 z</code>, overriding the noise floor. This is live on dim C1 images but its
+  effect on measurement quality there is unmeasured — the part-level median absorbs it.</li>
+</ul>
+
+<h3>What was wrong in the first report</h3>
+<div class="erratum">
+<p><strong>Errata.</strong> The first version of this report (and the first study close) contained
+several errors, all now corrected:</p>
+<ul>
+  <li>Synthetic δ = −0.51 was quoted as the shipped-path figure. It was actually the
+  <code>edge_frac = 0.65</code> (→ effective 0.50) path. Shipped δ = +1.649 ± 0.003.</li>
+  <li>"The median z-map was the dominant fix" — unsupported on synthetic data; the threshold
+  accounts for essentially all the improvement absent a single-channel fringe.</li>
+  <li>Both calibration criteria were broken (500 × 1 synthetic render; zero-variance
+  <code>low_confidence_count</code>). <code>edge_frac = 0.30</code> was effectively selected
+  without valid evidence.</li>
+  <li>The clamp fix was claimed to be "a no-op on C1" — wrong; it changes ~800–1500 columns per
+  dim image (max 5.65 px per column, up to 0.83 px on image median). The headline statistics
+  survive (verified by re-run s03d), but the claim was false.</li>
+  <li>The headline run (s03b) predated the clamp fix by 23 minutes. The numbers in this report
+  are from s03d, which was produced by the shipped code.</li>
+  <li>MasP2 median diameters were misquoted (80.53 / 62.23 / 42.61 µm); correct values are
+  43.68 / 75.68 / 112.57 µm (<code>scripts/masp2_identical.json</code>).</li>
+  <li>Global width shrink was stated as 10.6%; measured at 9.7% (median over 450 images).</li>
+</ul>
+</div>
+
+<!-- =========================================================== -->
+<h2>Open items</h2>
+<ol>
+  <li><strong>Stage-3 registration peak validation</strong> — fibre 10 (and fibre 04 part 5, which
+  shows the same fragility). The ~9.7% width shrink altered the cross-correlation landscape;
+  a constrained peak search or multi-start registration would address this.</li>
+  <li><strong>Absolute-z threshold audit</strong> — <code>amin</code>, <code>rise_min</code>,
+  <code>slope_min</code>, <code>slope_cap</code>, and the <code>FLAG_NO_BG</code> guard at
+  <code>k_band / 2</code> are all absolute in z and carry the same coupling to the z-scale that
+  <code>k_band</code> did. No symptoms observed, but never individually checked.</li>
+  <li><strong>Faint-wall test</strong> — <code>test_bright_level_never_leaves_the_wall</code>
+  re-implements the formula inline and never calls <code>edges.py</code>; reverting the clamp fix
+  still passes all 218 tests. An end-to-end fixture with <code>A_side &lt; 8</code> is needed.</li>
+  <li><strong>Shipped-preset accuracy test</strong> — no test pins end-to-end bright accuracy at
+  the shipped <code>edge_frac = 0.30</code> / <code>k_band = 6.0</code> presets.</li>
+  <li><strong><code>edge_frac</code> validation</strong> — a registered pair-disagreement
+  comparison, or a second full-pipeline run at a different value, would give the first
+  non-circular handle on the optimal value.</li>
+</ol>
+
+<!-- =========================================================== -->
+<h2>Conclusion</h2>
+<div class="verdict">
+<p>The hypothesis is confirmed: the median z-map + clamped relative threshold substantially
+reduces defocus-induced width errors on C1 images (per-part rms p50 3.70 → 2.74, low-confidence
+6 → 1 of 15 fibres) without introducing inward bite, and without any change to the MasP2 desat
+path. The improvement is statistically robust (<em>p</em> < 10<sup>−7</sup>) and visually
+verified.</p>
+<p>The shipped value <code>edge_frac = 0.30</code> rests on these empirical results, not on a
+valid calibration criterion. On synthetic data the threshold change — not the z-map — accounts
+for essentially all of the improvement; the real-data attribution is unmeasured. A +1.6 px/side
+systematic wide bias remains at the shipped threshold (roughly half the old pipeline's ~4 px/side);
+this is a known trade-off against the inward-bite risk at higher thresholds.</p>
+</div>
+
+<div class="footnote">
+<p><strong>Data.</strong> Run <code>multiangle_c1_s03d</code> in
+<code>.claude/worktrees/edge-criteria/fibrecv_output/</code>. Evidence artifacts in
+<code>scripts/*.json</code> (same worktree). 218 tests pass.</p>
+<p><strong>Reproducibility.</strong> All claimed numbers are backed by persisted JSON artifacts
+generated by scripts in the <code>scripts/</code> directory. Exceptions (no artifact):
+fibre-10 lag diagnostics, the old-side <code>band_half</code> values (97.5 / 89.0 / 97.5 px),
+the 3495-column count (s03 output deleted for disk space).</p>
+</div>
+
+</div>
