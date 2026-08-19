@@ -39,10 +39,27 @@ from .measure import measure_image
 
 DEFAULT_OUT = "./fibrecv_output"
 
+# Calibrated bright-mode defaults (study 03). The CONFIG dataclass defaults are
+# desat-calibrated (MasP2) and are wrong for bright-on-dark C1 images in two
+# coupled ways: ``edge_frac=0.65`` acts as a faint-wall cap under the desat
+# formula but is the PRIMARY relative threshold under the bright formula, and
+# ``k_band=4.0`` was calibrated against the max(R,G,B) z-scale -- the median
+# z-map has a smaller background MAD, so z inflates and defocus halo crosses 4.0,
+# ballooning the coarse band and raising false ``band_mismatch``. Applied when
+# ``--feature-mode bright`` is selected; any explicit flag still overrides.
+BRIGHT_DEFAULTS = {"edge_frac": 0.30, "k_band": 6.0}
+
 
 def build_config(args: argparse.Namespace) -> CONFIG:
-    """Override CONFIG defaults from CLI flags (only those explicitly set)."""
+    """Override CONFIG defaults from CLI flags (only those explicitly set).
+
+    Bright mode additionally starts from ``BRIGHT_DEFAULTS`` (calibrated in
+    study 03) rather than the desat-calibrated dataclass defaults; explicit
+    CLI flags are applied afterwards and always win.
+    """
     cfg = CONFIG()
+    if args.feature_mode == "bright":
+        cfg = replace(cfg, feature_mode="bright", **BRIGHT_DEFAULTS)
     overrides = {
         "feature_mode": args.feature_mode,
         "ppu": args.ppu,

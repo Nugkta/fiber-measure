@@ -1,0 +1,627 @@
+{
+  "4.0": {
+    "problem": [
+      {
+        "width_px": 140.0504608154297,
+        "band_half": 159.0,
+        "band_ratio": 0.44041025413657137,
+        "coverage": 0.9905362776025236,
+        "mismatch": true
+      },
+      {
+        "width_px": 136.6952362060547,
+        "band_half": 141.5,
+        "band_ratio": 0.48302203606379746,
+        "coverage": 1.0,
+        "mismatch": true
+      },
+      {
+        "width_px": 149.5111083984375,
+        "band_half": 216.75,
+        "band_ratio": 0.3448929836180796,
+        "coverage": 0.9278391167192429,
+        "mismatch": true
+      },
+      {
+        "width_px": 156.35787963867188,
+        "band_half": 166.5,
+        "band_ratio": 0.46954318209811374,
+        "coverage": 0.8576498422712934,
+        "mismatch": true
+      },
+      {
+        "width_px": 145.24879455566406,
+        "band_half": 222.5,
+        "band_ratio": 0.3264017855183462,
+        "coverage": 0.9511041009463722,
+        "mismatch": true
+      },
+      {
+        "width_px": 143.19949340820312,
+        "band_half": 147.5,
+        "band_ratio": 0.48542201155323095,
+        "coverage": 1.0,
+        "mismatch": true
+      }
+    ],
+    "control": [
+      {
+        "width_px": 137.9500274658203,
+        "band_half": 85.5,
+        "band_ratio": 0.8067253068176626,
+        "coverage": 0.9980283911671924,
+        "mismatch": false
+      },
+      {
+        "width_px": 142.128173828125,
+        "band_half": 94.0,
+        "band_ratio": 0.7560009246176862,
+        "coverage": 1.0,
+        "mismatch": false
+      },
+      {
+        "width_px": 139.85931396484375,
+        "band_half": 76.0,
+        "band_ratio": 0.9201270655581826,
+        "coverage": 0.9029968454258676,
+        "mismatch": false
+      },
+      {
+        "width_px": 155.89027404785156,
+        "band_half": 94.0,
+        "band_ratio": 0.8292035853609125,
+        "coverage": 0.9972397476340694,
+        "mismatch": false
+      },
+      {
+        "width_px": 184.05563354492188,
+        "band_half": 96.0,
+        "band_ratio": 0.9586230913798014,
+        "coverage": 1.0,
+        "mismatch": false
+      },
+      {
+        "width_px": 161.1930694580078,
+        "band_half": 100.0,
+        "band_ratio": 0.8059653472900391,
+        "coverage": 0.9996056782334385,
+        "mismatch": false
+      },
+      {
+        "width_px": 148.43508911132812,
+        "band_half": 81.5,
+        "band_ratio": 0.9106447184744056,
+        "coverage": 1.0,
+        "mismatch": false
+      },
+      {
+        "width_px": 140.0619659423828,
+        "band_half": 86.5,
+        "band_ratio": 0.8096067395513458,
+        "coverage": 1.0,
+        "mismatch": false
+      },
+      {
+        "width_px": 156.92686462402344,
+        "band_half": 86.5,
+        "band_ratio": 0.9070917030290372,
+        "coverage": 0.9972397476340694,
+        "mismatch": false
+      },
+      {
+        "width_px": 134.60354614257812,
+        "band_half": 80.5,
+        "band_ratio": 0.8360468704507958,
+        "coverage": 1.0,
+        "mismatch": false
+      },
+      {
+        "width_px": 147.62783813476562,
+        "band_half": 91.0,
+        "band_ratio": 0.8111419677734375,
+        "coverage": 0.9696372239747634,
+        "mismatch": false
+      }
+    ]
+  },
+  "5.0": {
+    "problem": [
+      {
+        "width_px": 140.13613891601562,
+        "band_half": 104.0,
+        "band_ratio": 0.673731437096229,
+        "coverage": 0.9913249211356467,
+        "mismatch": false
+      },
+      {
+        "width_px": 136.69076538085938,
+        "band_half": 96.5,
+        "band_ratio": 0.7082423076728465,
+        "coverage": 1.0,
+        "mismatch": false
+      },
+      {
+        "width_px": 149.45472717285156,
+        "band_half": 109.5,
+        "band_ratio": 0.6824416765883633,
+        "coverage": 0.9278391167192429,
+        "mismatch": false
+      },
+      {
+        "width_px": 156.36770629882812,
+        "band_half": 109.5,
+        "band_ratio": 0.7140077913188498,
+        "coverage": 0.8576498422712934,
+        "mismatch": false
+      },
+      {
+        "width_px": 145.26361083984375,
+        "band_half": 112.5,
+        "band_ratio": 0.6456160481770833,
+        "coverage": 0.9514984227129337,
+        "mismatch": false
+      },
+      {
+        "width_px": 143.20364379882812,
+        "band_half": 101.0,
+        "band_ratio": 0.7089289296971689,
+        "coverage": 1.0,
+        "mismatch": false
+      }
+    ],
+    "control": [
+      {
+        "width_px": 137.9446258544922,
+        "band_half": 80.0,
+        "band_ratio": 0.8621539115905762,
+        "coverage": 0.998422712933754,
+        "mismatch": false
+      },
+      {
+        "width_px": 142.1104278564453,
+        "band_half": 87.5,
+        "band_ratio": 0.8120595877511161,
+        "coverage": 1.0,
+        "mismatch": false
+      },
+      {
+        "width_px": 139.86032104492188,
+        "band_half": 74.0,
+        "band_ratio": 0.9450021692224451,
+        "coverage": 0.9029968454258676,
+        "mismatch": false
+      },
+      {
+        "width_px": 155.90089416503906,
+        "band_half": 89.5,
+        "band_ratio": 0.8709547160058048,
+        "coverage": 0.9972397476340694,
+        "mismatch": false
+      },
+      {
+        "width_px": 184.05262756347656,
+        "band_half": 94.0,
+        "band_ratio": 0.9790033381035987,
+        "coverage": 1.0,
+        "mismatch": false
+      },
+      {
+        "width_px": 161.20082092285156,
+        "band_half": 93.0,
+        "band_ratio": 0.8666710802303847,
+        "coverage": 0.9996056782334385,
+        "mismatch": false
+      },
+      {
+        "width_px": 148.43617248535156,
+        "band_half": 79.0,
+        "band_ratio": 0.93946944610982,
+        "coverage": 1.0,
+        "mismatch": false
+      },
+      {
+        "width_px": 140.02374267578125,
+        "band_half": 82.0,
+        "band_ratio": 0.8538033089986662,
+        "coverage": 1.0,
+        "mismatch": false
+      },
+      {
+        "width_px": 156.9801788330078,
+        "band_half": 83.5,
+        "band_ratio": 0.9400010708563342,
+        "coverage": 0.9968454258675079,
+        "mismatch": false
+      },
+      {
+        "width_px": 134.60202026367188,
+        "band_half": 77.0,
+        "band_ratio": 0.8740390926212459,
+        "coverage": 1.0,
+        "mismatch": false
+      },
+      {
+        "width_px": 147.6343536376953,
+        "band_half": 86.5,
+        "band_ratio": 0.8533777666918804,
+        "coverage": 0.9704258675078864,
+        "mismatch": false
+      }
+    ]
+  },
+  "6.0": {
+    "problem": [
+      {
+        "width_px": 140.0075225830078,
+        "band_half": 96.5,
+        "band_ratio": 0.7254275781502996,
+        "coverage": 0.9901419558359621,
+        "mismatch": false
+      },
+      {
+        "width_px": 136.69696044921875,
+        "band_half": 90.0,
+        "band_ratio": 0.7594275580512153,
+        "coverage": 1.0,
+        "mismatch": false
+      },
+      {
+        "width_px": 149.44342041015625,
+        "band_half": 99.5,
+        "band_ratio": 0.7509719618600816,
+        "coverage": 0.9278391167192429,
+        "mismatch": false
+      },
+      {
+        "width_px": 156.3785858154297,
+        "band_half": 102.0,
+        "band_ratio": 0.7665616951736749,
+        "coverage": 0.8576498422712934,
+        "mismatch": false
+      },
+      {
+        "width_px": 145.2928924560547,
+        "band_half": 103.0,
+        "band_ratio": 0.7053053031847315,
+        "coverage": 0.9511041009463722,
+        "mismatch": false
+      },
+      {
+        "width_px": 143.19715881347656,
+        "band_half": 95.0,
+        "band_ratio": 0.7536692569130345,
+        "coverage": 0.9996056782334385,
+        "mismatch": false
+      }
+    ],
+    "control": [
+      {
+        "width_px": 137.9455108642578,
+        "band_half": 78.0,
+        "band_ratio": 0.8842660952837039,
+        "coverage": 0.998422712933754,
+        "mismatch": false
+      },
+      {
+        "width_px": 142.13441467285156,
+        "band_half": 84.0,
+        "band_ratio": 0.8460381825764974,
+        "coverage": 1.0,
+        "mismatch": false
+      },
+      {
+        "width_px": 139.86044311523438,
+        "band_half": 72.5,
+        "band_ratio": 0.9645547801050647,
+        "coverage": 0.9029968454258676,
+        "mismatch": false
+      },
+      {
+        "width_px": 155.8982391357422,
+        "band_half": 87.0,
+        "band_ratio": 0.8959668915847252,
+        "coverage": 0.9972397476340694,
+        "mismatch": false
+      },
+      {
+        "width_px": 184.0532989501953,
+        "band_half": 93.0,
+        "band_ratio": 0.9895338653236307,
+        "coverage": 1.0,
+        "mismatch": false
+      },
+      {
+        "width_px": 161.20706176757812,
+        "band_half": 89.5,
+        "band_ratio": 0.9005981104333973,
+        "coverage": 0.9996056782334385,
+        "mismatch": false
+      },
+      {
+        "width_px": 148.43577575683594,
+        "band_half": 77.0,
+        "band_ratio": 0.9638686737456879,
+        "coverage": 1.0,
+        "mismatch": false
+      },
+      {
+        "width_px": 140.0584259033203,
+        "band_half": 79.0,
+        "band_ratio": 0.8864457335653184,
+        "coverage": 1.0,
+        "mismatch": false
+      },
+      {
+        "width_px": 156.95376586914062,
+        "band_half": 82.0,
+        "band_ratio": 0.9570351577386623,
+        "coverage": 0.9972397476340694,
+        "mismatch": false
+      },
+      {
+        "width_px": 134.60256958007812,
+        "band_half": 74.5,
+        "band_ratio": 0.9033729502018666,
+        "coverage": 1.0,
+        "mismatch": false
+      },
+      {
+        "width_px": 147.61990356445312,
+        "band_half": 83.0,
+        "band_ratio": 0.8892765274967056,
+        "coverage": 0.9700315457413249,
+        "mismatch": false
+      }
+    ]
+  },
+  "7.0": {
+    "problem": [
+      {
+        "width_px": 140.01571655273438,
+        "band_half": 90.0,
+        "band_ratio": 0.7778650919596354,
+        "coverage": 0.9901419558359621,
+        "mismatch": false
+      },
+      {
+        "width_px": 136.6915283203125,
+        "band_half": 85.0,
+        "band_ratio": 0.804067813648897,
+        "coverage": 1.0,
+        "mismatch": false
+      },
+      {
+        "width_px": 149.45945739746094,
+        "band_half": 92.0,
+        "band_ratio": 0.8122796597688094,
+        "coverage": 0.9278391167192429,
+        "mismatch": false
+      },
+      {
+        "width_px": 156.37686157226562,
+        "band_half": 96.0,
+        "band_ratio": 0.8144628206888834,
+        "coverage": 0.8576498422712934,
+        "mismatch": false
+      },
+      {
+        "width_px": 145.25697326660156,
+        "band_half": 95.5,
+        "band_ratio": 0.7605077134377045,
+        "coverage": 0.9511041009463722,
+        "mismatch": false
+      },
+      {
+        "width_px": 143.20266723632812,
+        "band_half": 91.0,
+        "band_ratio": 0.7868278419578468,
+        "coverage": 1.0,
+        "mismatch": false
+      }
+    ],
+    "control": [
+      {
+        "width_px": 137.958251953125,
+        "band_half": 76.0,
+        "band_ratio": 0.9076200786389803,
+        "coverage": 0.9988170347003155,
+        "mismatch": false
+      },
+      {
+        "width_px": 142.12330627441406,
+        "band_half": 80.5,
+        "band_ratio": 0.8827534551205842,
+        "coverage": 1.0,
+        "mismatch": false
+      },
+      {
+        "width_px": 139.86044311523438,
+        "band_half": 71.5,
+        "band_ratio": 0.9780450567498907,
+        "coverage": 0.9029968454258676,
+        "mismatch": false
+      },
+      {
+        "width_px": 155.88525390625,
+        "band_half": 84.0,
+        "band_ratio": 0.9278884161086309,
+        "coverage": 0.9972397476340694,
+        "mismatch": false
+      },
+      {
+        "width_px": 184.05575561523438,
+        "band_half": 91.5,
+        "band_ratio": 1.005769156367401,
+        "coverage": 1.0,
+        "mismatch": false
+      },
+      {
+        "width_px": 161.19732666015625,
+        "band_half": 87.0,
+        "band_ratio": 0.9264214175871048,
+        "coverage": 0.9996056782334385,
+        "mismatch": false
+      },
+      {
+        "width_px": 148.434326171875,
+        "band_half": 75.5,
+        "band_ratio": 0.9830087825951986,
+        "coverage": 1.0,
+        "mismatch": false
+      },
+      {
+        "width_px": 140.07167053222656,
+        "band_half": 76.0,
+        "band_ratio": 0.9215241482383326,
+        "coverage": 1.0,
+        "mismatch": false
+      },
+      {
+        "width_px": 157.0027618408203,
+        "band_half": 80.0,
+        "band_ratio": 0.981267261505127,
+        "coverage": 0.9972397476340694,
+        "mismatch": false
+      },
+      {
+        "width_px": 134.5995635986328,
+        "band_half": 73.0,
+        "band_ratio": 0.9219148191687179,
+        "coverage": 1.0,
+        "mismatch": false
+      },
+      {
+        "width_px": 147.60848999023438,
+        "band_half": 80.0,
+        "band_ratio": 0.9225530624389648,
+        "coverage": 0.9696372239747634,
+        "mismatch": false
+      }
+    ]
+  },
+  "8.0": {
+    "problem": [
+      {
+        "width_px": 140.08815002441406,
+        "band_half": 88.5,
+        "band_ratio": 0.7914584747142037,
+        "coverage": 0.9909305993690851,
+        "mismatch": false
+      },
+      {
+        "width_px": 136.69451904296875,
+        "band_half": 83.5,
+        "band_ratio": 0.8185300541495135,
+        "coverage": 1.0,
+        "mismatch": false
+      },
+      {
+        "width_px": 149.4542236328125,
+        "band_half": 91.0,
+        "band_ratio": 0.8211770529275412,
+        "coverage": 0.9278391167192429,
+        "mismatch": false
+      },
+      {
+        "width_px": 156.38616943359375,
+        "band_half": 95.5,
+        "band_ratio": 0.818775756196826,
+        "coverage": 0.8576498422712934,
+        "mismatch": false
+      },
+      {
+        "width_px": 145.24928283691406,
+        "band_half": 92.5,
+        "band_ratio": 0.7851312585779139,
+        "coverage": 0.9511041009463722,
+        "mismatch": false
+      },
+      {
+        "width_px": 143.19830322265625,
+        "band_half": 89.5,
+        "band_ratio": 0.7999905207969623,
+        "coverage": 1.0,
+        "mismatch": false
+      }
+    ],
+    "control": [
+      {
+        "width_px": 137.96083068847656,
+        "band_half": 75.0,
+        "band_ratio": 0.9197388712565104,
+        "coverage": 0.9988170347003155,
+        "mismatch": false
+      },
+      {
+        "width_px": 142.1213836669922,
+        "band_half": 78.5,
+        "band_ratio": 0.905231743101861,
+        "coverage": 1.0,
+        "mismatch": false
+      },
+      {
+        "width_px": 139.86053466796875,
+        "band_half": 70.0,
+        "band_ratio": 0.9990038190569196,
+        "coverage": 0.9029968454258676,
+        "mismatch": false
+      },
+      {
+        "width_px": 155.87716674804688,
+        "band_half": 82.0,
+        "band_ratio": 0.9504705289515053,
+        "coverage": 0.9972397476340694,
+        "mismatch": false
+      },
+      {
+        "width_px": 184.0609588623047,
+        "band_half": 91.0,
+        "band_ratio": 1.011323949792883,
+        "coverage": 1.0,
+        "mismatch": false
+      },
+      {
+        "width_px": 161.2012939453125,
+        "band_half": 86.0,
+        "band_ratio": 0.9372168252634447,
+        "coverage": 0.999211356466877,
+        "mismatch": false
+      },
+      {
+        "width_px": 148.435791015625,
+        "band_half": 74.5,
+        "band_ratio": 0.9962133625209731,
+        "coverage": 1.0,
+        "mismatch": false
+      },
+      {
+        "width_px": 140.02728271484375,
+        "band_half": 74.0,
+        "band_ratio": 0.9461302886138091,
+        "coverage": 1.0,
+        "mismatch": false
+      },
+      {
+        "width_px": 156.97915649414062,
+        "band_half": 79.0,
+        "band_ratio": 0.9935389651527887,
+        "coverage": 0.9976340694006309,
+        "mismatch": false
+      },
+      {
+        "width_px": 134.59962463378906,
+        "band_half": 71.5,
+        "band_ratio": 0.9412561163202032,
+        "coverage": 1.0,
+        "mismatch": false
+      },
+      {
+        "width_px": 147.602783203125,
+        "band_half": 78.5,
+        "band_ratio": 0.9401451159434714,
+        "coverage": 0.9696372239747634,
+        "mismatch": false
+      }
+    ]
+  }
+}

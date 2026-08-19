@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import argparse
 import math
 
 import numpy as np
@@ -114,3 +115,48 @@ def test_bright_fibre_has_no_desat_signal():
     rgb = _bright_fibre()
     mr = compute_measurement(rgb, CONFIG(), "synthetic")
     assert mr.meta["coverage"] < 0.2
+
+
+# --- CLI mode presets (study 03) -------------------------------------------
+
+def _args(**kw):
+    """Namespace with every build_config flag None except those given."""
+    from fibrecv.run_measure import build_config
+    fields = ["feature_mode", "ppu", "edge_z", "edge_frac", "edge_cap", "k_band",
+              "min_width", "sigma_y", "wcol", "guard", "amin", "reject_dev",
+              "margin", "min_coverage", "max_shift", "slope_min", "slope_rel",
+              "rise_min"]
+    ns = argparse.Namespace(**{f: None for f in fields})
+    for k, v in kw.items():
+        setattr(ns, k, v)
+    return build_config(ns)
+
+
+def test_desat_cli_keeps_dataclass_defaults():
+    """No --feature-mode: the desat-calibrated CONFIG defaults are untouched."""
+    cfg = _args()
+    base = CONFIG()
+    assert cfg.feature_mode == "desat"
+    assert cfg.edge_frac == base.edge_frac == 0.65
+    assert cfg.k_band == base.k_band == 4.0
+
+
+def test_bright_cli_applies_calibrated_presets():
+    """--feature-mode bright swaps in the study-03 calibrated knobs.
+
+    Both are load-bearing: edge_frac is the PRIMARY relative threshold under
+    the bright formula (not a faint-wall cap), and k_band must rise because the
+    median z-map inflates z-scores -- at 4.0 the defocus halo balloons the
+    coarse band and raises false band_mismatch.
+    """
+    cfg = _args(feature_mode="bright")
+    assert cfg.feature_mode == "bright"
+    assert cfg.edge_frac == 0.30
+    assert cfg.k_band == 6.0
+
+
+def test_explicit_flags_override_bright_presets():
+    """An explicit flag always wins over the mode preset."""
+    cfg = _args(feature_mode="bright", edge_frac=0.42, k_band=9.0)
+    assert cfg.edge_frac == 0.42
+    assert cfg.k_band == 9.0
