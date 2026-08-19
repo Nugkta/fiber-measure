@@ -43,10 +43,10 @@ Bright-mode presets live in `run_measure.py`:
 ```
 BRIGHT_DEFAULTS = {"edge_frac": 0.30, "k_band": 6.0}
 ```
-applied in `build_config` when `--feature-mode bright` is given, before explicit flag overrides.
+applied in `build_config` when `--feature-mode bright` is given, before explicit flag overrides. The GUI (`gui_app.py`) exposes the same presets through a sidebar `Image mode` selectbox: applying a mode switch starts from that mode's calibrated defaults (bright: `BRIGHT_DEFAULTS`; desat: dataclass) and resets the visible `edge_frac` widget accordingly, while non-coupled knobs survive.
 
 ## Caveats
-- **The presets are CLI-only.** Code that constructs `CONFIG(feature_mode="bright")` directly (tests, notebooks, any future GUI bright mode) gets the desat-calibrated `edge_frac=0.65` and `k_band=4.0`, which are both wrong for bright images — `k_band=4.0` in particular reintroduces the false `band_mismatch` on defocused images. Set both explicitly in that case.
+- **The presets apply only through the two front ends (CLI `build_config`, GUI mode selector).** Code that constructs `CONFIG(feature_mode="bright")` directly (tests, notebooks, scripts) gets the desat-calibrated `edge_frac=0.65` and `k_band=4.0`, which are both wrong for bright images — `k_band=4.0` in particular reintroduces the false `band_mismatch` on defocused images. Set both explicitly in that case.
 - **`edge_cap` is not inert.** At the shipped `edge_frac=0.30`, the cap binds whenever `A_side < edge_z/edge_cap = 8 z`. On dim C1 images this affects ~800–1500 of ~2500 columns per image, shifting medians up to ~0.83 px. The cap overrides the `edge_z` noise floor on these faint walls — the crossing is guaranteed to exist, but the measurement sits at a sub-noise level. A follow-up could flag such columns rather than silently measuring them.
 - **Other absolute-z thresholds were not individually re-swept.** `amin=3.0`, `rise_min=2.0`, `slope_min`, `slope_cap` are all absolute in z units and carry the same coupling to the z-scale that `k_band` did. They showed no symptoms across 450 C1 images, but a future z-map change should re-check them as a group.
 - **`k_band` raise moves the NO_BG guard.** The `FLAG_NO_BG` threshold at `edges.py:282` is `cfg.k_band / 2.0`, so raising `k_band` from 4.0 to 6.0 moved it from 2.0 to 3.0 z in bright mode. The incidence change was never measured.

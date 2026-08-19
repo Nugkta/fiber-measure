@@ -141,3 +141,45 @@ def test_anomaly_flags_surface_in_gui(anomaly_folder: Path):
     captions = " | ".join(str(c.value) for c in at.caption)
     assert "QC-dropped" in captions
     assert "test 1_1_2" in captions and "anomaly" in captions
+
+
+def test_mode_switch_applies_calibrated_defaults():
+    """Switching feature_mode through the real widget path re-applies that
+    mode's calibrated edge_frac/k_band (bright: BRIGHT_DEFAULTS 0.30/6.0,
+    desat: dataclass 0.65/4.0) while non-coupled user tuning survives."""
+    at = AppTest.from_file(APP, default_timeout=60).run()
+    assert not at.exception
+
+    cfg = at.session_state["cfg_dict"]
+    assert cfg["feature_mode"] == "desat"
+    assert cfg["edge_frac"] == pytest.approx(0.65)
+    assert cfg["k_band"] == pytest.approx(4.0)
+
+    # tune a non-coupled knob, then switch to bright and Apply
+    edge_z = next(s for s in at.sidebar.slider if s.key and "edge_z" in s.key)
+    edge_z.set_value(5.0)
+    mode_sb = next(sb for sb in at.sidebar.selectbox
+                   if sb.key and "feature_mode" in sb.key)
+    mode_sb.set_value("bright")
+    next(b for b in at.sidebar.button if b.label == "Apply").click()
+    at.run()
+    assert not at.exception
+    cfg = at.session_state["cfg_dict"]
+    assert cfg["feature_mode"] == "bright"
+    assert cfg["edge_frac"] == pytest.approx(0.30)  # BRIGHT_DEFAULTS
+    assert cfg["k_band"] == pytest.approx(6.0)      # hidden knob rides along
+    assert cfg["edge_z"] == pytest.approx(5.0)      # user tuning survives
+
+    # switch back: desat calibrated defaults return (widgets re-keyed by the
+    # form_version bump, so re-fetch them)
+    mode_sb = next(sb for sb in at.sidebar.selectbox
+                   if sb.key and "feature_mode" in sb.key)
+    mode_sb.set_value("desat")
+    next(b for b in at.sidebar.button if b.label == "Apply").click()
+    at.run()
+    assert not at.exception
+    cfg = at.session_state["cfg_dict"]
+    assert cfg["feature_mode"] == "desat"
+    assert cfg["edge_frac"] == pytest.approx(0.65)
+    assert cfg["k_band"] == pytest.approx(4.0)
+    assert cfg["edge_z"] == pytest.approx(5.0)

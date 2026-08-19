@@ -36,6 +36,16 @@ Started: 2026-08-19
    partial 0.40 output.
 7. **Final audit** (independent agent) — found that the headline run predates the clamp fix
    (below). Re-ran the shipped config on the fixed code → `fibrecv_output/multiangle_c1_s03d`.
+8. **GUI image-mode selector** (`src/fibrecv/gui_app.py`) — sidebar `Image mode` selectbox
+   (desat | bright) at the top of the parameter form. On Apply, bright mode starts from
+   `run_measure.BRIGHT_DEFAULTS` (so the hidden `k_band=6.0` rides along); a mode *switch*
+   additionally resets the visible `edge_frac` widget to the new mode's calibrated default
+   (bright 0.30 / desat 0.65) instead of keeping the stale value, while non-coupled knobs
+   (e.g. a tuned `edge_z`) survive. Header chip now shows the active mode. Updated the
+   `edge_z`/`edge_frac` tooltips to describe both modes. New AppTest
+   `test_mode_switch_applies_calibrated_defaults` drives the real widget path both ways.
+   Report gained an "Appendix — parameter comparison" table (desat vs bright settings + both
+   threshold formulas). Suite: **219 passed**.
 
 **What I observed**
 

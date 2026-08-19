@@ -694,6 +694,74 @@ systematic wide bias remains at the shipped threshold (roughly half the old pipe
 this is a known trade-off against the inward-bite risk at higher thresholds.</p>
 </div>
 
+<!-- =========================================================== -->
+<h2>Appendix — parameter comparison</h2>
+<p>Shipped defaults for the two feature modes. Parameters not listed are identical between modes.</p>
+<div class="table-wrap">
+<table>
+<thead>
+<tr>
+  <th>Parameter</th>
+  <th>Desat (MasP2)</th>
+  <th>Bright (C1)</th>
+  <th>What it controls</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><code>feature_mode</code></td>
+  <td><code>"desat"</code></td>
+  <td><code>"bright"</code></td>
+  <td>Which z-map to compute</td>
+</tr>
+<tr>
+  <td>z-map formula</td>
+  <td>HSV desaturation</td>
+  <td>median(R, G, B)</td>
+  <td>How each pixel's brightness is measured</td>
+</tr>
+<tr>
+  <td><code>k_band</code></td>
+  <td>4.0</td>
+  <td><strong>6.0</strong></td>
+  <td>Coarse band mask threshold (z units). Raised for bright because the median z-map inflates z-scores.</td>
+</tr>
+<tr>
+  <td><code>edge_frac</code></td>
+  <td>0.65</td>
+  <td><strong>0.30</strong></td>
+  <td>Relative threshold — fraction of wall amplitude where the boundary is placed</td>
+</tr>
+<tr>
+  <td><code>edge_cap</code></td>
+  <td>0.50 (unused)</td>
+  <td><strong>0.50</strong></td>
+  <td>Upper clamp on the relative threshold. Prevents convergence toward 50% (inward bite). Only active in bright mode formula.</td>
+</tr>
+<tr>
+  <td><code>edge_z</code></td>
+  <td>4.0 (primary knob)</td>
+  <td>4.0 (noise floor)</td>
+  <td>Absolute threshold (z units). In desat mode it's the main knob; in bright mode it's the minimum to protect faint walls.</td>
+</tr>
+<tr class="stripe">
+  <td colspan="4" style="font-weight:600; padding-top:0.8em;">Threshold formula</td>
+</tr>
+<tr>
+  <td>Desat</td>
+  <td colspan="3"><code>level = base_val + min(edge_z, edge_frac × A)</code> — edge_z is primary, edge_frac caps for faint walls</td>
+</tr>
+<tr>
+  <td>Bright</td>
+  <td colspan="3"><code>level = base_val + min(edge_cap × A, max(edge_z, edge_frac × A))</code> — edge_frac is primary, edge_z is floor, edge_cap is ceiling</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p class="caption">All other parameters (wall finding, QC, registration, smoothing) are shared between modes.
+<code>BRIGHT_DEFAULTS</code> in <code>run_measure.py</code> applies the bright overrides automatically
+when <code>--feature-mode bright</code> is selected; explicit CLI flags always take precedence.</p>
+
 <div class="footnote">
 <p><strong>Data.</strong> Run <code>multiangle_c1_s03d</code> in
 <code>.claude/worktrees/edge-criteria/fibrecv_output/</code>. Evidence artifacts in

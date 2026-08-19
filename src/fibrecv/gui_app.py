@@ -17,11 +17,14 @@ Inputs
 - Images from a local folder OR any number of uploaded files; both are
   auto-grouped via ``parse_name``'s trailing-numbers rule, with unparseable
   names collected in an "ungrouped" bucket.
-- The three boundary knobs (``edge_z``/``edge_frac``/``wcol``), the ``ppu``
-  calibration, and the anomaly-flag thresholds (``jump_thresh_px``/``gap_frac``/
-  ``step_frac``/``rep_dev_frac``) plus the ``anomaly_exclude`` checkbox, edited
-  in a sidebar form and applied on demand; all other ``CONFIG`` fields stay at
-  the validated defaults.
+- The image-mode selector (``feature_mode``: desat | bright — switching modes
+  re-applies that mode's calibrated ``edge_frac``/``k_band`` defaults, bright
+  via ``run_measure.BRIGHT_DEFAULTS``), the three boundary knobs
+  (``edge_z``/``edge_frac``/``wcol``), the ``ppu`` calibration, and the
+  anomaly-flag thresholds (``jump_thresh_px``/``gap_frac``/``step_frac``/
+  ``rep_dev_frac``) plus the ``anomaly_exclude`` checkbox, edited in a sidebar
+  form and applied on demand; all other ``CONFIG`` fields stay at the
+  validated defaults.
 - An output-folder path for export/batch.
 
 Output
@@ -102,7 +105,7 @@ from fibrecv.manual_edit import (  # noqa: E402
 from fibrecv.measure import write_measurement  # noqa: E402
 from fibrecv.overlay import GREY, WHITE, mark_anchors, render_overlay  # noqa: E402
 from fibrecv.register import register_sample  # noqa: E402
-from fibrecv.run_measure import _lib_versions, _worker  # noqa: E402
+from fibrecv.run_measure import BRIGHT_DEFAULTS, _lib_versions, _worker  # noqa: E402
 from fibrecv.tensile import (  # noqa: E402
     build_matrix, compute_tensile, discover_tensile, discover_tensile_files,
     read_trace)
@@ -117,18 +120,21 @@ DEFAULTS = CONFIG()  # never mutated; the source of widget defaults + reset targ
 # text only. ---
 PARAM_SPECS: list[tuple] = [
     ("edge_z", "Boundary tightness (edge_z)", "slider",
-     "Where on the fibre wall the boundary line is drawn (the main knob): "
-     "higher sits further inside the fibre (thinner reading), lower sits "
-     "further outside (thicker reading). If the line cuts into the fibre, "
-     "lower it; if it sits in the shadow outside the fibre, raise it. "
-     "Recommended 3-5, default 4.0.",
+     "Where on the fibre wall the boundary line is drawn. In desat mode this "
+     "is the main knob: higher sits further inside the fibre (thinner "
+     "reading), lower sits further outside (thicker reading). If the line "
+     "cuts into the fibre, lower it; if it sits in the shadow outside the "
+     "fibre, raise it. Recommended 3-5, default 4.0. In bright mode it is "
+     "only the noise floor under edge_frac — leave it at 4.0 there.",
      0.5, 1.0, 12.0, "%.1f"),
-    ("edge_frac", "Faint-fibre guard (edge_frac)", "float",
-     "Protection for faint fibres: caps the crossing level at edge_frac of a "
-     "weak wall's own height, so the line stays on the wall instead of "
-     "drifting outward when the wall never reaches edge_z above background. "
-     "It only kicks in when the wall is weaker than edge_z. Leave at 0.65 "
-     "unless a very faint fibre loses its boundary — then lower it slightly.",
+    ("edge_frac", "Relative threshold (edge_frac)", "float",
+     "Fraction of the wall's own height where the boundary is placed. "
+     "Bright mode: this is the main knob — the line sits where the wall "
+     "reaches edge_frac of its full height (calibrated 0.30; higher = "
+     "thinner reading). Desat mode: only a faint-fibre guard — it caps the "
+     "crossing level for walls too weak to reach edge_z above background; "
+     "leave at 0.65 unless a very faint fibre loses its boundary. Switching "
+     "the image mode resets this to that mode's calibrated default.",
      0.05, 0.0, 1.0, "%.2f"),
     ("wcol", "Smoothing width (wcol)", "int",
      "Horizontal smoothing width in pixels. If the boundary line is jittery "
@@ -176,6 +182,14 @@ PARAM_SPECS: list[tuple] = [
 
 # names of int-typed visible fields (so widgets return int, not float)
 _INT_FIELDS = {name for (name, label, kind, *_rest) in PARAM_SPECS if kind == "int"}
+
+# feature_mode selector: internal value -> display label. Bright mode starts
+# from the study-03 calibrated BRIGHT_DEFAULTS (edge_frac 0.30 / k_band 6.0),
+# mirroring run_measure.build_config; desat keeps the dataclass defaults.
+_MODE_LABELS: dict[str, str] = {
+    "desat": "Pale fibre on saturated background (desat)",
+    "bright": "Bright fibre on dark background (bright)",
+}
 
 
 # --------------------------------------------------------------------------- #
@@ -766,6 +780,22 @@ def _param_form() -> None:
         st.markdown("**Parameters** — edit, then click **Apply** to re-render.")
         new_vals: dict = {}
 
+        mode_options = list(_MODE_LABELS)
+        cur_mode = applied.get("feature_mode", "desat")
+        new_vals["feature_mode"] = st.selectbox(
+            "Image mode",
+            mode_options,
+            index=(mode_options.index(cur_mode)
+                   if cur_mode in mode_options else 0),
+            format_func=lambda m: _MODE_LABELS[m],
+            help="Which feature map the detector runs on. desat: HSV "
+                 "desaturation z-map (MasP2 look — pale fibre on a saturated "
+                 "background). bright: median-RGB brightness z-map (C1 look — "
+                 "bright fibre on a dark background). Applying a mode switch "
+                 "re-applies that mode's calibrated defaults for edge_frac "
+                 "and k_band (bright: 0.30 / 6.0, desat: 0.65 / 4.0).",
+            key=f"p_feature_mode_v{ver}")
+
         def _render_spec(spec: tuple) -> None:
             name, label, kind, help_txt, step, lo, hi, fmt = spec
             key = f"p_{name}_v{ver}"
@@ -808,9 +838,21 @@ def _param_form() -> None:
         st.session_state.form_version += 1
         st.rerun()
     if apply:
-        # merge: the three knobs override a full defaults dict, so hidden
-        # fields always carry the validated values
-        st.session_state.cfg_dict = {**DEFAULTS.as_dict(), **new_vals}
+        # merge: the visible knobs override a full defaults dict, so hidden
+        # fields always carry the validated values. Bright mode starts from
+        # BRIGHT_DEFAULTS (study 03) so the hidden k_band rides along,
+        # mirroring run_measure.build_config.
+        mode = new_vals.get("feature_mode", "desat")
+        base = DEFAULTS.as_dict()
+        if mode == "bright":
+            base.update(BRIGHT_DEFAULTS)
+        if mode != applied.get("feature_mode", "desat"):
+            # mode switch: the mode-coupled visible knob jumps to the new
+            # mode's calibrated default rather than keeping the stale widget
+            # value; the version bump refreshes the widgets to show it
+            new_vals.pop("edge_frac", None)
+            st.session_state.form_version += 1
+        st.session_state.cfg_dict = {**base, **new_vals}
         st.rerun()  # re-run top-to-bottom so reps recompute with the new params
 
 
@@ -1181,7 +1223,8 @@ def _inject_css() -> None:
     st.markdown(_CSS, unsafe_allow_html=True)
 
 
-def _render_header(group_label: str | None, n_reps: int, edge_z: float) -> None:
+def _render_header(group_label: str | None, n_reps: int, edge_z: float,
+                   feature_mode: str = "desat") -> None:
     """Slim header + state chip, replacing ``st.title``/``st.caption``.
 
     Must run after the sidebar builders (``_load_reps`` etc.) since the chip
@@ -1197,9 +1240,10 @@ def _render_header(group_label: str | None, n_reps: int, edge_z: float) -> None:
     else:
         reps_txt = f"{n_reps} replicate" + ("" if n_reps == 1 else "s")
         edge_z_txt = _fmt(edge_z, "one_dp")
-        chip = (f"group {group_label} · {reps_txt} · edge_z {edge_z_txt}"
+        tail = f"{feature_mode} · edge_z {edge_z_txt}"
+        chip = (f"group {group_label} · {reps_txt} · {tail}"
                 if group_label else
-                f"{reps_txt} (ungrouped) · edge_z {edge_z_txt}")
+                f"{reps_txt} (ungrouped) · {tail}")
     st.markdown(
         '<div class="fcv-header">'
         '<h1>fibrecv — fibre diameter detection</h1>'
@@ -1853,7 +1897,7 @@ def main() -> None:
 
     # header renders after the sidebar builders since its state chip needs
     # the group/replicate state they just produced
-    _render_header(group_label, len(reps), cfg.edge_z)
+    _render_header(group_label, len(reps), cfg.edge_z, cfg.feature_mode)
 
     # tensile-specific config: the diameter knobs stay as tuned; only the
     # strain scale and modulus-fit width come from the tensile controls

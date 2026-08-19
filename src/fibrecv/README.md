@@ -77,6 +77,8 @@ Per-image detection pipeline (features → band → edges → qc) driven by
   batch/export over the same `compute`/`register`/`tensile` core, plus the
   "clean lab" visual layer (`_CSS`/`_inject_css`, header+chip, four numbered
   card sections with a jump menu, `_fmt`, `_styled_fig`) — see
-  `docs/features/02_gui-redesign.md`.
+  `docs/features/02_gui-redesign.md`. Sidebar image-mode selector
+  (desat | bright); a mode switch re-applies that mode's calibrated
+  `edge_frac`/`k_band` defaults (bright via `run_measure.BRIGHT_DEFAULTS`).
 - `gui_launch.py` — current — `fibrecv-gui` console-script entry point; a
   thin subprocess wrapper around `streamlit run gui_app.py`.
