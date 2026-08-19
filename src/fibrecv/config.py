@@ -77,8 +77,10 @@ class CONFIG:
     #   that prevents convergence on 50% (inward bite from study 01).
     edge_z: float = 4.0        # absolute floor (z above wall-local bg); in bright
     #                            mode this is a minimum, in desat mode the primary knob
-    edge_frac: float = 0.65    # relative threshold: fraction of wall amplitude A
-    #                            (calibrate for bright mode; desat uses it as a cap)
+    edge_frac: float = 0.65    # relative threshold: fraction of wall amplitude A;
+    #                            bright mode: calibrated 0.30 (study 03, delta=2.19 px,
+    #                            0 low-confidence on C1 30-sample sweep);
+    #                            desat mode: legacy 0.65 cap for faint walls
     edge_cap: float = 0.50     # upper clamp on relative threshold (bright mode only);
     #                            prevents inward-bite from erf-midpoint convergence
     guard: int = 12            # px just outside the wall for local bg + recovery checks

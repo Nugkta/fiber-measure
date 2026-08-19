@@ -1,0 +1,79 @@
+[
+  {
+    "edge_frac": 0.15,
+    "delta_px": 4.391,
+    "in_band": false,
+    "n": 30,
+    "median_width_px": 158.9553680419922,
+    "std_width_px": 16.40907098054539,
+    "mean_coverage": 0.9978312302839117,
+    "low_confidence_count": 0,
+    "width_iqr_px": 23.711410522460938
+  },
+  {
+    "edge_frac": 0.2,
+    "delta_px": 3.548,
+    "in_band": true,
+    "n": 30,
+    "median_width_px": 155.04061889648438,
+    "std_width_px": 16.12093878225325,
+    "mean_coverage": 0.9978575184016825,
+    "low_confidence_count": 0,
+    "width_iqr_px": 22.44271469116211
+  },
+  {
+    "edge_frac": 0.25,
+    "delta_px": 2.824,
+    "in_band": true,
+    "n": 30,
+    "median_width_px": 152.04570770263672,
+    "std_width_px": 16.034679248692143,
+    "mean_coverage": 0.9977917981072556,
+    "low_confidence_count": 0,
+    "width_iqr_px": 20.432430267333984
+  },
+  {
+    "edge_frac": 0.3,
+    "delta_px": 2.191,
+    "in_band": true,
+    "n": 30,
+    "median_width_px": 149.45220947265625,
+    "std_width_px": 15.951505855158574,
+    "mean_coverage": 0.9973186119873818,
+    "low_confidence_count": 0,
+    "width_iqr_px": 19.570507049560547
+  },
+  {
+    "edge_frac": 0.35,
+    "delta_px": 1.609,
+    "in_band": true,
+    "n": 30,
+    "median_width_px": 147.07596588134766,
+    "std_width_px": 15.808735050322362,
+    "mean_coverage": 0.9969768664563616,
+    "low_confidence_count": 0,
+    "width_iqr_px": 18.85279083251953
+  },
+  {
+    "edge_frac": 0.4,
+    "delta_px": 1.049,
+    "in_band": true,
+    "n": 30,
+    "median_width_px": 144.8578872680664,
+    "std_width_px": 15.672392730416956,
+    "mean_coverage": 0.9970294426919033,
+    "low_confidence_count": 0,
+    "width_iqr_px": 18.39429473876953
+  },
+  {
+    "edge_frac": 0.45,
+    "delta_px": 0.52,
+    "in_band": true,
+    "n": 30,
+    "median_width_px": 142.7845001220703,
+    "std_width_px": 15.584047197458437,
+    "mean_coverage": 0.9970688748685593,
+    "low_confidence_count": 0,
+    "width_iqr_px": 17.797779083251953
+  }
+]
