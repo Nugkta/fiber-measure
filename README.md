@@ -65,8 +65,13 @@ number of files), pick a group, and tune the three boundary knobs — `edge_z`
 smoothing) — then export results or batch-process the whole folder. The app
 is a violet-accented "clean lab" light theme with numbered card sections and
 a jump menu (see
-[docs/features/02_gui-redesign.md](docs/features/02_gui-redesign.md)). See
-[GUI_README.md](GUI_README.md) for the full guide.
+[docs/features/02_gui-redesign.md](docs/features/02_gui-redesign.md)). A
+sidebar mode switch swaps the whole main area to a multi-angle cross-section
+view — six angle tabs, the fitted ellipse cross-section, and a batch card —
+for C1-style `<condition>_<fibre>_a<angle>_part<part>` image sets, driven by
+a manual µm/px scale instead of the calibration field (see
+[docs/features/06_gui_multiangle.md](docs/features/06_gui_multiangle.md)).
+See [GUI_README.md](GUI_README.md) for the full guide.
 
 ## CLI pipeline
 

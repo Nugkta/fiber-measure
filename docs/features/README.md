@@ -25,3 +25,12 @@ What it does / Design choices / Algorithm details / Caveats (see CLAUDE.md).
   large_gap / diameter_step per image + replicate_outlier per group, the
   `anomaly_exclude` switch, `"anomaly"` meta sub-dict and
   `summary/per_image_summary.csv`.
+- `05_edge_criteria.md` — current — bright-mode edge criteria upgrade:
+  median(R,G,B) z-map (rejects single-channel chromatic-aberration fringes)
+  + clamped relative edge threshold (`edge_frac`/`edge_cap`, prevents
+  inward bite at 50%) + coupled `k_band` 4→6 recalibration; desat mode
+  (MasP2) unchanged (bit-identical).
+- `06_gui_multiangle.md` — current — GUI multi-angle cross-section mode:
+  sidebar analysis-mode radio, per-angle tabs, cross-section panel
+  (ellipse fit + split-half uncertainty), condition-scoped batch card;
+  manual µm/px scale and numeric `--scale-source` bypassing XML sidecars.

@@ -46,6 +46,15 @@ Started: 2026-08-19
    `test_mode_switch_applies_calibrated_defaults` drives the real widget path both ways.
    Report gained an "Appendix — parameter comparison" table (desat vs bright settings + both
    threshold formulas). Suite: **219 passed**.
+9. **GUI multi-angle cross-section mode** (separate feature, landed on this same branch,
+   commits `8c22790`/`0e3f9ea`/`aebe1e2`/`406ced7`) — wired the existing headless multi-angle
+   cross-section stage (`xsection.py`/`run_xsection.py`, study 02) into the Streamlit GUI as a
+   second sidebar-selected analysis mode: per-angle tabs, a cross-section panel (ellipse fit +
+   split-half uncertainty), and a condition-scoped batch card. `run_xsection.py` gained a
+   numeric `--scale-source` bypass (skips XML sidecars and their 0.1% inter-angle agreement
+   check) and `--anomaly-exclude`. Documented as `docs/features/06_gui_multiangle.md`; see
+   that file for the full design writeup — not repeated here since it is unrelated to the
+   edge-criteria threshold work above.
 
 **What I observed**
 
@@ -189,6 +198,19 @@ criterion in this repo picks any particular `edge_frac`.
 - Unverifiable for want of an artifact: the 3495-column count (s03 deleted), the fiber-10 lag
   diagnostics, the old-side `band_half` values.
 
+*GUI multi-angle mode (feature 06, unrelated to the edge_frac work above)*
+- Full suite after the feature landed: **241 passed** (219 → 233 after the pure helpers,
+  240 after the GUI wiring, 241 after the round-trip-persistence fix), no regressions.
+  `tests/test_gui_multiangle.py` holds 19 tests (pure helpers + AppTest cases).
+  Docs written: `docs/features/06_gui_multiangle.md`, `README.md`/`GUI_README.md` updates,
+  `src/fibrecv/README.md` rows (already current from the implementing commits), this labbook
+  entry, `docs/metalabbook.md` refresh.
+- Review found and fixed one real bug before this landed: the manual µm/px scale field was
+  dropped by Streamlit on a round trip through Replicates mode (session-state key deleted
+  whenever a keyed widget isn't rendered), reverting a hand-calibrated scale to the
+  `0.388924` default silently. Fixed by mirroring the widget value into a separate
+  session-state key, the same pattern `st.session_state.folder` already used.
+
 **What I think it means** — The empirical improvement on real C1 data is large, statistically
 solid, robust to the column-churn confound, and visually confirmed; MasP2 is provably untouched.
 Confidence: **high** on the direction and rough magnitude of the gain.
@@ -211,6 +233,11 @@ Evidence that would change this reading: an `s03d` that moves the headline mater
 the pre-fix numbers were load-bearing; a *registered* pair-disagreement comparison at 0.30 /
 0.40 / 0.45 on the known defocused parts would give the first non-circular handle on `edge_frac`
 without a 450-image run.
+
+On the GUI multi-angle mode (item 9, unrelated feature work): straightforward wiring of an
+already-validated headless pipeline (study 02) into the existing GUI, exercised by 19 new
+tests and one real bug caught and fixed by review before landing. Confidence: **high** that the
+mode is correct and documented; it carries no bearing on the `edge_frac`/`k_band` findings above.
 
 **Next** — Fold the `s03d` numbers into the report, then rewrite `docs/report/03_edge_criteria/`
 and `docs/features/05_edge_criteria.md`, both of which still carry the retracted −0.51 figure,

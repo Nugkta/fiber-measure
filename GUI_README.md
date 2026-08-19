@@ -10,10 +10,15 @@ The app is a thin front-end over the validated `fibrecv` pipeline — it changes
 **no** detection logic and uses the same calibrated defaults as the CLI.
 
 It uses a "clean lab" light theme (violet accent, slim header with a
-one-line status chip, four numbered sections with a jump menu on the right)
+one-line status chip, numbered sections with a jump menu on the right)
 defined by `.streamlit/config.toml` plus the app's own styling code — purely
 visual, see
-[docs/features/02_gui-redesign.md](docs/features/02_gui-redesign.md).
+[docs/features/02_gui-redesign.md](docs/features/02_gui-redesign.md). A
+sidebar **Analysis** switch picks between two main-area layouts: **Replicates**
+(four sections — the default, described first below) and **Multi-angle
+cross-section** (three sections, for C1-style rotation-angle image sets —
+described in its own part further down), see
+[docs/features/06_gui_multiangle.md](docs/features/06_gui_multiangle.md).
 
 ---
 
@@ -70,10 +75,22 @@ are passed straight through to `streamlit run`).
 
 ## 3. Using the app
 
-The main area is split into four numbered sections — 01 Replicates,
-02 Group panel, 03 Tensile, 04 Export & batch — described below in order;
-a fixed jump menu on the right (hidden on narrow windows) links straight to
-each one once data is loaded.
+**Sidebar — Analysis** (mode)
+- A radio at the top of the sidebar picks **Replicates** (default) or
+  **Multi-angle cross-section**. Replicates mode splits the main area into
+  four numbered sections — 01 Replicates, 02 Group panel, 03 Tensile,
+  04 Export & batch — described below in order. Multi-angle mode replaces
+  all four with three different sections — 01 Angles, 02 Cross-section,
+  03 Batch & export — described in their own part at the end of this
+  section. A fixed jump menu on the right (hidden on narrow windows) links
+  straight to whichever set of sections is showing, once data is loaded.
+  Entering multi-angle mode once applies that mode's calibrated `bright`
+  image-mode defaults (`edge_frac`/`k_band`); switching back to Replicates
+  does not revert them automatically.
+
+The rest of this section (Data / Detection sidebar, 01–04) describes
+**Replicates mode**; multi-angle mode is described afterwards under
+"Multi-angle cross-section mode".
 
 **Sidebar — Data** (source)
 - **Local folder**: type the path to your images folder. The app scans for
@@ -162,6 +179,60 @@ each one once data is loaded.
   groups, writes the full tree including `summary/master_summary.csv` and
   `summary/run_config.json`, then shows `master_summary` with a CSV download
   button.
+
+---
+
+## Multi-angle cross-section mode
+
+For C1-style image sets named `<condition>_<fibre>_a<angle>_part<part>.tiff`
+(six rotation-angle images per fibre part). Switch to it with the **Analysis**
+radio at the top of the sidebar; see
+[docs/features/06_gui_multiangle.md](docs/features/06_gui_multiangle.md) for
+the full design writeup.
+
+**Sidebar — source and scale**
+- **Local folder** (reuses the same "Image folder" field as Replicates mode)
+  or **Upload** (no whole-folder-upload option here — a real C1 directory is
+  tens of GB). Filenames are parsed into condition / fibre / part groups;
+  scale-bar name twins and non-matching files are counted and skipped.
+  Pick a condition (only shown if the folder has more than one), a fibre and
+  a part; the up-to-six matching angle images load.
+- **Scale (µm per pixel)**: a manual number field, default `0.388924` (the
+  C1 microscope's resolved `Scaling/Items` value from study 03) — **not**
+  the sidebar's `ppu` calibration field, which is unused in this mode and
+  stays visible but inert. Every µm number in this mode, and the batch's
+  scale, comes from this field; changing it does not need an Apply.
+
+**01 Angles**
+- One tab per angle (`a1`…`a6`), each with its overlay, per-angle metrics
+  (median width in µm and in px, coverage, tilt, flags) and, behind an
+  "Edit boundaries" checkbox, the same manual boundary editor as Replicates
+  mode. A tab gets a `⚠` prefix when its image is QC-excluded from the fit,
+  carries an anomaly flag, or has an uncertain/saturated alignment shift.
+
+**02 Cross-section**
+- Six status chips (in fit / no image / QC-excluded / uncertain shift), the
+  six aligned width curves in µm, and metrics for the fitted per-position
+  ellipse: median area with a split-half uncertainty band, axis ratio,
+  orientation, semi-axes, and fit residual. Fitting needs all 3 of the 3
+  projection directions covered (`a1`/`a4` = 0°, `a2`/`a5` = 60°,
+  `a3`/`a6` = 120°); fewer than that shows an error instead of a result.
+  With fewer than all six angles present, the fit can still run but the
+  split-half uncertainty needs all six, so the area shows `±—` with an
+  explanatory caption. A drawn cross-section, an area-vs-position plot, and
+  a per-angle QC table (shift, correlation peak, uncertain/saturated,
+  residual) round out the section.
+
+**03 Batch & export**
+- One button, **Run multi-angle batch (measure + cross-sections)**: measures
+  every image for the selected condition (all fibres/parts, not just the one
+  loaded above — "roughly 20 minutes for 450 images"), then fits every
+  cross-section, and offers `xsection_summary.csv` for download with a
+  `status` column flagging low-confidence fibres. Folder source only —
+  uploads have no batch button since there is nothing on disk to re-read.
+  The batch always recomputes from disk and **ignores** manual boundary
+  edits made in 01 Angles; point it at a fresh output folder, since it
+  reuses whatever `per_image/*` is already there.
 
 ---
 

@@ -57,8 +57,10 @@ Output
 - In multi-angle mode instead: the six angle views of one (fibre, part) as
   tabs, their aligned width stack, the per-position ellipse cross-section
   (area +/- split-half error, axis ratio, orientation, rms residual, drawn
-  cross-section) and a one-button whole-folder batch that runs the per-image
-  measure pass and ``run_xsection`` back to back.
+  cross-section) and a one-button batch, scoped to the selected condition
+  (every fibre/part under it, not just the one previewed), that runs the
+  per-image measure pass and ``run_xsection`` back to back with a numeric
+  ``--scale-source`` (the sidebar's manual µm/px field, never ``cfg.ppu``).
 - A "clean lab" light UI over that data: a slim violet-accent header + state
   chip (``_render_header``), numbered card sections -- 01 Replicates,
   02 Group panel, 03 Tensile, 04 Export & batch (or, in multi-angle mode,
