@@ -64,7 +64,7 @@ def rgb_to_desaturation(rgb: np.ndarray, cfg: CONFIG) -> tuple[np.ndarray, np.nd
     margin-row median/MAD machinery applied to brightness ``V = median(R,G,B)``,
     with the sign flipped: ``D = (V - v_bg) / (mad_scale*MAD + eps)``.
     Median rejects single-channel chromatic-aberration fringes that ``max``
-    rides, removing a systematic 1–4 px wide bias on bright-mode images.
+    rides (~0.9 px per px of displacement; real-data contribution not isolated).
 
     Returns ``(D, F, f_bg, mad)`` where ``F`` is the feature channel (S or V)
     and ``f_bg`` its background level. NB downstream meta stores ``f_bg`` under
