@@ -22,6 +22,9 @@ Suspicious measurements (edge jumps, long unmeasurable gaps, mid-image
 diameter steps, deviant replicates) are flagged — advisorily by default — in
 the GUI, the meta JSONs and `summary/per_image_summary.csv`; see
 [docs/features/04_anomaly_flags.md](docs/features/04_anomaly_flags.md).
+Bright-mode images (C1) use a median-RGB z-map and a clamped relative edge
+threshold that eliminates chromatic-fringe bias and scales with wall amplitude;
+see [docs/features/05_edge_criteria.md](docs/features/05_edge_criteria.md).
 
 ## Install
 
