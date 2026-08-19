@@ -261,7 +261,16 @@ def _side_edge(
         return np.nan, FLAG_BAD_GRAD
 
     if cfg.feature_mode == "bright":
-        level = base_val + max(cfg.edge_z, min(cfg.edge_frac * A_side, cfg.edge_cap * A_side))
+        # relative primary, floored at edge_z, then hard-capped at edge_cap*A.
+        # The cap must be OUTERMOST: with it inside the max, a faint wall where
+        # edge_z > edge_cap*A_side lands above the cap, and one where
+        # edge_z > A_side lands above the wall top entirely -- _outer_crossing
+        # then finds nothing and the fallback below silently places the edge at
+        # the wall's outer base with no flag. This ordering guarantees
+        # level - base_val <= edge_cap*A_side < A_side, so a crossing always
+        # exists on the wall run.
+        level = base_val + min(cfg.edge_cap * A_side,
+                               max(cfg.edge_z, cfg.edge_frac * A_side))
     else:
         level = base_val + min(cfg.edge_z, cfg.edge_frac * A_side)
     scan_outer = int(np.clip(i_outer - step * cfg.guard, 0, d.size - 1))

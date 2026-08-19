@@ -117,10 +117,34 @@ def test_bright_fibre_has_no_desat_signal():
     assert mr.meta["coverage"] < 0.2
 
 
+def test_bright_level_never_leaves_the_wall():
+    """The bright clamp must keep the crossing level on the wall run.
+
+    Regression guard for the clamp ordering. With the cap inside the max
+    (``max(edge_z, min(frac*A, cap*A))``) a faint wall with ``A_side < edge_z``
+    gets a level ABOVE the wall top: ``_outer_crossing`` then returns None and
+    ``_side_edge`` silently falls back to the wall's outer base with FLAG_OK,
+    reporting a too-wide edge with no flag. The shipped ordering
+    ``min(cap*A, max(edge_z, frac*A))`` bounds the level by ``edge_cap*A_side``
+    for every amplitude, so a crossing always exists.
+    """
+    cfg = CONFIG(feature_mode="bright", edge_frac=0.30, edge_cap=0.50, edge_z=4.0)
+    for a_side in [0.5, 1.0, 2.0, 3.0, 5.0, 8.0, 12.0, 40.0, 70.0]:
+        level_rel = min(cfg.edge_cap * a_side,
+                        max(cfg.edge_z, cfg.edge_frac * a_side))
+        assert level_rel <= cfg.edge_cap * a_side + 1e-12, a_side
+        assert level_rel < a_side, f"level leaves the wall at A_side={a_side}"
+
+
 # --- CLI mode presets (study 03) -------------------------------------------
 
 def _args(**kw):
-    """Namespace with every build_config flag None except those given."""
+    """Namespace with every build_config flag None except those given.
+
+    ``fields`` mirrors the ``dest`` names of the CONFIG-override flags in
+    ``run_measure.main``; if a flag is added there but not here the tests fail
+    loudly with AttributeError rather than silently skipping it.
+    """
     from fibrecv.run_measure import build_config
     fields = ["feature_mode", "ppu", "edge_z", "edge_frac", "edge_cap", "k_band",
               "min_width", "sigma_y", "wcol", "guard", "amin", "reject_dev",
@@ -141,6 +165,20 @@ def test_desat_cli_keeps_dataclass_defaults():
     assert cfg.k_band == base.k_band == 4.0
 
 
+def test_explicit_desat_does_not_get_bright_defaults():
+    """``--feature-mode desat`` spelled out must also keep the desat knobs.
+
+    Guards the gate specifically: a regression from ``== "bright"`` to a
+    truthy check would still pass the no-flag test above (None is falsy too)
+    while silently applying BRIGHT_DEFAULTS to explicit desat runs -- which
+    would change MasP2 numbers.
+    """
+    cfg = _args(feature_mode="desat")
+    assert cfg.feature_mode == "desat"
+    assert cfg.edge_frac == 0.65
+    assert cfg.k_band == 4.0
+
+
 def test_bright_cli_applies_calibrated_presets():
     """--feature-mode bright swaps in the study-03 calibrated knobs.
 
@@ -153,6 +191,10 @@ def test_bright_cli_applies_calibrated_presets():
     assert cfg.feature_mode == "bright"
     assert cfg.edge_frac == 0.30
     assert cfg.k_band == 6.0
+    # not in BRIGHT_DEFAULTS -- inherited from the dataclass, but load-bearing
+    # for bright mode (it is the clamp that prevents study-01 inward bite), so
+    # pin it here: a change to the dataclass default must not pass silently.
+    assert cfg.edge_cap == 0.50
 
 
 def test_explicit_flags_override_bright_presets():
