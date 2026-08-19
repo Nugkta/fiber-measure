@@ -57,7 +57,7 @@ def _write_sidecar(data_root, image_name, items_m=UM_ITEMS * 1e-6):
 
 
 def _write_image_profile(out_root, base, width, x0=100, x1=400,
-                         band_mismatch=False, coverage=1.0):
+                         band_mismatch=False, coverage=1.0, flags=None):
     csv_dir = out_root / "per_image" / "csv"
     meta_dir = out_root / "per_image" / "diagnostics"
     csv_dir.mkdir(parents=True, exist_ok=True)
@@ -75,7 +75,7 @@ def _write_image_profile(out_root, base, width, x0=100, x1=400,
     })
     df.to_csv(csv_dir / f"{base}_profile.csv", index=False)
     meta = {"coverage": coverage, "band_mismatch": band_mismatch,
-            "low_confidence": False, "anomaly": {"flags": []}}
+            "low_confidence": False, "anomaly": {"flags": list(flags or [])}}
     with open(meta_dir / f"{base}_meta.json", "w") as fh:
         json.dump(meta, fh)
 
@@ -159,6 +159,70 @@ def test_pipeline_numeric_scale_source(mini_tree):
     df = pd.read_csv(out_root / "per_part" / "csv" / "xsec_C1_01_p1.csv")
     v = df[df["valid"] == 1]
     assert np.allclose(v["area_um2"], np.pi * A_TRUE * B_TRUE * 0.25, rtol=1e-6)
+
+
+def test_pipeline_numeric_scale_source_no_sidecars(tmp_path):
+    # numeric --scale-source must bypass the XML sidecars entirely: no reads,
+    # no rc=2 abort when the sidecars are simply absent from the data dir
+    out_root = tmp_path / "out"
+    data_root = tmp_path / "data"
+    data_root.mkdir()  # deliberately no *_metadata.xml sidecars written
+    for a in range(1, 7):
+        _write_image_profile(out_root, f"C1_01_a{a}_part1", ellipse_width(a))
+
+    rc = run_xsection.main([
+        "--out", str(out_root), "--data-root", str(data_root),
+        "--scale-source", "0.5",
+    ])
+    assert rc == 0
+
+    summary = pd.read_csv(out_root / "summary" / "xsection_summary.csv")
+    assert summary.iloc[0]["um_per_px"] == pytest.approx(0.5)
+
+    shifts = json.loads(
+        (out_root / "per_part" / "shifts" / "xsec_C1_01_p1.json").read_text())
+    assert shifts["um_per_px_camera"] is None
+    assert shifts["um_per_px_items"] is None
+    assert shifts["um_per_px_resolved"] == pytest.approx(0.5)
+
+
+def test_pipeline_numeric_scale_source_rejects_non_positive(mini_tree):
+    out_root, data_root = mini_tree
+    for source in ("0", "-1.5"):
+        rc = run_xsection.main([
+            "--out", str(out_root), "--data-root", str(data_root),
+            "--scale-source", source,
+        ])
+        assert rc == 2
+
+
+def test_pipeline_anomaly_exclude_flag(tmp_path):
+    out_root = tmp_path / "out"
+    data_root = tmp_path / "data"
+    data_root.mkdir()
+    # a5 carries an anomaly flag but is not band_mismatch -> advisory only
+    # by default, excluded only when --anomaly-exclude is passed
+    for a in range(1, 7):
+        base = f"C1_01_a{a}_part1"
+        _write_image_profile(out_root, base, ellipse_width(a),
+                             flags=["large_gap"] if a == 5 else None)
+        _write_sidecar(data_root, f"{base}.tiff")
+
+    rc = run_xsection.main([
+        "--out", str(out_root), "--data-root", str(data_root),
+        "--scale-source", "items",
+    ])
+    assert rc == 0
+    df = pd.read_csv(out_root / "per_part" / "csv" / "xsec_C1_01_p1.csv")
+    assert not df["w_a5_px"].isna().all()  # advisory only: a5 kept
+
+    rc = run_xsection.main([
+        "--out", str(out_root), "--data-root", str(data_root),
+        "--scale-source", "items", "--anomaly-exclude",
+    ])
+    assert rc == 0
+    df = pd.read_csv(out_root / "per_part" / "csv" / "xsec_C1_01_p1.csv")
+    assert df["w_a5_px"].isna().all()  # excluded: a5 dropped to NaN
 
 
 def test_pipeline_missing_angle_and_excluded_image(mini_tree):

@@ -11,17 +11,21 @@ Inputs
 ``--out`` (output root holding ``per_image/``), ``--data-root`` (image dir with
 ``*_metadata.xml`` sidecars), optional ``--condition`` / ``--fibers`` filters,
 ``--scale-source camera|items|<um_per_px>`` (µm conversion; the scale-bar cross
--check adjudicated "items" for C1 — labbook 02), ``--min-corr`` /
-``--max-shift`` (cross-angle alignment gates -> ``xsec_min_corr`` /
-``xsec_max_shift``), ``--validation``.
+-check adjudicated "items" for C1 — labbook 02; a numeric literal bypasses the
+sidecars entirely — no reads, no inter-angle agreement check — for manual-scale
+GUI runs), ``--min-corr`` / ``--max-shift`` (cross-angle alignment gates ->
+``xsec_min_corr`` / ``xsec_max_shift``), ``--anomaly-exclude`` (image-level
+anomalies also exclude an image from multi-angle aggregation, mirroring
+run_aggregate's flag; default: advisory only), ``--validation``.
 
 Output
 ------
 Per (fiber, part): ``per_part/csv/xsec_<cond>_<ff>_p<p>.csv`` (aligned widths +
 per-column ellipse/hexagon), ``per_part/plots/...png``, ``per_part/shifts/...json``
-(alignment + both XML scales). Per run: ``summary/xsection_summary.csv`` (one
-row per fiber), ``summary/xsection_angle_residuals.csv`` (v2-gate evidence),
-``summary/xsection_run_config.json`` and, with ``--validation``,
+(alignment + both XML scales — ``null`` for both when ``--scale-source`` was
+numeric, since no sidecar was read). Per run: ``summary/xsection_summary.csv``
+(one row per fiber), ``summary/xsection_angle_residuals.csv`` (v2-gate
+evidence), ``summary/xsection_run_config.json`` and, with ``--validation``,
 ``summary/xsection_validation.csv`` (anisotropy + phi-transfer errors).
 
 Pos
@@ -131,7 +135,22 @@ def _load_multiangle_profiles(out_root: Path, cfg: CONFIG,
 
 def _part_scale(data_root: Path, cond: str, fiber: int, part: int,
                 angles, scale_source):
-    """Read every sidecar of the part; enforce 0.1% agreement; resolve µm/px."""
+    """Resolve µm/px for the part.
+
+    A numeric ``scale_source`` (e.g. a manual GUI scale) bypasses the XML
+    sidecars entirely — no reads, no inter-angle agreement check — and
+    returns ``(None, um)``. ``"camera"``/``"items"`` still read every
+    sidecar of the part and enforce 0.1% agreement before resolving.
+    """
+    try:
+        manual_um = float(scale_source)
+    except (TypeError, ValueError):
+        pass
+    else:
+        if manual_um <= 0:
+            raise ValueError(f"non-positive um/px: {scale_source!r}")
+        return None, manual_um
+
     infos = []
     for a in sorted(angles):
         img = data_root / f"{cond}_{fiber:02d}_a{a}_part{part}.tiff"
@@ -209,6 +228,11 @@ def main(argv: list[str] | None = None) -> int:
                     help="cross-angle corr-peak gate (xsec_min_corr)")
     ap.add_argument("--max-shift", dest="max_shift", type=int, default=None,
                     help="cross-angle lag bound px (xsec_max_shift)")
+    ap.add_argument("--anomaly-exclude", dest="anomaly_exclude",
+                    action=argparse.BooleanOptionalAction, default=None,
+                    help="image-level anomalies also exclude an image from "
+                         "multi-angle aggregation (default: advisory only; "
+                         "mirrors run_aggregate's flag)")
     ap.add_argument("--validation", action="store_true",
                     help="also write summary/xsection_validation.csv")
     args = ap.parse_args(argv)
@@ -216,6 +240,7 @@ def main(argv: list[str] | None = None) -> int:
     cfg = CONFIG()
     ov = {k: v for k, v in {
         "xsec_min_corr": args.min_corr, "xsec_max_shift": args.max_shift,
+        "anomaly_exclude": args.anomaly_exclude,
     }.items() if v is not None}
     cfg = replace(cfg, **ov)
 
@@ -286,8 +311,8 @@ def main(argv: list[str] | None = None) -> int:
             json.dump({
                 "fiber": fiber, "part": part, "condition": cond,
                 "shifts": st.shifts,
-                "um_per_px_camera": info.um_per_px_camera,
-                "um_per_px_items": info.um_per_px_items,
+                "um_per_px_camera": info.um_per_px_camera if info else None,
+                "um_per_px_items": info.um_per_px_items if info else None,
                 "um_per_px_resolved": um,
                 "n_columns": int(st.x.size),
                 "n_valid": int(fit.valid.sum()),

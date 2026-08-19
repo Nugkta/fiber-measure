@@ -67,7 +67,9 @@ Per-image detection pipeline (features → band → edges → qc) driven by
 - `run_xsection.py` — current — CLI, stage 3 (multi-angle sets): aligns the
   six per-angle width profiles of each (fiber, part), fits per-column
   ellipses + hexagon bound, converts to µm via the XML sidecar scale
-  (`--scale-source`), and writes per-part CSV/plot/shifts +
+  (`--scale-source`; a numeric literal bypasses the sidecars entirely, for
+  manual-scale GUI runs), optional `--anomaly-exclude` (mirrors
+  `run_aggregate`'s flag), and writes per-part CSV/plot/shifts +
   `xsection_summary.csv`/`xsection_angle_residuals.csv`
   (+`xsection_validation.csv` with `--validation`).
 - `tensile.py` — current — tensile (stress-strain) CSV/Excel ingestion and
