@@ -17,7 +17,7 @@ Inputs
 - Images from a local folder OR any number of uploaded files; both are
   auto-grouped via ``parse_name``'s trailing-numbers rule, with unparseable
   names collected in an "ungrouped" bucket.
-- The three boundary knobs (``edge_z``/``edge_frac``/``wcol``), the ``ppu``
+- The boundary knobs (``edge_z``/``edge_frac``/``edge_cap``/``wcol``), the ``ppu``
   calibration, and the anomaly-flag thresholds (``jump_thresh_px``/``gap_frac``/
   ``step_frac``/``rep_dev_frac``) plus the ``anomaly_exclude`` checkbox, edited
   in a sidebar form and applied on demand; all other ``CONFIG`` fields stay at
@@ -123,12 +123,12 @@ PARAM_SPECS: list[tuple] = [
      "lower it; if it sits in the shadow outside the fibre, raise it. "
      "Recommended 3-5, default 4.0.",
      0.5, 1.0, 12.0, "%.1f"),
-    ("edge_frac", "Faint-fibre guard (edge_frac)", "float",
-     "Protection for faint fibres: caps the crossing level at edge_frac of a "
-     "weak wall's own height, so the line stays on the wall instead of "
-     "drifting outward when the wall never reaches edge_z above background. "
-     "It only kicks in when the wall is weaker than edge_z. Leave at 0.65 "
-     "unless a very faint fibre loses its boundary — then lower it slightly.",
+    ("edge_frac", "Relative threshold (edge_frac)", "float",
+     "Boundary level as a fraction of the wall amplitude. In bright mode "
+     "(C1) this is the primary threshold — higher sits further inside the "
+     "fibre, lower further outside. In desat mode (MasP2) it caps the level "
+     "for faint walls. Clamped between edge_z (floor) and edge_cap (ceiling) "
+     "in bright mode. Typical range 0.25–0.40 for bright, 0.65 for desat.",
      0.05, 0.0, 1.0, "%.2f"),
     ("wcol", "Smoothing width (wcol)", "int",
      "Horizontal smoothing width in pixels. If the boundary line is jittery "
@@ -262,6 +262,7 @@ _FMT_KINDS: dict[str, tuple[str, str]] = {
     "MJ/m3":  ("{:.2f}", " MJ/m³"),
     "MPa":    ("{:.1f}", " MPa"),
     "one_dp": ("{:.1f}", ""),
+    "two_dp": ("{:.2f}", ""),
     "pct100": ("{:.2f}", " %"),
     "int":    ("{:.0f}", ""),
 }
@@ -1181,7 +1182,7 @@ def _inject_css() -> None:
     st.markdown(_CSS, unsafe_allow_html=True)
 
 
-def _render_header(group_label: str | None, n_reps: int, edge_z: float) -> None:
+def _render_header(group_label: str | None, n_reps: int, edge_z: float, edge_frac: float = 0.65) -> None:
     """Slim header + state chip, replacing ``st.title``/``st.caption``.
 
     Must run after the sidebar builders (``_load_reps`` etc.) since the chip
@@ -1197,9 +1198,10 @@ def _render_header(group_label: str | None, n_reps: int, edge_z: float) -> None:
     else:
         reps_txt = f"{n_reps} replicate" + ("" if n_reps == 1 else "s")
         edge_z_txt = _fmt(edge_z, "one_dp")
-        chip = (f"group {group_label} · {reps_txt} · edge_z {edge_z_txt}"
+        edge_frac_txt = _fmt(edge_frac, "two_dp")
+        chip = (f"group {group_label} · {reps_txt} · edge_z {edge_z_txt} · edge_frac {edge_frac_txt}"
                 if group_label else
-                f"{reps_txt} (ungrouped) · edge_z {edge_z_txt}")
+                f"{reps_txt} (ungrouped) · edge_z {edge_z_txt} · edge_frac {edge_frac_txt}")
     st.markdown(
         '<div class="fcv-header">'
         '<h1>fibrecv — fibre diameter detection</h1>'
@@ -1853,7 +1855,7 @@ def main() -> None:
 
     # header renders after the sidebar builders since its state chip needs
     # the group/replicate state they just produced
-    _render_header(group_label, len(reps), cfg.edge_z)
+    _render_header(group_label, len(reps), cfg.edge_z, cfg.edge_frac)
 
     # tensile-specific config: the diameter knobs stay as tuned; only the
     # strain scale and modulus-fit width come from the tensile controls

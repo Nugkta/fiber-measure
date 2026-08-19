@@ -48,6 +48,7 @@ def build_config(args: argparse.Namespace) -> CONFIG:
         "ppu": args.ppu,
         "edge_z": args.edge_z,
         "edge_frac": args.edge_frac,
+        "edge_cap": args.edge_cap,
         "k_band": args.k_band,
         "min_width": args.min_width,
         "sigma_y": args.sigma_y,
@@ -132,9 +133,14 @@ def main(argv: list[str] | None = None) -> int:
                          'or "bright" (C1 bright-on-dark)')
     ap.add_argument("--ppu", type=float, default=None)
     ap.add_argument("--edge-z", dest="edge_z", type=float, default=None,
-                    help="strictness knob (absolute z above bg); higher -> tighter")
+                    help="absolute floor on boundary level (z above bg); "
+                         "in bright mode this is the minimum, in desat the primary knob")
     ap.add_argument("--edge-frac", dest="edge_frac", type=float, default=None,
-                    help="relative cap on the edge level for faint fibres")
+                    help="relative threshold as fraction of wall amplitude "
+                         "(bright: primary knob; desat: cap for faint walls)")
+    ap.add_argument("--edge-cap", dest="edge_cap", type=float, default=None,
+                    help="upper clamp on relative threshold (bright mode only); "
+                         "prevents inward-bite convergence (default 0.50)")
     ap.add_argument("--k-band", dest="k_band", type=float, default=None)
     ap.add_argument("--min-width", dest="min_width", type=float, default=None)
     ap.add_argument("--sigma-y", dest="sigma_y", type=float, default=None)
@@ -168,7 +174,8 @@ def main(argv: list[str] | None = None) -> int:
                    "n_images": len(images), "root": str(args.root)}, fh, indent=2)
 
     print(f"Measuring {len(images)} images with {args.jobs} jobs "
-          f"(edge_z={cfg.edge_z}, wcol={cfg.wcol}) -> {out_root}")
+          f"(mode={cfg.feature_mode}, edge_z={cfg.edge_z}, "
+          f"edge_frac={cfg.edge_frac}, wcol={cfg.wcol}) -> {out_root}")
     results = []
     if args.jobs <= 1:
         for p in images:

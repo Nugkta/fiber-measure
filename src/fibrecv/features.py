@@ -16,7 +16,7 @@ Output
 - ``rgb_to_desaturation(rgb, cfg)`` -> ``(D, S, s_bg, mad)``, dispatching on
   ``cfg.feature_mode`` (unknown mode -> ValueError). ``"desat"``: ``D`` is the
   robust z-like desaturation map ``(s_bg - S) / (mad_scale*MAD + eps)``.
-  ``"bright"``: same machinery on brightness ``V = rgb.max(axis=2)`` with the
+  ``"bright"``: same machinery on brightness ``V = median(R,G,B)`` with the
   sign flipped (``(V - v_bg) / ...``) for bright-on-dark fibres. Either way
   ``D`` is large-positive inside the fibre, ~0 in background, and
   self-normalising per image so faint and dark-background cases are comparable.
@@ -61,8 +61,10 @@ def rgb_to_desaturation(rgb: np.ndarray, cfg: CONFIG) -> tuple[np.ndarray, np.nd
     build ``D = (s_bg - S) / (mad_scale*MAD + eps)``.
 
     ``cfg.feature_mode == "bright"`` (C1, bright fibre on dark bg): the same
-    margin-row median/MAD machinery applied to brightness ``V = max(R,G,B)``,
+    margin-row median/MAD machinery applied to brightness ``V = median(R,G,B)``,
     with the sign flipped: ``D = (V - v_bg) / (mad_scale*MAD + eps)``.
+    Median rejects single-channel chromatic-aberration fringes that ``max``
+    rides, removing a systematic 1–4 px wide bias on bright-mode images.
 
     Returns ``(D, F, f_bg, mad)`` where ``F`` is the feature channel (S or V)
     and ``f_bg`` its background level. NB downstream meta stores ``f_bg`` under
@@ -78,7 +80,7 @@ def rgb_to_desaturation(rgb: np.ndarray, cfg: CONFIG) -> tuple[np.ndarray, np.nd
         D = ((s_bg - S) / denom).astype(np.float32)
         return D, S, s_bg, mad
     if cfg.feature_mode == "bright":
-        V = rgb.max(axis=2).astype(np.float32)
+        V = np.median(rgb, axis=2).astype(np.float32)
         v_bg, mad = estimate_bg(V, cfg)
         denom = cfg.mad_scale * mad + cfg.eps
         D = ((V - v_bg) / denom).astype(np.float32)

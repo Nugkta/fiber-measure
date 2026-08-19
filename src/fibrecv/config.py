@@ -68,14 +68,19 @@ class CONFIG:
     #                            merges the plateau-fragmented ramps of
     #                            defocused walls (2.0 left them speckled;
     #                            recalibrated on the full 144-image MasP2 set)
-    # STRICTNESS: boundary placed where D crosses level = local_bg + min(edge_z, edge_frac*A).
-    # edge_z is the PRIMARY knob (absolute z-units above background): higher -> tighter,
-    # and stable because it does not track the per-column specular peak. edge_frac is a
-    # relative CAP that keeps the level inside the hump for faint fibres (low amplitude A).
-    edge_z: float = 4.0        # STRICTNESS KNOB (z above wall-local bg); higher -> tighter
-    #                            (user-validated on pilot 3_1: ez4 tracks the true wall;
-    #                             higher values get dragged inward by internal reflections)
-    edge_frac: float = 0.65    # relative cap on the level for faint/weak walls
+    # STRICTNESS (mode-dependent):
+    # desat (MasP2): level = local_bg + min(edge_z, edge_frac*A) — edge_z is the
+    #   primary knob, edge_frac caps for faint walls (legacy, unchanged).
+    # bright (C1): level = local_bg + max(edge_z, min(edge_frac*A, edge_cap*A)) —
+    #   edge_frac is the primary relative threshold, edge_z is the absolute floor
+    #   protecting faint walls from going below noise, edge_cap is the upper clamp
+    #   that prevents convergence on 50% (inward bite from study 01).
+    edge_z: float = 4.0        # absolute floor (z above wall-local bg); in bright
+    #                            mode this is a minimum, in desat mode the primary knob
+    edge_frac: float = 0.65    # relative threshold: fraction of wall amplitude A
+    #                            (calibrate for bright mode; desat uses it as a cap)
+    edge_cap: float = 0.50     # upper clamp on relative threshold (bright mode only);
+    #                            prevents inward-bite from erf-midpoint convergence
     guard: int = 12            # px just outside the wall for local bg + recovery checks
     # --- wall finding (separates true fibre walls from shadow/vignette ramps) ---
     slope_min: float = 0.05    # absolute slope floor (z/px) for a wall candidate

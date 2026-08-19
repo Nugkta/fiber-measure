@@ -52,15 +52,18 @@ average of ``D`` to suppress iridescence banding, vertically smoothed):
     that wall (so an adjacent shadow plateau becomes the reference, per the
     strict never-count-shadow rule), and the wall amplitude
     ``A_side = D[wall top] - base``,
-  * place the boundary at the level ``base + min(edge_z, edge_frac*A_side)``
-    as a sub-pixel crossing searched **on the wall run itself** -- it cannot
-    land on a shadow shoulder or an interior reflection.
+  * place the boundary at a mode-dependent level, searched as a sub-pixel
+    crossing **on the wall run itself** (cannot land on a shadow shoulder or
+    an interior reflection):
+    - **desat** (MasP2): ``base + min(edge_z, edge_frac*A_side)`` — ``edge_z``
+      is the primary knob, ``edge_frac`` caps for faint walls (legacy).
+    - **bright** (C1): ``base + max(edge_z, min(edge_frac*A, edge_cap*A))`` —
+      ``edge_frac`` is the primary relative threshold, ``edge_z`` is the
+      absolute floor (protects faint walls from going below noise), and
+      ``edge_cap`` is the upper clamp that prevents convergence on 50%
+      (where study 01 showed inward bite on cylindrical fibres).
   * an outside-recovery guard flags columns where no true background
     (``D < k_band/2``) exists beyond the wall (fibre fills the window).
-
-``edge_z`` (z-units above the wall-local base) is the strictness knob: higher
--> the crossing sits higher up the wall -> tighter. ``edge_frac`` caps the
-level for weak walls so the crossing stays on them.
 
 Tilt handling
 -------------
@@ -257,7 +260,10 @@ def _side_edge(
     if A_side <= cfg.eps:
         return np.nan, FLAG_BAD_GRAD
 
-    level = base_val + min(cfg.edge_z, cfg.edge_frac * A_side)
+    if cfg.feature_mode == "bright":
+        level = base_val + max(cfg.edge_z, min(cfg.edge_frac * A_side, cfg.edge_cap * A_side))
+    else:
+        level = base_val + min(cfg.edge_z, cfg.edge_frac * A_side)
     scan_outer = int(np.clip(i_outer - step * cfg.guard, 0, d.size - 1))
     edge = _outer_crossing(d, i_inner, scan_outer, level)
     if edge is None:

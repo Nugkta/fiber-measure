@@ -69,7 +69,7 @@ def test_bright_mode_formula():
     rgb = _bright_fibre()
     cfg = CONFIG(feature_mode="bright")
     D, V, v_bg, mad = rgb_to_desaturation(rgb, cfg)
-    V_ref = rgb.max(axis=2).astype(np.float32)
+    V_ref = np.median(rgb, axis=2).astype(np.float32)
     v_bg_ref, mad_ref = estimate_bg(V_ref, cfg)
     D_ref = ((V_ref - v_bg_ref) / (cfg.mad_scale * mad_ref + cfg.eps)).astype(np.float32)
     assert v_bg == v_bg_ref and mad == mad_ref
