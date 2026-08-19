@@ -82,5 +82,10 @@ Per-image detection pipeline (features → band → edges → qc) driven by
   `docs/features/02_gui-redesign.md`. Sidebar image-mode selector
   (desat | bright); a mode switch re-applies that mode's calibrated
   `edge_frac`/`k_band` defaults (bright via `run_measure.BRIGHT_DEFAULTS`).
+  Also carries pure, headless multi-angle helpers over the `xsection`/
+  `run_xsection` stage-3 pipeline (`_profile_from_mr`, `_profiles_from_results`,
+  `multiangle_preview` -> `MultiAnglePreview`, `run_multiangle_batch`) plus
+  `run_batch(aggregate=)` to skip stage-2 registration for angle data — not
+  yet wired into any UI section (a later task does that).
 - `gui_launch.py` — current — `fibrecv-gui` console-script entry point; a
   thin subprocess wrapper around `streamlit run gui_app.py`.

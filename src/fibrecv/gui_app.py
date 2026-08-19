@@ -4,8 +4,11 @@ Dependencies
 ------------
 ``streamlit``, ``numpy``, ``pandas``, ``matplotlib`` (Agg), ``imageio`` plus the
 reused ``fibrecv`` package: ``compute`` (pure detection core), ``config``,
-``io_utils``, ``overlay`` (``render_overlay``), ``register``, ``measure``
-(``write_measurement``) and ``run_measure``/``run_aggregate`` (batch + aggregate).
+``io_utils`` (incl. ``discover_multiangle``/``parse_multiangle_name``),
+``overlay`` (``render_overlay``), ``register``, ``measure``
+(``write_measurement``), ``xsection`` (``build_part_stack``,
+``fit_ellipse_projections``, hexagon/split-half/pair helpers) and
+``run_measure``/``run_aggregate``/``run_xsection`` (batch + aggregate stages).
 Imports are absolute (``fibrecv.*``) because Streamlit runs this file as a script.
 The sibling ``.streamlit/config.toml`` supplies the Streamlit-engine half of the
 theme (base colours, radii, ``toolbarMode``); this file's own ``_CSS`` constant
@@ -78,8 +81,9 @@ import io
 import json
 import re
 import traceback
+import warnings
 from concurrent.futures import ProcessPoolExecutor, as_completed
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Callable
 
@@ -93,12 +97,13 @@ import imageio.v3 as iio  # noqa: E402
 import streamlit as st  # noqa: E402
 import streamlit.components.v1 as components  # noqa: E402
 
-from fibrecv import run_aggregate  # noqa: E402
+from fibrecv import run_aggregate, run_xsection  # noqa: E402
 from fibrecv.anomaly import detect_replicate_outliers, exclusion_reason  # noqa: E402
 from fibrecv.compute import compute_measurement  # noqa: E402
 from fibrecv.config import CONFIG  # noqa: E402
 from fibrecv.io_utils import (  # noqa: E402
-    IMAGE_SUFFIXES, discover_images, natural_key, parse_name)
+    IMAGE_SUFFIXES, discover_images, discover_multiangle, natural_key,
+    parse_multiangle_name, parse_name)
 from fibrecv.io_utils import load_rgb as _io_load_rgb  # noqa: E402
 from fibrecv.manual_edit import (  # noqa: E402
     apply_manual_edits, display_to_native, empty_edits, has_edits)
@@ -109,6 +114,9 @@ from fibrecv.run_measure import BRIGHT_DEFAULTS, _lib_versions, _worker  # noqa:
 from fibrecv.tensile import (  # noqa: E402
     build_matrix, compute_tensile, discover_tensile, discover_tensile_files,
     read_trace)
+from fibrecv.xsection import (  # noqa: E402
+    PartStack, XsecFit, build_part_stack, fit_ellipse_projections,
+    hexagon_area, hexagon_area_expected, pair_differences, split_half_area)
 from streamlit_image_coordinates import streamlit_image_coordinates  # noqa: E402
 
 DEFAULTS = CONFIG()  # never mutated; the source of widget defaults + reset target
@@ -455,15 +463,20 @@ def run_batch(
     cfg: CONFIG,
     jobs: int,
     progress_cb: Callable[[float, dict], None] | None = None,
+    aggregate: bool = True,
 ) -> tuple[pd.DataFrame, list[dict]]:
-    """Measure every image in-process, then aggregate the whole folder.
+    """Measure every image in-process, then (optionally) aggregate the folder.
 
     Tries a ``ProcessPoolExecutor`` (reusing the picklable ``run_measure._worker``)
     and falls back to sequential if the pool cannot start (Windows ``spawn``
     safety); both paths report progress through ``progress_cb(frac, result)``.
-    Writes the full output tree (per_image/*, overlays/, per_sample/*,
-    summary/master_summary.csv, run_config.json) and returns
-    ``(master_summary_df, per_image_results)``.
+    Writes the per-image output tree (per_image/*, overlays/, run_config.json)
+    always; with ``aggregate=True`` (default) also runs ``run_aggregate.main``
+    to build per_sample/* and summary/master_summary.csv, returning
+    ``(master_summary_df, per_image_results)``. ``aggregate=False`` skips that
+    stage-2 pass entirely (empty DataFrame returned) -- the multi-angle batch
+    uses this, since stage 2's group registration is meaningless for angle
+    data (``run_xsection`` is its own aggregation stage).
     """
     out_root = Path(out_root)
     (out_root / "summary").mkdir(parents=True, exist_ok=True)
@@ -514,15 +527,261 @@ def run_batch(
                          f"{'LOWCONF' if r['low_confidence'] else ''}\n")
 
     # aggregate the whole folder (reuses the validated CLI aggregator)
-    run_aggregate.main([
-        "--out", str(out_root), "--all",
-        "--ppu", str(cfg.ppu), "--max-shift", str(cfg.max_shift),
-        "--min-corr", str(cfg.min_corr), "--min-coverage", str(cfg.min_coverage),
-        "--rep-dev-frac", str(cfg.rep_dev_frac),
-    ] + (["--anomaly-exclude"] if cfg.anomaly_exclude else []))
+    if aggregate:
+        run_aggregate.main([
+            "--out", str(out_root), "--all",
+            "--ppu", str(cfg.ppu), "--max-shift", str(cfg.max_shift),
+            "--min-corr", str(cfg.min_corr), "--min-coverage", str(cfg.min_coverage),
+            "--rep-dev-frac", str(cfg.rep_dev_frac),
+        ] + (["--anomaly-exclude"] if cfg.anomaly_exclude else []))
     master_path = out_root / "summary" / "master_summary.csv"
     master = pd.read_csv(master_path) if master_path.exists() else pd.DataFrame()
     return master, results
+
+
+# --------------------------------------------------------------------------- #
+# Pure multi-angle preview / batch logic (no Streamlit calls -> headlessly    #
+# testable). Task 3 wires these into a new UI section; nothing here renders.  #
+# --------------------------------------------------------------------------- #
+
+#: Default µm/px offered for the manual multi-angle scale field -- the C1
+#: "Scaling/Items" value resolved and used throughout study 03 (labbook 03).
+_MA_UM_PER_PX_DEFAULT = 0.388924
+
+
+def _profile_from_mr(mr) -> dict[str, np.ndarray]:
+    """Build one angle's ``{"x", "w"}`` profile for ``xsection.build_part_stack``.
+
+    Mirrors ``write_measurement``'s profile CSV contract (``x_px`` /
+    ``diameter_px_smooth`` / ``valid`` -- the only three columns
+    ``run_xsection`` reads back) directly from an in-memory ``MeasureResult``,
+    without ever touching ``mr.rgb`` (it is ``None`` on the cached folder
+    path -- see ``_cached_compute_path``). ``x`` is ABSOLUTE image pixels
+    (``bnd.x0 .. bnd.x1`` inclusive, never relative to the span); ``valid``
+    and ``diameter_smooth`` are FULL-image-width arrays on ``mr.res``, so both
+    must be sliced by the same ``span`` before combining, exactly like
+    ``_render_group``/``_group_mean_um`` already do (their own ``span =
+    slice(bnd.x0, bnd.x1 + 1)`` + masked-profile blocks, below in this file).
+    """
+    bnd, res = mr.bnd, mr.res
+    x = np.arange(bnd.x0, bnd.x1 + 1, dtype=float)
+    span = slice(bnd.x0, bnd.x1 + 1)
+    w = np.where(res.valid[span], res.diameter_smooth[span], np.nan).astype(float)
+    return {"x": x, "w": w}
+
+
+def _profiles_from_results(mrs: dict[int, object], cfg: CONFIG
+                           ) -> tuple[dict[int, dict], dict[int, str]]:
+    """Split per-angle ``MeasureResult``s into included profiles + drop reasons.
+
+    ``mrs`` maps angle (1..6) -> ``MeasureResult``. Applies the exact same QC
+    policy ``_render_group`` uses (``anomaly.exclusion_reason`` on
+    ``band_mismatch``/``coverage``/``anomaly.flags``), so a GUI multi-angle
+    preview agrees with the CLI's ``run_xsection`` (which gained the same
+    ``--anomaly-exclude`` flag in Task 1). Returns ``(profiles, excluded)``:
+    ``profiles`` maps angle -> ``_profile_from_mr(mr)`` for angles that passed
+    QC; ``excluded`` maps every dropped angle to a user-facing
+    (``_friendly_reason``) string.
+    """
+    profiles: dict[int, dict] = {}
+    excluded: dict[int, str] = {}
+    for angle, mr in mrs.items():
+        res = mr.res
+        reason = exclusion_reason(res.band_mismatch, res.coverage,
+                                  res.anomaly.flags, cfg)
+        if reason is not None:
+            excluded[angle] = _friendly_reason(reason)
+            continue
+        profiles[angle] = _profile_from_mr(mr)
+    return profiles, excluded
+
+
+def _ma_circular_phi_median(phi_deg: np.ndarray) -> float:
+    """Orientation average with period 180 deg (vector mean of 2*phi).
+
+    Local copy of ``run_xsection._circular_phi_median`` (private there, not
+    part of this task's import list) so this module stays independent of
+    ``run_xsection``'s internals -- only its public ``main`` is imported.
+    """
+    ph = np.radians(np.asarray(phi_deg, dtype=float))
+    ph = ph[np.isfinite(ph)]
+    if ph.size == 0:
+        return float("nan")
+    return float(np.degrees(np.arctan2(np.mean(np.sin(2 * ph)),
+                                       np.mean(np.cos(2 * ph))) / 2) % 180.0)
+
+
+@dataclass
+class MultiAnglePreview:
+    """Headless multi-angle cross-section preview for one (fiber, part).
+
+    All geometry stays in pixels (no micron conversion -- the caller applies
+    ``um_per_px``, mirroring ``xsection.py``'s split from ``run_xsection.py``).
+    """
+
+    stack: PartStack | None       # None when profiles was empty
+    fit: XsecFit | None           # None when profiles was empty
+    present: set                  # angles (1..6) present in the input profiles
+    n_directions: int             # distinct projection directions among present
+    fittable: bool                # n_directions == 3 (necessary, not sufficient
+                                  # -- a fittable part can still have 0 valid
+                                  # columns after the per-column 3-direction rule)
+    med: dict                     # summary stats (empty dict when profiles empty)
+
+
+def multiangle_preview(profiles: dict[int, dict], cfg: CONFIG) -> MultiAnglePreview:
+    """Pure multi-angle cross-section preview from already-QC'd profiles.
+
+    Mirrors ``run_xsection.py``'s per-part pipeline: ``build_part_stack`` ->
+    ``fit_ellipse_projections`` -> ``split_half_area``/``hexagon_area``
+    (+expected)/``pair_differences``, including its ``w_dir`` nanmean
+    denominator and RuntimeWarning suppression for ``dw_frac``
+    (run_xsection.py:360-366). ``profiles`` maps angle (1..6) -> ``{"x", "w"}``
+    absolute-px profiles, e.g. the ``included`` half of
+    ``_profiles_from_results``'s return. Empty ``profiles`` short-circuits to
+    ``stack=None``/``fit=None``/``med={}`` (``build_part_stack`` raises on an
+    empty dict, so this case must never reach it).
+
+    ``present``/``n_directions``/``fittable`` are computed even when empty
+    (all empty/zero/False) so the caller can render "0 of 6 angles" copy
+    without a None-check. ``fiber``/``part`` are fixed placeholders (0, 1) --
+    this is a single-part preview, not tied to any real (fiber, part) label.
+    """
+    present = set(profiles)
+    n_directions = len({(a - 1) % 3 for a in present})
+    fittable = n_directions == 3
+    if not profiles:
+        return MultiAnglePreview(stack=None, fit=None, present=present,
+                                 n_directions=n_directions, fittable=fittable,
+                                 med={})
+
+    stack = build_part_stack(0, 1, profiles, cfg)
+    fit = fit_ellipse_projections(stack.W)
+    hex_px2, _hex_degen = hexagon_area(stack.W)
+    # computed to mirror the full CLI call chain (run_xsection.py:282-283);
+    # not surfaced as a med scalar, same as the CLI's own per-fiber summary
+    # (only the per-column CSV carries hex_ratio_expected) -- Task 3 can
+    # recompute it from `fit` directly if a per-column plot needs it.
+    _hex_exp_px2 = hexagon_area_expected(fit.a, fit.b, fit.phi_deg)
+    A_lo, A_hi = split_half_area(stack.W)
+    pair_dw = pair_differences(stack.W)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", category=RuntimeWarning)
+        with np.errstate(invalid="ignore"):
+            area_err_px2 = np.abs(A_lo - A_hi) / 2.0
+            hex_ratio = fit.area / hex_px2
+            w_dir = np.nanmean(np.stack([stack.W[:3], stack.W[3:]]), axis=0)
+            dw_frac = np.abs(pair_dw) / w_dir
+
+    valid = fit.valid
+    # n_uncertain counts only PRESENT angles marked uncertain: build_part_stack
+    # also marks every MISSING angle uncertain=True (shifts.append at
+    # xsection.py:390-392), so a naive `sum(uncertain)` would double-report
+    # angles that are already absent from `present` -- mirrors the CLI's
+    # `n_unc = sum(1 for s in st.shifts if s["present"] and s["uncertain"])`
+    # at run_xsection.py:367-368.
+    n_uncertain = sum(1 for s in stack.shifts if s["present"] and s["uncertain"])
+    n_saturated = sum(1 for s in stack.shifts if s.get("saturated"))
+    # n_links mirrors run_xsection.py:370/392 (`sum(present) - 1`, floored at
+    # 0): the number of cross-angle correlation LINKS actually estimated, i.e.
+    # one fewer than the count of present angles (the reference angle has no
+    # link to itself). len(present) is exactly that present-count.
+    n_links = max(len(present) - 1, 0)
+
+    Wf = np.isfinite(stack.W)
+    n_measurable = int(((Wf[0] | Wf[3]) & (Wf[1] | Wf[4]) & (Wf[2] | Wf[5])).sum())
+    n_pos = int(valid.sum())
+    valid_frac = n_pos / n_measurable if n_measurable else 0.0
+
+    hexr = hex_ratio[np.isfinite(hex_ratio)]
+    dwf = dw_frac[np.isfinite(dw_frac)]
+
+    # nanmedian/nanmean below can legitimately see an all-NaN slice (e.g. a
+    # missing angle removes a whole direction from one split-half fit, so
+    # area_err_px2 is NaN at every column even though the full 6-angle fit
+    # stays valid there) -- suppress numpy's advisory RuntimeWarning for that
+    # case, same as xsection.py:165-167 / run_xsection.py:361-366.
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", category=RuntimeWarning)
+        med = {
+            "a": float(np.nanmedian(fit.a[valid])) if valid.any() else float("nan"),
+            "b": float(np.nanmedian(fit.b[valid])) if valid.any() else float("nan"),
+            "ratio": float(np.nanmedian((fit.a / fit.b)[valid])) if valid.any() else float("nan"),
+            "phi": _ma_circular_phi_median(fit.phi_deg),
+            "area": float(np.nanmedian(fit.area[valid])) if valid.any() else float("nan"),
+            "area_err": float(np.nanmedian(area_err_px2[valid])) if valid.any() else float("nan"),
+            "rms": float(np.nanmedian(fit.rms_resid[valid])) if valid.any() else float("nan"),
+            "hex_ratio": float(np.median(hexr)) if hexr.size else float("nan"),
+            "dw_frac": float(np.median(dwf)) if dwf.size else float("nan"),
+        }
+    med.update({
+        "valid_frac": valid_frac,
+        "n_uncertain": n_uncertain,
+        "n_saturated": n_saturated,
+        "n_links": n_links,
+    })
+
+    return MultiAnglePreview(stack=stack, fit=fit, present=present,
+                             n_directions=n_directions, fittable=fittable,
+                             med=med)
+
+
+def run_multiangle_batch(
+    folder: str | Path,
+    condition: str | None,
+    out_root: str | Path,
+    cfg: CONFIG,
+    um_per_px: float,
+    jobs: int,
+    progress_cb: Callable[[float, dict], None] | None = None,
+) -> tuple[pd.DataFrame, list[dict], int]:
+    """Measure a whole multi-angle folder, then run the ``run_xsection`` stage.
+
+    ``discover_multiangle(folder, condition)`` finds every ``(fiber, part)``
+    -> ``{angle: path}`` group (scale-bar twins and unparseable names are
+    already skipped there); the paths are flattened and measured in-process
+    via ``run_batch(..., aggregate=False)`` (stage-2 group registration is
+    meaningless for angle data -- ``run_xsection`` is its own aggregation
+    stage). Then runs ``run_xsection.main`` with a NUMERIC ``--scale-source``
+    (``um_per_px``, e.g. ``0.388924`` -- bypasses the XML sidecars entirely,
+    per Task 1) and ``--anomaly-exclude`` mirrored from ``cfg.anomaly_exclude``.
+    ``--condition`` is ALWAYS passed explicitly: ``run_xsection``'s
+    ``by_fiber`` keys only on fiber number (run_xsection.py:261/379), so a
+    folder mixing conditions would silently merge them without this filter.
+
+    ``condition`` must be a concrete string -- raises ``ValueError`` on
+    ``None`` rather than silently degrading (e.g. to "measure everything");
+    the caller (a later task) is responsible for resolving a single detected
+    condition, or asking the user, before calling this.
+
+    Returns ``(summary_df, results, rc)``: ``summary_df`` is
+    ``summary/xsection_summary.csv`` read back (empty DataFrame if
+    ``run_xsection`` failed or wrote nothing), ``results`` is ``run_batch``'s
+    per-image result dicts, and ``rc`` is ``run_xsection.main``'s return code
+    (0 on success).
+    """
+    if condition is None:
+        raise ValueError(
+            "run_multiangle_batch requires a concrete condition string "
+            "(discover_multiangle can find more than one; resolve to a "
+            "single condition before calling this, never pass None)."
+        )
+    folder = Path(folder)
+    out_root = Path(out_root)
+    groups = discover_multiangle(folder, condition)
+    image_paths = [p for angles in groups.values() for p in angles.values()]
+
+    _master, results = run_batch(image_paths, out_root, cfg, jobs, progress_cb,
+                                 aggregate=False)
+
+    rc = run_xsection.main([
+        "--out", str(out_root), "--data-root", str(folder),
+        "--condition", condition, "--scale-source", str(um_per_px),
+    ] + (["--anomaly-exclude"] if cfg.anomaly_exclude else []))
+
+    summary_path = out_root / "summary" / "xsection_summary.csv"
+    summary_df = pd.read_csv(summary_path) if summary_path.exists() else pd.DataFrame()
+    return summary_df, results, rc
 
 
 def _group_mean_um(reps: list[dict], cfg: CONFIG) -> float | None:

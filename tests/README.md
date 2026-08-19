@@ -40,4 +40,10 @@ skipif-guarded). Run with `uv run pytest -q` from the repo root.
 - `test_overlay.py` — current — overlay rendering smoke.
 - `test_manual_edit.py` — current — manual boundary-edit round-trip.
 - `test_gui_smoke.py` — current — Streamlit GUI smoke (expander widget path).
+- `test_gui_multiangle.py` — current — pure `gui_app.py` multi-angle helpers:
+  `_profile_from_mr`/`_profiles_from_results` (absolute-x span slicing, QC
+  split), `multiangle_preview` (known-ellipse recovery, missing-angle
+  `n_uncertain` rule, non-fittable direction case), `run_batch(aggregate=)`
+  and headless `run_multiangle_batch`. Module-level `_bright_fibre`/
+  `multiangle_folder` fixtures are reused by a later task's AppTest cases.
 - `test_tensile.py` — current — stress–strain analysis stage.
