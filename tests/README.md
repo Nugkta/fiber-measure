@@ -40,10 +40,13 @@ skipif-guarded). Run with `uv run pytest -q` from the repo root.
 - `test_overlay.py` — current — overlay rendering smoke.
 - `test_manual_edit.py` — current — manual boundary-edit round-trip.
 - `test_gui_smoke.py` — current — Streamlit GUI smoke (expander widget path).
-- `test_gui_multiangle.py` — current — pure `gui_app.py` multi-angle helpers:
-  `_profile_from_mr`/`_profiles_from_results` (absolute-x span slicing, QC
-  split), `multiangle_preview` (known-ellipse recovery, missing-angle
+- `test_gui_multiangle.py` — current — multi-angle helpers and GUI mode. Pure
+  half: `_profile_from_mr`/`_profiles_from_results` (absolute-x span slicing,
+  QC split), `multiangle_preview` (known-ellipse recovery, missing-angle
   `n_uncertain` rule, non-fittable direction case), `run_batch(aggregate=)`
-  and headless `run_multiangle_batch`. Module-level `_bright_fibre`/
-  `multiangle_folder` fixtures are reused by a later task's AppTest cases.
+  and headless `run_multiangle_batch`. AppTest half (mode radio selected by
+  key `analysis_mode`): bright coupling on entering the mode, mode-aware
+  Reset, six angle tabs + recovered axis ratio, missing-angle warning and
+  "±—" split-half, one-direction "Cannot fit" error, upload source without a
+  folder chooser, and the batch button end to end.
 - `test_tensile.py` — current — stress–strain analysis stage.

@@ -1,7 +1,8 @@
-"""Pure multi-angle helper tests: profile extraction, preview, headless batch.
+"""Multi-angle tests: pure helpers (profiles, preview, headless batch) plus
+the Streamlit AppTest cases for the multi-angle analysis mode.
 
-Fixtures (`_bright_fibre`, `multiangle_folder`) are module level so Task 3 can
-reuse them for Streamlit AppTest cases without redefining anything.
+Fixtures (`_bright_fibre`, `multiangle_folder`) are module level and shared by
+both halves.
 """
 
 from __future__ import annotations
@@ -12,6 +13,7 @@ from types import SimpleNamespace
 import imageio.v3 as iio
 import numpy as np
 import pytest
+from streamlit.testing.v1 import AppTest
 
 from fibrecv.compute import compute_measurement
 from fibrecv.config import CONFIG
@@ -24,6 +26,9 @@ from fibrecv.gui_app import (
     run_multiangle_batch,
 )
 from fibrecv.xsection import NOMINAL_ANGLES_DEG
+
+APP = str(Path(__file__).resolve().parents[1] / "src" / "fibrecv" / "gui_app.py")
+MULTIANGLE_MODE = "Multi-angle cross-section"
 
 A_TRUE, B_TRUE, PHI_TRUE = 35.0, 25.0, 20.0
 
@@ -77,19 +82,38 @@ def six_angle_mrs() -> dict:
     return mrs
 
 
+def _write_angles(folder: Path, angles) -> Path:
+    """Write one C1 fiber-1 part-1 image per requested angle."""
+    for a in angles:
+        arr = (_bright_fibre(ellipse_width(a)) * 255).astype(np.uint8)
+        iio.imwrite(folder / f"C1_01_a{a}_part1.tiff", arr)
+    return folder
+
+
 @pytest.fixture
 def multiangle_folder(tmp_path: Path) -> Path:
     """C1 fiber 1 part 1, all six angles of the a=35/b=25/phi=20 fixture,
     plus a scale-bar twin ("s" suffix, skipped by discover_multiangle) and a
     stray non-multiangle file (skipped too)."""
-    for a in range(1, 7):
-        arr = (_bright_fibre(ellipse_width(a)) * 255).astype(np.uint8)
-        iio.imwrite(tmp_path / f"C1_01_a{a}_part1.tiff", arr)
+    _write_angles(tmp_path, range(1, 7))
     arr = (_bright_fibre(ellipse_width(1), seed=99) * 255).astype(np.uint8)
     iio.imwrite(tmp_path / "C1_01_a1_part1s.tiff", arr)  # scale-bar twin
     arr = (_bright_fibre(40.0, seed=42) * 255).astype(np.uint8)
     iio.imwrite(tmp_path / "notes.png", arr)  # stray, not multiangle-parseable
     return tmp_path
+
+
+@pytest.fixture
+def multiangle_folder_minus_a5(tmp_path: Path) -> Path:
+    """Five angles: a5 missing, so the three projection directions are still
+    covered (a1/a4 = 0, a2 = 60, a3/a6 = 120) but the split half a4-a6 is not."""
+    return _write_angles(tmp_path, [1, 2, 3, 4, 6])
+
+
+@pytest.fixture
+def multiangle_folder_one_direction(tmp_path: Path) -> Path:
+    """a1 + a4 only — a 180-degree pair, i.e. ONE projection direction."""
+    return _write_angles(tmp_path, [1, 4])
 
 
 # --------------------------------------------------------------------- #
@@ -252,3 +276,176 @@ def test_run_multiangle_batch_requires_condition_string(multiangle_folder, tmp_p
     with pytest.raises(ValueError):
         run_multiangle_batch(multiangle_folder, None, tmp_path / "out", cfg,
                              _MA_UM_PER_PX_DEFAULT, jobs=1)
+
+
+# --------------------------------------------------------------------- #
+# GUI: multi-angle analysis mode (streamlit AppTest)
+# --------------------------------------------------------------------- #
+
+def _mode_radio(at: AppTest):
+    """The analysis-mode radio, selected BY KEY (never by index: the smoke
+    test's at.sidebar.text_input[0] contract shows how brittle index-based
+    selectors are, and _load_reps' own source radio carries no key)."""
+    return next(r for r in at.sidebar.radio if r.key == "analysis_mode")
+
+
+def _in_multiangle(folder: Path | None = None, timeout: int = 180) -> AppTest:
+    """Boot the app, switch to multi-angle mode, optionally point it at a
+    folder (the shared "Image folder" field, still text_input[0])."""
+    at = AppTest.from_file(APP, default_timeout=timeout).run()
+    assert not at.exception
+    _mode_radio(at).set_value(MULTIANGLE_MODE).run()
+    assert not at.exception
+    if folder is not None:
+        at.sidebar.text_input[0].set_value(str(folder)).run()
+        assert not at.exception
+    return at
+
+
+def test_multiangle_mode_applies_bright_defaults():
+    """Entering multi-angle mode couples the detector to bright mode once."""
+    at = AppTest.from_file(APP, default_timeout=60).run()
+    assert at.session_state["cfg_dict"]["feature_mode"] == "desat"
+
+    _mode_radio(at).set_value(MULTIANGLE_MODE).run()
+    assert not at.exception
+    cfg = at.session_state["cfg_dict"]
+    assert cfg["feature_mode"] == "bright"
+    assert cfg["edge_frac"] == pytest.approx(0.30)   # BRIGHT_DEFAULTS
+    assert cfg["k_band"] == pytest.approx(6.0)
+
+    # and only on the TRANSITION: tuning a knob and re-running must not be
+    # stomped back to the bright defaults on every interaction
+    edge_z = next(s for s in at.sidebar.slider if s.key and "edge_z" in s.key)
+    edge_z.set_value(6.5)
+    next(b for b in at.sidebar.button if b.label == "Apply").click()
+    at.run()
+    assert not at.exception
+    assert at.session_state["cfg_dict"]["edge_z"] == pytest.approx(6.5)
+
+
+def test_reset_in_multiangle_mode_keeps_bright():
+    """Reset is mode-aware: in multi-angle mode its base is the bright
+    baseline, not the desat dataclass defaults (which would silently
+    mis-detect every angle image)."""
+    at = _in_multiangle(timeout=60)
+    next(b for b in at.sidebar.button
+         if b.label == "Reset to defaults").click()
+    at.run()
+    assert not at.exception
+    cfg = at.session_state["cfg_dict"]
+    assert cfg["feature_mode"] == "bright"
+    assert cfg["edge_frac"] == pytest.approx(0.30)
+    assert cfg["k_band"] == pytest.approx(6.0)
+
+    # the same Reset in replicate mode still lands on the desat defaults
+    _mode_radio(at).set_value("Replicates").run()
+    next(b for b in at.sidebar.button
+         if b.label == "Reset to defaults").click()
+    at.run()
+    assert not at.exception
+    assert at.session_state["cfg_dict"]["feature_mode"] == "desat"
+    assert at.session_state["cfg_dict"]["edge_frac"] == pytest.approx(0.65)
+
+
+def test_multiangle_six_angles_render_and_fit(multiangle_folder: Path):
+    at = _in_multiangle(multiangle_folder)
+
+    # card 01: one tab per angle, always six
+    tab_labels = [t.label for t in at.tabs]
+    for a in range(1, 7):
+        assert any(lbl.endswith(f"a{a}") for lbl in tab_labels), tab_labels
+
+    labels = [m.label for m in at.metric]
+    assert "median width" in labels          # per-angle row (µm/px, not ppu)
+    assert "median area" in labels           # cross-section row
+    assert "axis ratio a/b" in labels
+    assert "orientation φ" in labels
+    assert "fit rms residual" in labels
+
+    ratio = float(next(m.value for m in at.metric
+                       if m.label == "axis ratio a/b"))
+    assert ratio == pytest.approx(A_TRUE / B_TRUE, rel=0.10)
+
+    # six angles present -> the split-half error is defined and shown
+    area = next(m.value for m in at.metric if m.label == "median area")
+    assert "µm²" in area and "±—" not in area
+
+    # per-angle QC table
+    tables = [df.value for df in at.dataframe]
+    qc = [t for t in tables if "corr peak" in t.columns]
+    assert qc, "per-angle alignment table not rendered"
+    assert len(qc[0]) == 6
+
+    captions = " | ".join(str(c.value) for c in at.caption)
+    assert "µm/px (manual)" in captions
+    assert "hex ratio" in captions
+
+
+def test_multiangle_missing_angle_warns_and_drops_split_half(
+        multiangle_folder_minus_a5: Path):
+    at = _in_multiangle(multiangle_folder_minus_a5)
+    warnings_txt = " | ".join(str(w.value) for w in at.warning)
+    assert "5 of 6 angles" in warnings_txt, warnings_txt
+    assert "a5" in warnings_txt, warnings_txt
+    assert not at.error, [e.value for e in at.error]
+
+    # the fit still runs, but the split-half uncertainty is undefined
+    area = next(m.value for m in at.metric if m.label == "median area")
+    assert "±—" in area, area
+    captions = " | ".join(str(c.value) for c in at.caption)
+    assert "split-half uncertainty needs all six angles" in captions
+
+
+def test_multiangle_batch_button_runs_both_stages(multiangle_folder: Path):
+    """Card 03's one button drives measure + run_xsection and renders the
+    summary (the helper itself is covered headlessly above; this covers the
+    wiring: progress callback, status column, download button)."""
+    at = _in_multiangle(multiangle_folder, timeout=600)
+    out = multiangle_folder / "batch_out"
+    next(t for t in at.text_input
+         if t.label == "Output folder").set_value(str(out)).run()
+    next(n for n in at.number_input
+         if n.label == "parallel jobs").set_value(1).run()
+    next(b for b in at.button
+         if b.label.startswith("Run multi-angle")).click().run()
+    assert not at.exception
+    assert (out / "summary" / "xsection_summary.csv").exists()
+    assert any("fibre row" in str(s.value) for s in at.success)
+    tables = [df.value for df in at.dataframe]
+    assert any("status" in t.columns for t in tables), [list(t) for t in tables]
+
+
+def test_multiangle_upload_source_has_no_folder_upload(multiangle_folder: Path):
+    """The upload source offers hand-picked files only: a folder chooser
+    pointed at a real condition directory would push tens of GB of TIFFs
+    through the browser websocket. The batch button needs a real directory
+    too, so it is disabled here."""
+    at = _in_multiangle(multiangle_folder)
+    assert not any("upload a whole folder" in cb.label
+                   for cb in at.sidebar.checkbox)
+    assert next(b for b in at.button
+                if b.label.startswith("Run multi-angle")).disabled is False
+
+    source = next(r for r in at.sidebar.radio if r.label == "multi-angle source")
+    source.set_value("Upload").run()
+    assert not at.exception
+    assert not any("upload a whole folder" in cb.label
+                   for cb in at.sidebar.checkbox)
+    # no uploads yet -> nothing is loaded and the cards do not render
+    assert not any(b.label.startswith("Run multi-angle") for b in at.button)
+    assert any("upload the six angle images" in str(i.value) for i in at.info)
+
+
+def test_multiangle_one_direction_cannot_fit(
+        multiangle_folder_one_direction: Path):
+    at = _in_multiangle(multiangle_folder_one_direction)
+    errors = " | ".join(str(e.value) for e in at.error)
+    assert "Cannot fit" in errors, errors
+    assert "1 of 3 projection directions" in errors, errors
+
+    # no ellipse metrics, but the aligned plot and the QC table still render
+    labels = [m.label for m in at.metric]
+    assert "median area" not in labels
+    tables = [df.value for df in at.dataframe]
+    assert any("corr peak" in t.columns for t in tables)
