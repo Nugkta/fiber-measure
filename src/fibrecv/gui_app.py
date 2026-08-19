@@ -168,7 +168,8 @@ PARAM_SPECS: list[tuple] = [
      "so this scales every µm number in the app and exports (pixel values "
      "are unaffected). Measure it with a stage micrometer for your "
      "microscope + camera combination. Default 1.3680 (the original "
-     "calibrated setup).",
+     "calibrated setup). Not used in Multi-angle cross-section mode, which "
+     "takes its scale from the sidebar's µm/px field.",
      0.001, 0.1, 10.0, "%.4f"),
     ("jump_thresh_px", "Edge jump threshold (px)", "float",
      "edge_jump anomaly: a detected edge that moves more than this many "
@@ -492,9 +493,14 @@ def run_batch(
     always; with ``aggregate=True`` (default) also runs ``run_aggregate.main``
     to build per_sample/* and summary/master_summary.csv, returning
     ``(master_summary_df, per_image_results)``. ``aggregate=False`` skips that
-    stage-2 pass entirely (empty DataFrame returned) -- the multi-angle batch
-    uses this, since stage 2's group registration is meaningless for angle
-    data (``run_xsection`` is its own aggregation stage).
+    stage-2 pass entirely -- the multi-angle batch uses this, since stage 2's
+    group registration is meaningless for angle data (``run_xsection`` is its
+    own aggregation stage). The DataFrame read-back below is unconditional,
+    so with ``aggregate=False`` the returned DataFrame is whatever
+    ``summary/master_summary.csv`` already holds in ``out_root`` -- empty for
+    a fresh out_root, but possibly stale rows left over from a previous
+    ``aggregate=True`` run against the same out_root. Callers using
+    ``aggregate=False`` should ignore the returned DataFrame.
     """
     out_root = Path(out_root)
     (out_root / "summary").mkdir(parents=True, exist_ok=True)
@@ -1516,9 +1522,10 @@ def _ma_classify(items: list, key) -> tuple[list[tuple], int, int]:
     matches the strict ``<cond>_<fiber>_a<angle>_part<part>`` convention.
     Angles outside 1..6 count as "other": the whole cross-section stage is
     built on the six nominal rotations, so an ``a7`` would be silently ignored
-    downstream rather than measured. This mirrors ``discover_multiangle``'s
-    filtering, but keeps the counts the user needs to see why a file was
-    skipped (that function just drops them).
+    downstream rather than measured. Unlike ``discover_multiangle`` (which
+    accepts any parseable angle and lets a missing/extra angle simply be an
+    absent or unused dict key), this function actively rejects angles outside
+    1..6 so the UI can report them as skipped rather than silently drop them.
     """
     parsed: list[tuple] = []
     n_scalebar = n_other = 0
@@ -2580,7 +2587,7 @@ def _render_angle_tab(entry: dict, angle: int, cfg: CONFIG, um_per_px: float,
     # on every rerun, so six always-open editors would mean six extra
     # full-res overlay renders plus six click-component iframes per
     # interaction on 2560x1920 images
-    if st.checkbox("Edit boundaries", key=f"ma_edit_on_a{angle}",
+    if st.checkbox("Edit boundaries", key=f"ma_edit_on_{entry['name']}",
                    help="Open the manual boundary editor for this angle. Kept "
                         "off by default because all six tabs render on every "
                         "interaction."):
@@ -2839,19 +2846,30 @@ def _render_xsec_batch(ma: dict, cfg: CONFIG) -> None:
                 low = table["low_confidence"].astype(bool)
                 table.insert(0, "status",
                              np.where(low, "⚠ low confidence", "ok"))
-                flagged = [f"{int(f):02d}" for f in table.loc[low, "fiber"]]
-                if flagged:
-                    st.warning(
-                        "Low-confidence fibre(s): " + ", ".join(flagged)
-                        + " — too few valid columns, too many uncertain "
-                          "shifts, or an rms residual above "
-                          f"{cfg.xsec_rms_flag_px:.0f} px. Check their angle "
-                          "coverage before using these areas.")
+            else:
+                low = None
+            # dataframe + download must render before the low-confidence
+            # fibre-list lookup below: a schema surprise in that lookup (e.g.
+            # a renamed/missing "fiber" column) must not raise and mask a
+            # batch that actually succeeded and already wrote its files.
             st.dataframe(table, width="stretch", hide_index=True)
             st.download_button(
                 "Download xsection_summary.csv",
                 summary.to_csv(index=False).encode(),
                 file_name="xsection_summary.csv", mime="text/csv")
+            try:
+                if low is not None:
+                    flagged = [f"{int(f):02d}" for f in table.loc[low, "fiber"]]
+                    if flagged:
+                        st.warning(
+                            "Low-confidence fibre(s): " + ", ".join(flagged)
+                            + " — too few valid columns, too many uncertain "
+                              "shifts, or an rms residual above "
+                              f"{cfg.xsec_rms_flag_px:.0f} px. Check their "
+                              "angle coverage before using these areas.")
+            except Exception:  # noqa: BLE001 - degrade to skipping the
+                # warning; the dataframe and download above already rendered.
+                pass
         except Exception as exc:  # noqa: BLE001
             st.error(f"Multi-angle batch failed: {exc}")
             st.code(traceback.format_exc())

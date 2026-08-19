@@ -147,7 +147,7 @@ def _part_scale(data_root: Path, cond: str, fiber: int, part: int,
     except (TypeError, ValueError):
         pass
     else:
-        if manual_um <= 0:
+        if not np.isfinite(manual_um) or manual_um <= 0:
             raise ValueError(f"non-positive um/px: {scale_source!r}")
         return None, manual_um
 

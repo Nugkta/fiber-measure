@@ -182,7 +182,7 @@ The rest of this section (Data / Detection sidebar, 01–04) describes
 
 ---
 
-## Multi-angle cross-section mode
+## 4. Multi-angle cross-section mode
 
 For C1-style image sets named `<condition>_<fibre>_a<angle>_part<part>.tiff`
 (six rotation-angle images per fibre part). Switch to it with the **Analysis**
@@ -236,7 +236,7 @@ the full design writeup.
 
 ---
 
-## 4. Notes & troubleshooting
+## 5. Notes & troubleshooting
 
 - **Performance**: one image is ~1–2 s to compute (HSV on a 5 MP photo), so a
   3-replicate group is ~3–6 s per **Apply**. Results are cached, so switching

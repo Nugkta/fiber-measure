@@ -188,7 +188,7 @@ def test_pipeline_numeric_scale_source_no_sidecars(tmp_path):
 
 def test_pipeline_numeric_scale_source_rejects_non_positive(mini_tree):
     out_root, data_root = mini_tree
-    for source in ("0", "-1.5"):
+    for source in ("0", "-1.5", "nan", "inf"):
         rc = run_xsection.main([
             "--out", str(out_root), "--data-root", str(data_root),
             "--scale-source", source,

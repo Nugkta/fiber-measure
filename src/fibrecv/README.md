@@ -77,7 +77,7 @@ Per-image detection pipeline (features → band → edges → qc) driven by
   fibre's measured mean diameter.
 - `gui_app.py` — current — local Streamlit GUI: tuning/preview/manual-edit/
   batch/export over the same `compute`/`register`/`tensile` core, plus the
-  "clean lab" visual layer (`_CSS`/`_inject_css`, header+chip, four numbered
+  "clean lab" visual layer (`_CSS`/`_inject_css`, header+chip, numbered
   card sections with a jump menu, `_fmt`, `_styled_fig`) — see
   `docs/features/02_gui-redesign.md`. Sidebar image-mode selector
   (desat | bright); a mode switch re-applies that mode's calibrated
