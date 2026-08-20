@@ -401,7 +401,6 @@ def test_multiangle_six_angles_render_and_fit(multiangle_folder: Path):
 
     captions = " | ".join(str(c.value) for c in at.caption)
     assert "µm/px (manual)" in captions
-    assert "hex ratio" in captions
     # alignment shifts render signed at the "px2" kind's 2 dp, not 1 dp: a
     # sub-pixel shift is real information about how well the angles line up
     assert re.search(r"a1: [+-]\d+\.\d{2} px", captions), captions

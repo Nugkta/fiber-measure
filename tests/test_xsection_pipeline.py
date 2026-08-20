@@ -18,14 +18,13 @@ UM_CAMERA = 0.22
 EXPECTED_PART_COLS = [
     "x_px", "w_a1_px", "w_a2_px", "w_a3_px", "w_a4_px", "w_a5_px", "w_a6_px",
     "n_angles", "a_px", "b_px", "phi_deg", "rms_resid_px", "a_um", "b_um",
-    "area_um2", "area_err_um2", "area_hex_um2", "hex_ratio",
-    "hex_ratio_expected", "valid",
+    "area_um2", "area_err_um2", "valid",
 ]
 
 EXPECTED_SUMMARY_COLS = [
     "fiber", "n_parts", "n_positions", "um_per_px", "A_mean_um2", "A_harm_um2",
     "A_min_um2", "A_min_part", "A_min_x_px", "axis_ratio_median",
-    "axis_ratio_iqr", "phi_med_deg", "hex_ratio_median", "pair_dw_frac_median",
+    "axis_ratio_iqr", "phi_med_deg", "pair_dw_frac_median",
     "A_circle_um2", "area_ratio", "uniformity", "n_uncertain_shifts",
     "n_saturated_shifts", "part_rms_med_max_px", "low_confidence",
 ]
@@ -113,9 +112,6 @@ def test_pipeline_known_ellipse(mini_tree):
     assert np.allclose(v["area_um2"],
                        np.pi * A_TRUE * B_TRUE * UM_ITEMS ** 2, rtol=1e-6)
     assert np.allclose(v["area_err_um2"], 0.0, atol=1e-6)
-    # hexagon QC pair: measured ratio equals expected-for-fit ratio exactly
-    assert np.allclose(v["hex_ratio"], v["hex_ratio_expected"], rtol=1e-9)
-    assert (v["hex_ratio"] < np.pi / (2 * np.sqrt(3))).all()  # ellipse < circle anchor
 
     assert (out_root / "per_part" / "plots" / "xsec_C1_01_p1.png").exists()
     shifts = json.loads(

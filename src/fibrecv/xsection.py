@@ -1,4 +1,4 @@
-"""Pure multi-angle cross-section math: alignment stack, ellipse + hexagon.
+"""Pure multi-angle cross-section math: alignment stack, ellipse fit.
 
 Dependencies
 ------------
@@ -22,8 +22,6 @@ Output
 - ``fit_ellipse_projections(W, theta_deg)`` -> ``XsecFit`` per-column ellipse
   (fit in squared-width space, exactly linear; a >= b by construction; phi is
   the rotation angle at which the measured width is maximal, in [0, 180)).
-- ``hexagon_area`` / ``hexagon_area_expected`` -> circumscribed-hexagon upper
-  bound and its value expected for the fitted ellipse (QC ratio pair).
 - ``split_half_area``, ``pair_differences`` -> 180-degree-pair uncertainty.
 - ``predict_anisotropy``, ``predict_phi_transfer`` -> held-out validation
   errors (directional vs isotropic baseline; phi-transfer two-direction fit).
@@ -51,8 +49,6 @@ from .register import estimate_shift, resample_to_grid
 #: assumption (labbook 02); every consumer takes theta_deg as a parameter so a
 #: corrected spacing only requires re-running, not re-coding.
 NOMINAL_ANGLES_DEG = np.array([0.0, 60.0, 120.0, 180.0, 240.0, 300.0])
-
-_SQRT3 = np.sqrt(3.0)
 
 
 @dataclass
@@ -168,58 +164,6 @@ def fit_ellipse_projections(W: np.ndarray,
 
     return XsecFit(a=a, b=b, phi_deg=phi, area=area, resid=resid,
                    rms_resid=rms_resid, n_angles=n_angles, valid=valid)
-
-
-def _hexagon_from_h(h: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-    """Closed-form area of the 3-slab hexagon from support distances h (3, N).
-
-    Valid only while every slab binds (h_d < h_e + h_f for all rotations);
-    beyond that the closed form UNDER-states the true intersection area and
-    would silently break the upper-bound property, so degenerate columns are
-    NaN-ed and flagged instead.
-    """
-    h0, h1, h2 = h
-    present = np.isfinite(h).all(axis=0)
-    with np.errstate(invalid="ignore"):
-        degen = present & ~((h0 < h1 + h2) & (h1 < h0 + h2) & (h2 < h0 + h1))
-        area = (2.0 / _SQRT3) * (2.0 * (h0 * h1 + h1 * h2 + h2 * h0)
-                                 - (h0 ** 2 + h1 ** 2 + h2 ** 2))
-    area = np.where(present & ~degen, area, np.nan)
-    return area, degen
-
-
-def hexagon_area(W: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-    """Circumscribed-hexagon upper bound from the three direction widths.
-
-    Direction width = nanmean of each 180-degree pair (rows k, k+3); support
-    distance ``h_d = w_d / 2``. Returns ``(area, degenerate)``; area is NaN
-    where a direction is missing or the hexagon is degenerate.
-    """
-    W = np.asarray(W, dtype=float)
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore", category=RuntimeWarning)
-        w_dir = np.nanmean(np.stack([W[:3], W[3:]]), axis=0)
-    return _hexagon_from_h(w_dir / 2.0)
-
-
-def hexagon_area_expected(a: np.ndarray, b: np.ndarray, phi_deg: np.ndarray
-                          ) -> np.ndarray:
-    """Hexagon area EXPECTED for a fitted (a, b, phi) ellipse.
-
-    The 0.9069 circle anchor is exact for circles only; a true ellipse gives a
-    phi-dependent lower ratio, so QC must compare the measured hexagon against
-    this expected value, not against the anchor. NaN phi (near-circular) is
-    evaluated at phi = 0, where the support widths are phi-independent anyway.
-    """
-    a = np.asarray(a, dtype=float)
-    b = np.asarray(b, dtype=float)
-    phi = np.radians(np.where(np.isfinite(phi_deg), phi_deg, 0.0))
-    theta = np.radians(NOMINAL_ANGLES_DEG[:3])[:, None]
-    with np.errstate(invalid="ignore"):
-        h = np.sqrt(a ** 2 * np.cos(theta - phi) ** 2
-                    + b ** 2 * np.sin(theta - phi) ** 2)
-    area, _ = _hexagon_from_h(h)
-    return area
 
 
 def split_half_area(W: np.ndarray,

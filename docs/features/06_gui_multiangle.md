@@ -98,12 +98,11 @@ cross-section fit is only meaningful with a bright-mode boundary.
 3. **Preview fit** (`multiangle_preview` → `MultiAnglePreview`): included
    angles' profiles go through `xsection.build_part_stack` (cross-angle
    correlation alignment) → `fit_ellipse_projections` (per-column w²-space
-   ellipse LSQ) → `hexagon_area`/`hexagon_area_expected` → `split_half_area`
-   → `pair_differences` — the same call chain `run_xsection` uses per part.
-   Summary scalars (`med`) are medians (area, axis lengths, ratio, rms) or
-   circular medians (orientation φ) over the fit's valid columns; `hex_ratio`
-   and `dw_frac` are medians over their own finite values, independent of the
-   ellipse-fit validity mask.
+   ellipse LSQ) → `split_half_area` → `pair_differences` — the same call
+   chain `run_xsection` uses per part. Summary scalars (`med`) are medians
+   (area, axis lengths, ratio, rms) or circular medians (orientation φ) over
+   the fit's valid columns; `dw_frac` is a median over its own finite values,
+   independent of the ellipse-fit validity mask.
 4. **Rendering**: card 01 shows each angle's overlay, µm metrics (using the
    manual scale, never `ppu`), and its own diameter-vs-position plot. Card 02
    shows the aligned width stack, the ellipse metrics with the split-half

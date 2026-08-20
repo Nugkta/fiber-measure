@@ -14,8 +14,6 @@ from fibrecv.xsection import (
     PartStack,
     build_part_stack,
     fit_ellipse_projections,
-    hexagon_area,
-    hexagon_area_expected,
     pair_differences,
     predict_anisotropy,
     predict_phi_transfer,
@@ -37,38 +35,6 @@ def ellipse_widths(a: float, b: float, phi_deg: float,
 
 def tile_W(w6: np.ndarray, n: int = 4) -> np.ndarray:
     return np.repeat(w6[:, None], n, axis=1).astype(float)
-
-
-def _clip_poly(poly, nx, ny, h):
-    """Sutherland–Hodgman clip of polygon by half-plane nx*x+ny*y <= h."""
-    out = []
-    m = len(poly)
-    for i in range(m):
-        p, q = poly[i], poly[(i + 1) % m]
-        dp = nx * p[0] + ny * p[1] - h
-        dq = nx * q[0] + ny * q[1] - h
-        if dp <= 0:
-            out.append(p)
-        if (dp < 0 < dq) or (dq < 0 < dp):
-            t = dp / (dp - dq)
-            out.append((p[0] + t * (q[0] - p[0]), p[1] + t * (q[1] - p[1])))
-    return out
-
-
-def clip_hexagon_area(h0: float, h1: float, h2: float) -> float:
-    """Brute-force area of the 3-slab intersection (normals at 0/60/120 deg)."""
-    poly = [(-1e5, -1e5), (1e5, -1e5), (1e5, 1e5), (-1e5, 1e5)]
-    for d, h in enumerate((h0, h1, h2)):
-        for s in (1.0, -1.0):
-            nx = s * np.cos(np.radians(60.0 * d))
-            ny = s * np.sin(np.radians(60.0 * d))
-            poly = _clip_poly(poly, nx, ny, h)
-    area = 0.0
-    for i in range(len(poly)):
-        x1, y1 = poly[i]
-        x2, y2 = poly[(i + 1) % len(poly)]
-        area += x1 * y2 - x2 * y1
-    return abs(area) / 2.0
 
 
 def phi_dist(p: float, q: float) -> float:
@@ -205,79 +171,6 @@ def test_montecarlo_circle_ratio_bias_positive_small():
     # Rician: the estimated anisotropy R-hat is biased upward at circularity
     assert 1.0 < np.mean(ratio) < 1.05
     assert abs(np.mean(fit.area[ok]) / (np.pi * r * r) - 1.0) < 0.005
-
-
-# ----------------------------------------------------------- hexagon area
-
-
-def test_hexagon_regular():
-    W = np.full((6, 2), 100.0)  # all direction widths equal -> h = 50
-    area, degen = hexagon_area(W)
-    assert not degen.any()
-    assert np.allclose(area, 2 * np.sqrt(3) * 50.0 ** 2, rtol=1e-12)
-
-
-def test_hexagon_circle_anchor():
-    r = 77.0
-    W = tile_W(ellipse_widths(r, r, 0.0))
-    area, degen = hexagon_area(W)
-    assert np.allclose(np.pi * r * r / area, np.pi / (2 * np.sqrt(3)), rtol=1e-12)
-
-
-def test_hexagon_matches_bruteforce_clip_random():
-    rng = np.random.default_rng(3)
-    for _ in range(50):
-        h = rng.uniform(50.0, 100.0, 3)
-        if not all(h[d] < h[(d + 1) % 3] + h[(d + 2) % 3] for d in range(3)):
-            continue
-        W = np.repeat((2 * h)[:, None], 2, axis=1)
-        W = np.vstack([W, W])  # 6 rows: pairs repeat direction widths
-        area, degen = hexagon_area(W)
-        assert not degen.any()
-        ref = clip_hexagon_area(*h)
-        assert np.allclose(area, ref, rtol=1e-9)
-
-
-def test_hexagon_degenerate_nan():
-    # h = (10, 6, 4): h0 == h1 + h2 -> slab 0 non-binding at the boundary
-    for h0 in (10.0, 10.1):
-        W = np.repeat(np.array([2 * h0, 12.0, 8.0])[:, None], 2, axis=1)
-        W = np.vstack([W, W])
-        area, degen = hexagon_area(W)
-        assert degen.all()
-        assert np.isnan(area).all()
-    # strictly inside -> valid and matches the clip
-    W = np.repeat(np.array([19.0, 12.0, 8.0])[:, None], 2, axis=1)
-    W = np.vstack([W, W])
-    area, degen = hexagon_area(W)
-    assert not degen.any()
-    assert np.allclose(area, clip_hexagon_area(9.5, 6.0, 4.0), rtol=1e-9)
-
-
-def test_hexagon_missing_direction_nan():
-    W = np.full((6, 2), 100.0)
-    W[2] = np.nan
-    W[5] = np.nan
-    area, degen = hexagon_area(W)
-    assert np.isnan(area).all()
-
-
-def test_hexagon_area_expected_matches_clip_on_ellipse():
-    for a, b, phi in [(100.0, 80.0, 35.0), (90.0, 60.0, 0.0), (70.0, 65.0, 120.0)]:
-        h = ellipse_widths(a, b, phi)[:3] / 2.0
-        expected = hexagon_area_expected(np.array([a]), np.array([b]),
-                                         np.array([phi]))
-        assert np.allclose(expected, clip_hexagon_area(*h), rtol=1e-9)
-        # and consistent with hexagon_area on the exact projection widths
-        area, _ = hexagon_area(tile_W(ellipse_widths(a, b, phi), n=1))
-        assert np.allclose(expected, area, rtol=1e-9)
-
-
-def test_hexagon_area_expected_circle_phi_nan():
-    r = 88.0
-    expected = hexagon_area_expected(np.array([r]), np.array([r]),
-                                     np.array([np.nan]))
-    assert np.allclose(expected, 2 * np.sqrt(3) * r * r, rtol=1e-12)
 
 
 # --------------------------------------------- split halves + pair diffs

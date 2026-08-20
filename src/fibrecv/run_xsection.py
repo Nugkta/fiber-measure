@@ -21,7 +21,7 @@ run_aggregate's flag; default: advisory only), ``--validation``.
 Output
 ------
 Per (fiber, part): ``per_part/csv/xsec_<cond>_<ff>_p<p>.csv`` (aligned widths +
-per-column ellipse/hexagon), ``per_part/plots/...png``, ``per_part/shifts/...json``
+per-column ellipse), ``per_part/plots/...png``, ``per_part/shifts/...json``
 (alignment + both XML scales — ``null`` for both when ``--scale-source`` was
 numeric, since no sidecar was read). Per run: ``summary/xsection_summary.csv``
 (one row per fiber), ``summary/xsection_angle_residuals.csv`` (v2-gate
@@ -61,8 +61,6 @@ from .scale import read_scale, resolve_um_per_px, sidecar_for  # noqa: E402
 from .xsection import (  # noqa: E402
     build_part_stack,
     fit_ellipse_projections,
-    hexagon_area,
-    hexagon_area_expected,
     pair_differences,
     predict_anisotropy,
     predict_phi_transfer,
@@ -199,8 +197,6 @@ def _plot_part(df: pd.DataFrame, name: str, um: float, out: Path) -> None:
     ax2.plot(df["x_px"], area, lw=1.2, color="tab:blue", label="ellipse area")
     ax2.fill_between(df["x_px"], area - err, area + err, alpha=0.25,
                      color="tab:blue", label="±split-half err")
-    ax2.plot(df["x_px"], df["area_hex_um2"], lw=0.8, color="tab:orange",
-             label="hexagon bound")
     ax2.set_xlabel("x (px, ref-angle frame)")
     ax2.set_ylabel("area (µm²)")
     ax2.legend(loc="best", fontsize=7)
@@ -279,13 +275,9 @@ def main(argv: list[str] | None = None) -> int:
 
         st = build_part_stack(fiber, part, profiles, cfg)
         fit = fit_ellipse_projections(st.W)
-        hex_px2, hex_degen = hexagon_area(st.W)
-        hex_exp_px2 = hexagon_area_expected(fit.a, fit.b, fit.phi_deg)
         A_lo, A_hi = split_half_area(st.W)
         with np.errstate(invalid="ignore"):
             area_err_px2 = np.abs(A_lo - A_hi) / 2.0
-            hex_ratio = fit.area / hex_px2
-            hex_ratio_expected = fit.area / hex_exp_px2
 
         name = f"xsec_{cond}_{fiber:02d}_p{part}"
         df = pd.DataFrame({
@@ -300,9 +292,6 @@ def main(argv: list[str] | None = None) -> int:
             "b_um": fit.b * um,
             "area_um2": fit.area * um ** 2,
             "area_err_um2": area_err_px2 * um ** 2,
-            "area_hex_um2": hex_px2 * um ** 2,
-            "hex_ratio": hex_ratio,
-            "hex_ratio_expected": hex_ratio_expected,
             "valid": fit.valid.astype(int),
         })
         df.to_csv(out_root / "per_part" / "csv" / f"{name}.csv", index=False)
@@ -316,7 +305,6 @@ def main(argv: list[str] | None = None) -> int:
                 "um_per_px_resolved": um,
                 "n_columns": int(st.x.size),
                 "n_valid": int(fit.valid.sum()),
-                "n_hex_degenerate": int(hex_degen.sum()),
                 "n_saturated": int(sum(1 for s in st.shifts
                                        if s.get("saturated"))),
             }, fh, indent=2)
@@ -383,7 +371,6 @@ def main(argv: list[str] | None = None) -> int:
             "valid": fit.valid,
             "ratio": fit.a / fit.b,
             "phi": fit.phi_deg,
-            "hex_ratio": hex_ratio,
             "dw_frac": dw_frac,
             "n_uncertain": n_unc,
             "n_saturated": n_sat,
@@ -416,8 +403,6 @@ def main(argv: list[str] | None = None) -> int:
         ratio = np.concatenate([p["ratio"][p["valid"]] for p in ps])
         ratio = ratio[np.isfinite(ratio)]
         phi_all = np.concatenate([p["phi"] for p in ps])
-        hexr = np.concatenate([p["hex_ratio"] for p in ps])
-        hexr = hexr[np.isfinite(hexr)]
         dwf = np.concatenate([p["dw_frac"].ravel() for p in ps])
         dwf = dwf[np.isfinite(dwf)]
         W_um_all = np.concatenate([p["W_um"].ravel() for p in ps])
@@ -445,7 +430,6 @@ def main(argv: list[str] | None = None) -> int:
             "axis_ratio_iqr": float(np.percentile(ratio, 75)
                                     - np.percentile(ratio, 25)) if ratio.size else float("nan"),
             "phi_med_deg": _circular_phi_median(phi_all),
-            "hex_ratio_median": float(np.median(hexr)) if hexr.size else float("nan"),
             "pair_dw_frac_median": float(np.median(dwf)) if dwf.size else float("nan"),
             "A_circle_um2": A_circle,
             "area_ratio": A_mean / A_circle if np.isfinite(A_mean) else float("nan"),

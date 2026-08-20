@@ -27,15 +27,15 @@ skipif-guarded). Run with `uv run pytest -q` from the repo root.
 - `test_aggregate_summary.py` — current — stage-2 replicate registration and
   master summary.
 - `test_xsection.py` — current — pure cross-section math: w²-space ellipse
-  fit, hexagon closed form vs brute-force clip, split-half, anisotropy +
-  φ-transfer predictors (incl. bisector rank guard), `build_part_stack`
-  (shift recovery, saturation flag, interior gaps, config wiring).
+  fit, split-half, anisotropy + φ-transfer predictors (incl. bisector rank
+  guard), `build_part_stack` (shift recovery, saturation flag, interior gaps,
+  config wiring).
 - `test_xsection_pipeline.py` — current — `run_xsection` CLI on a fabricated
   known-ellipse tree: schemas, summaries, missing-angle/excluded-image/
   bad-scale/garbled-input paths, `--fibers` filter, validation writer.
 - `test_xsection_synthetic.py` — current — rendered multi-angle images
   end-to-end: edge-bias measurement, ellipse/φ/area recovery pins, shift
-  recovery, hexagon QC, area_err asymmetry response.
+  recovery, area_err asymmetry response.
 - `test_anomaly.py` — current — advisory anomaly flags + exclusion switch.
 - `test_overlay.py` — current — overlay rendering smoke.
 - `test_manual_edit.py` — current — manual boundary-edit round-trip.

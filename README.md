@@ -23,8 +23,8 @@ diameter steps, deviant replicates) are flagged — advisorily by default — in
 the GUI, the meta JSONs and `summary/per_image_summary.csv`; see
 [docs/features/04_anomaly_flags.md](docs/features/04_anomaly_flags.md).
 Multi-angle image sets (`C1_01_a1_part1.tiff`-style, six rotation angles per
-fiber) get a third stage that fits per-position elliptical cross-sections with
-a circumscribed-hexagon QC bound instead of assuming circularity — see
+fiber) get a third stage that fits per-position elliptical cross-sections
+instead of assuming circularity — see
 [docs/features/03_multiangle_xsection.md](docs/features/03_multiangle_xsection.md).
 
 ## Install

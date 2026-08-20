@@ -8,8 +8,8 @@ smoothed shoulder) is MEASURED on a circular control and the elliptical truth
 is delta-corrected: ratio -> (a+2d)/(b+2d), area -> pi(a+2d)(b+2d)/4.
 
 Initial pins per the plan (record-and-tighten; ratio and phi stay centred):
-phi +/-4 deg, ratio +/-0.05, area +/-3%, shifts +/-1.5 px, hex_ratio within
-+/-0.02 of the expected-for-fit value, area_err ~linear in noise (x2 -> x1.5-3).
+phi +/-4 deg, ratio +/-0.05, area +/-3%, shifts +/-1.5 px, area_err ~linear
+in noise (x2 -> x1.5-3).
 """
 
 from __future__ import annotations
@@ -25,8 +25,6 @@ from fibrecv.xsection import (
     NOMINAL_ANGLES_DEG,
     build_part_stack,
     fit_ellipse_projections,
-    hexagon_area,
-    hexagon_area_expected,
     split_half_area,
 )
 
@@ -145,19 +143,6 @@ def test_shift_recovery(ellipse_run):
         # The real-data impact is bounded by the shifts-on-vs-zero sensitivity
         # check (labbook 02).
         assert abs(s["shift_px"] - expected) <= 2.5, (a, s["shift_px"], expected)
-
-
-def test_hex_ratio_matches_expected_for_fit(ellipse_run):
-    st, fit = ellipse_run
-    hex_area, _ = hexagon_area(st.W)
-    hex_exp = hexagon_area_expected(fit.a, fit.b, fit.phi_deg)
-    ok = fit.valid & np.isfinite(hex_area) & np.isfinite(hex_exp)
-    assert ok.mean() > 0.7
-    measured = float(np.median(fit.area[ok] / hex_area[ok]))
-    expected = float(np.median(fit.area[ok] / hex_exp[ok]))
-    assert abs(measured - expected) <= 0.02, (measured, expected)
-    # a ratio-1.27 ellipse sits visibly below the circle anchor
-    assert measured < np.pi / (2 * np.sqrt(3))
 
 
 def test_area_err_reports_injected_half_asymmetry(ellipse_run):

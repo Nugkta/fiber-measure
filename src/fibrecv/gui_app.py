@@ -7,7 +7,7 @@ reused ``fibrecv`` package: ``compute`` (pure detection core), ``config``,
 ``io_utils`` (incl. ``discover_multiangle``/``parse_multiangle_name``),
 ``overlay`` (``render_overlay``), ``register``, ``measure``
 (``write_measurement``), ``xsection`` (``build_part_stack``,
-``fit_ellipse_projections``, hexagon/split-half/pair helpers) and
+``fit_ellipse_projections``, split-half/pair helpers) and
 ``run_measure``/``run_aggregate``/``run_xsection`` (batch + aggregate stages).
 Imports are absolute (``fibrecv.*``) because Streamlit runs this file as a script.
 The sibling ``.streamlit/config.toml`` supplies the Streamlit-engine half of the
@@ -129,7 +129,7 @@ from fibrecv.tensile import (  # noqa: E402
     read_trace)
 from fibrecv.xsection import (  # noqa: E402
     PartStack, XsecFit, build_part_stack, fit_ellipse_projections,
-    hexagon_area, hexagon_area_expected, pair_differences, split_half_area)
+    pair_differences, split_half_area)
 from streamlit_image_coordinates import streamlit_image_coordinates  # noqa: E402
 
 DEFAULTS = CONFIG()  # never mutated; the source of widget defaults + reset target
@@ -652,17 +652,17 @@ class MultiAnglePreview:
                                   # columns after the per-column 3-direction rule)
     med: dict                     # summary stats (empty dict when profiles empty)
                                   # keys: a/b/ratio/phi/area/area_err/rms/
-                                  # hex_ratio/hex_ratio_expected/dw_frac/
-                                  # valid_frac/n_uncertain/n_saturated/n_links
+                                  # dw_frac/valid_frac/n_uncertain/n_saturated/
+                                  # n_links
 
 
 def multiangle_preview(profiles: dict[int, dict], cfg: CONFIG) -> MultiAnglePreview:
     """Pure multi-angle cross-section preview from already-QC'd profiles.
 
     Mirrors ``run_xsection.py``'s per-part pipeline: ``build_part_stack`` ->
-    ``fit_ellipse_projections`` -> ``split_half_area``/``hexagon_area``
-    (+expected)/``pair_differences``, including its ``w_dir`` nanmean
-    denominator and RuntimeWarning suppression for ``dw_frac``
+    ``fit_ellipse_projections`` -> ``split_half_area``/``pair_differences``,
+    including its ``w_dir`` nanmean denominator and RuntimeWarning
+    suppression for ``dw_frac``
     (run_xsection.py:360-366). ``profiles`` maps angle (1..6) -> ``{"x", "w"}``
     absolute-px profiles, e.g. the ``included`` half of
     ``_profiles_from_results``'s return. Empty ``profiles`` short-circuits to
@@ -684,20 +684,12 @@ def multiangle_preview(profiles: dict[int, dict], cfg: CONFIG) -> MultiAnglePrev
 
     stack = build_part_stack(0, 1, profiles, cfg)
     fit = fit_ellipse_projections(stack.W)
-    hex_px2, _hex_degen = hexagon_area(stack.W)
-    # the hexagon area EXPECTED for the fitted ellipse: the 0.9069 circle
-    # anchor is exact for circles only, so the measured hex_ratio is only
-    # readable next to this one (same pair the CLI writes per column as
-    # hex_ratio/hex_ratio_expected, run_xsection.py:283-289)
-    hex_exp_px2 = hexagon_area_expected(fit.a, fit.b, fit.phi_deg)
     A_lo, A_hi = split_half_area(stack.W)
     pair_dw = pair_differences(stack.W)
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", category=RuntimeWarning)
         with np.errstate(invalid="ignore"):
             area_err_px2 = np.abs(A_lo - A_hi) / 2.0
-            hex_ratio = fit.area / hex_px2
-            hex_ratio_exp = fit.area / hex_exp_px2
             w_dir = np.nanmean(np.stack([stack.W[:3], stack.W[3:]]), axis=0)
             dw_frac = np.abs(pair_dw) / w_dir
 
@@ -721,8 +713,6 @@ def multiangle_preview(profiles: dict[int, dict], cfg: CONFIG) -> MultiAnglePrev
     n_pos = int(valid.sum())
     valid_frac = n_pos / n_measurable if n_measurable else 0.0
 
-    hexr = hex_ratio[np.isfinite(hex_ratio)]
-    hexre = hex_ratio_exp[np.isfinite(hex_ratio_exp)]
     dwf = dw_frac[np.isfinite(dw_frac)]
 
     # nanmedian/nanmean below can legitimately see an all-NaN slice (e.g. a
@@ -740,9 +730,6 @@ def multiangle_preview(profiles: dict[int, dict], cfg: CONFIG) -> MultiAnglePrev
             "area": float(np.nanmedian(fit.area[valid])) if valid.any() else float("nan"),
             "area_err": float(np.nanmedian(area_err_px2[valid])) if valid.any() else float("nan"),
             "rms": float(np.nanmedian(fit.rms_resid[valid])) if valid.any() else float("nan"),
-            "hex_ratio": float(np.median(hexr)) if hexr.size else float("nan"),
-            "hex_ratio_expected": (float(np.median(hexre)) if hexre.size
-                                   else float("nan")),
             "dw_frac": float(np.median(dwf)) if dwf.size else float("nan"),
         }
     med.update({
@@ -1149,15 +1136,14 @@ def _xsec_area_fig(stack, fit, um_per_px: float, show_err: bool):
     """Per-column ellipse area along the part, with its bounds (mirrors the
     CLI's ``run_xsection._plot_part`` lower panel).
 
-    The split-half ± band and the hexagon upper bound are recomputed here from
-    the stack (``MultiAnglePreview`` carries only the medians, not the
-    per-column arrays); both are pure functions over ``stack.W``, so this
-    cannot disagree with the preview's numbers. ``show_err=False`` drops the
-    band, which is all-NaN whenever an angle is missing (each split half needs
-    all three directions on its own).
+    The split-half ± band is recomputed here from the stack
+    (``MultiAnglePreview`` carries only the medians, not the per-column
+    arrays); it is a pure function over ``stack.W``, so this cannot disagree
+    with the preview's numbers. ``show_err=False`` drops the band, which is
+    all-NaN whenever an angle is missing (each split half needs all three
+    directions on its own).
     """
     A_lo, A_hi = split_half_area(stack.W)
-    hex_px2, _degen = hexagon_area(stack.W)
     um2 = um_per_px ** 2
     area = np.where(fit.valid, fit.area, np.nan) * um2
 
@@ -1168,8 +1154,6 @@ def _xsec_area_fig(stack, fit, um_per_px: float, show_err: bool):
         band = np.where(np.isfinite(err), err, 0.0)
         ax.fill_between(stack.x, area - band, area + band, alpha=0.22,
                         color=_ACCENT, label="±split-half err")
-    ax.plot(stack.x, hex_px2 * um2, "-", lw=0.9, color="#D97706",
-            label="hexagon bound")
     ax.set_xlabel("aligned x position (px, reference-angle frame)")
     ax.set_ylabel("area (µm²)")
     ax.legend(loc="best", fontsize=7)
@@ -2728,8 +2712,8 @@ def _render_xsection(pv: MultiAnglePreview, excluded: dict[int, str],
             afig = _xsec_area_fig(pv.stack, pv.fit, um_per_px, show_err=full_six)
             st.pyplot(afig)
             plt.close(afig)
-            st.caption("Per-column ellipse area against the circumscribed-"
-                       "hexagon upper bound.")
+            st.caption("Per-column ellipse area with the ±split-half "
+                       "uncertainty band.")
 
     # --- 5. per-angle QC table --------------------------------------------
     rows = []
@@ -2766,8 +2750,6 @@ def _render_xsection(pv: MultiAnglePreview, excluded: dict[int, str],
     # --- 6. secondary numbers ---------------------------------------------
     n_links = int(med.get("n_links", 0))
     st.caption(
-        f"hex ratio {_fmt(med.get('hex_ratio'), 'cv')} vs expected "
-        f"{_fmt(med.get('hex_ratio_expected'), 'cv')} for this ellipse · "
         f"pair Δw/w {_fmt(med.get('dw_frac'), 'cv')} · valid columns "
         f"{_fmt(med.get('valid_frac'), 'coverage')} of the measurable ones · "
         f"uncertain shifts {int(med.get('n_uncertain', 0))}/{n_links} "

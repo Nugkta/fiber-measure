@@ -30,9 +30,9 @@ Per-image detection pipeline (features → band → edges → qc) driven by
   vs Scaling/Items) for the xsection stage's µm conversion.
 - `xsection.py` — current — pure multi-angle cross-section math:
   `build_part_stack` (cross-angle alignment), `fit_ellipse_projections`
-  (w²-space linear ellipse fit), `hexagon_area`(+`_expected`) upper bound,
-  `split_half_area` uncertainty, `predict_anisotropy`/`predict_phi_transfer`
-  validation criteria — see `docs/features/03_multiangle_xsection.md`.
+  (w²-space linear ellipse fit), `split_half_area` uncertainty,
+  `predict_anisotropy`/`predict_phi_transfer` validation criteria — see
+  `docs/features/03_multiangle_xsection.md`.
 - `band.py` — current — locates the single full-width fibre band and fits
   its centerline/tilt (`BandResult`, `tilt_geometry`).
 - `edges.py` — current — per-column tight-inner-edge detection producing
@@ -66,7 +66,7 @@ Per-image detection pipeline (features → band → edges → qc) driven by
   exclusion reason; `--anomaly-exclude` turns flags into exclusions).
 - `run_xsection.py` — current — CLI, stage 3 (multi-angle sets): aligns the
   six per-angle width profiles of each (fiber, part), fits per-column
-  ellipses + hexagon bound, converts to µm via the XML sidecar scale
+  ellipses, converts to µm via the XML sidecar scale
   (`--scale-source`; a numeric literal bypasses the sidecars entirely, for
   manual-scale GUI runs), optional `--anomaly-exclude` (mirrors
   `run_aggregate`'s flag), and writes per-part CSV/plot/shifts +
