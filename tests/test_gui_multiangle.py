@@ -446,16 +446,17 @@ def test_multiangle_upload_source_has_no_folder_upload(multiangle_folder: Path):
     through the browser websocket. The batch button needs a real directory
     too, so it is disabled here."""
     at = _in_multiangle(multiangle_folder)
-    assert not any("upload a whole folder" in cb.label
-                   for cb in at.sidebar.checkbox)
+    # folder source: the batch reads images back off disk, so the button works
     assert next(b for b in at.button
                 if b.label.startswith("Run multi-angle")).disabled is False
 
     source = next(r for r in at.sidebar.radio if r.label == "multi-angle source")
     source.set_value("Upload").run()
     assert not at.exception
-    assert not any("upload a whole folder" in cb.label
-                   for cb in at.sidebar.checkbox)
+    # upload source offers exactly the hand-picked-files uploader and no
+    # folder chooser: this fails if a folder-upload control is reintroduced.
+    uploader_labels = [f.label for f in at.sidebar.file_uploader]
+    assert uploader_labels == ["Upload multi-angle images"], uploader_labels
     # no uploads yet -> nothing is loaded and the cards do not render
     assert not any(b.label.startswith("Run multi-angle") for b in at.button)
     assert any("upload the six angle images" in str(i.value) for i in at.info)
