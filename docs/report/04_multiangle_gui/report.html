@@ -1,0 +1,531 @@
+<title>Multi-angle Cross-section Analysis</title>
+<style>
+  :root {
+    --ground: #FAFAF7;
+    --ink: #1A1A1F;
+    --ink-mid: #4A4850;
+    --ink-light: #78757F;
+    --accent: #660099;
+    --accent-soft: #8844AA;
+    --accent-faint: #F3F0F6;
+    --stripe: #F5F3F8;
+    --border: #DDD8E4;
+    --good: #2D7D4F;
+    --warn: #B8860B;
+    --bad: #C0392B;
+    --card-bg: #fff;
+    --code-bg: #F0EDF4;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground: #141418;
+      --ink: #E8E6EC;
+      --ink-mid: #A8A4B0;
+      --ink-light: #7A7684;
+      --accent: #B366E0;
+      --accent-soft: #9955CC;
+      --accent-faint: #1E1A24;
+      --stripe: #1C1920;
+      --border: #2E2A36;
+      --good: #5DBB7A;
+      --warn: #D4A843;
+      --bad: #E07070;
+      --card-bg: #1A1820;
+      --code-bg: #1E1A24;
+    }
+  }
+  :root[data-theme="dark"] {
+    --ground: #141418;
+    --ink: #E8E6EC;
+    --ink-mid: #A8A4B0;
+    --ink-light: #7A7684;
+    --accent: #B366E0;
+    --accent-soft: #9955CC;
+    --accent-faint: #1E1A24;
+    --stripe: #1C1920;
+    --border: #2E2A36;
+    --good: #5DBB7A;
+    --warn: #D4A843;
+    --bad: #E07070;
+    --card-bg: #1A1820;
+    --code-bg: #1E1A24;
+  }
+
+  body {
+    background: var(--ground);
+    color: var(--ink);
+    font-family: Georgia, 'Times New Roman', serif;
+    font-size: 17px;
+    line-height: 1.65;
+    margin: 0;
+    padding: 2rem 1.25rem 4rem;
+  }
+
+  .page { max-width: 720px; margin: 0 auto; }
+
+  h1 {
+    font-size: 1.55rem;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    margin: 0 0 0.25rem;
+    color: var(--ink);
+    text-wrap: balance;
+  }
+  .study-label {
+    font-variant: small-caps;
+    color: var(--accent);
+    font-size: 0.85rem;
+    letter-spacing: 0.08em;
+    margin: 0 0 0.15rem;
+  }
+  .date {
+    color: var(--ink-light);
+    font-size: 0.85rem;
+    margin: 0 0 2rem;
+  }
+
+  h2 {
+    font-size: 1.15rem;
+    font-weight: 700;
+    color: var(--accent);
+    letter-spacing: 0.02em;
+    margin: 2.5rem 0 0.75rem;
+    padding-bottom: 0.35rem;
+    border-bottom: 1.5px solid var(--border);
+    text-wrap: balance;
+  }
+  h3 {
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: var(--ink);
+    margin: 1.5rem 0 0.75rem;
+  }
+
+  p { margin: 0 0 1rem; }
+
+  .cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 0.75rem;
+    margin: 0 0 2rem;
+  }
+  .card {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 0.75rem 0.85rem;
+    text-align: center;
+  }
+  .card .label {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    font-size: 0.72rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--ink-light);
+    margin: 0 0 0.25rem;
+  }
+  .card .value {
+    font-size: 1.5rem;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    color: var(--ink);
+    margin: 0;
+    line-height: 1.2;
+  }
+  .card .detail {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    font-size: 0.72rem;
+    color: var(--ink-mid);
+    margin: 0.15rem 0 0;
+  }
+  .card .value.good { color: var(--good); }
+  .card .value.warn { color: var(--warn); }
+
+  .tbl-wrap { overflow-x: auto; margin: 0.75rem 0 1.25rem; }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    font-size: 0.82rem;
+    font-variant-numeric: tabular-nums;
+  }
+  th {
+    text-align: left;
+    font-weight: 600;
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--ink-light);
+    padding: 0.5rem 0.6rem;
+    border-bottom: 1.5px solid var(--border);
+    white-space: nowrap;
+  }
+  th.r, td.r { text-align: right; }
+  td {
+    padding: 0.4rem 0.6rem;
+    border-bottom: 1px solid var(--border);
+    color: var(--ink-mid);
+  }
+  tr:nth-child(even) td { background: var(--stripe); }
+  td.improved { color: var(--good); font-weight: 600; }
+  td.worsened { color: var(--bad); font-weight: 600; }
+  td.neutral { color: var(--ink-mid); }
+  td.fiber-name { color: var(--ink); font-weight: 600; }
+
+  code {
+    font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+    font-size: 0.85em;
+    background: var(--code-bg);
+    padding: 0.15em 0.35em;
+    border-radius: 3px;
+  }
+  pre {
+    background: var(--code-bg);
+    padding: 0.75rem 1rem;
+    border-radius: 4px;
+    overflow-x: auto;
+    font-size: 0.82rem;
+    line-height: 1.5;
+    margin: 0.75rem 0 1.25rem;
+  }
+  pre code { background: none; padding: 0; }
+
+  figure { margin: 1rem 0 1.5rem; }
+  figure img { max-width: 100%; height: auto; border-radius: 4px; }
+  figcaption {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    font-size: 0.78rem;
+    color: var(--ink-light);
+    margin-top: 0.5rem;
+    line-height: 1.45;
+  }
+
+  .verdict {
+    background: var(--accent-faint);
+    border-left: 3px solid var(--accent);
+    padding: 1rem 1.25rem;
+    border-radius: 0 4px 4px 0;
+    margin: 1.5rem 0;
+  }
+  .verdict p { margin: 0 0 0.5rem; }
+  .verdict p:last-child { margin: 0; }
+
+  .caveat {
+    background: var(--accent-faint);
+    border-left: 3px solid var(--warn);
+    padding: 0.85rem 1rem;
+    border-radius: 0 4px 4px 0;
+    margin: 1rem 0;
+    font-size: 0.92rem;
+  }
+  .caveat p { margin: 0 0 0.4rem; }
+  .caveat p:last-child { margin: 0; }
+
+  .erratum {
+    background: var(--accent-faint);
+    border-left: 3px solid var(--bad);
+    padding: 0.85rem 1rem;
+    border-radius: 0 4px 4px 0;
+    margin: 1rem 0;
+    font-size: 0.92rem;
+  }
+  .erratum p { margin: 0 0 0.4rem; }
+  .erratum p:last-child { margin: 0; }
+
+  .footnote {
+    font-size: 0.82rem;
+    color: var(--ink-light);
+    border-top: 1px solid var(--border);
+    margin-top: 2rem;
+    padding-top: 0.75rem;
+  }
+  .footnote p { margin: 0 0 0.4rem; }
+
+  ul, ol { padding-left: 1.4rem; margin: 0 0 1rem; }
+  li { margin-bottom: 0.35rem; }
+
+  .eq {
+    font-family: Georgia, 'Times New Roman', serif;
+    font-style: italic;
+    text-align: center;
+    margin: 1rem 0;
+    font-size: 1.05em;
+    color: var(--ink);
+  }
+</style>
+
+<div class="page">
+
+<p class="study-label">fibrecv &middot; feature overview</p>
+<h1>Multi-angle cross-section analysis</h1>
+<p class="date">2026-08-20</p>
+
+<!-- =========================================================== -->
+<h2>1. Overview</h2>
+
+<p>This feature adds multi-angle cross-section analysis to fibrecv &mdash; both as a CLI stage
+and an interactive GUI mode. It takes bright-on-dark fibre images captured at 6 rotation positions spaced 60&deg; apart
+(a1 through a6), measures each image's diameter profile, aligns them via cross-correlation, and
+fits an ellipse at every position along the fibre to produce a cross-sectional area spectrum.
+The 6 rotations cover 3 independent projection directions, each measured twice from opposite
+sides (a1/a4 = 0&deg;, a2/a5 = 60&deg;, a3/a6 = 120&deg;). The GUI provides interactive preview of the fit quality plus
+one-click batch processing for full datasets.</p>
+
+<div class="caveat">
+<p>Tensile integration is not yet added to this mode.</p>
+</div>
+
+<!-- =========================================================== -->
+<h2>2. Pipeline</h2>
+
+<h3>Input</h3>
+<p>Images are named <code>&lt;condition&gt;_&lt;fibre&gt;_a&lt;angle&gt;_part&lt;part&gt;.tiff</code>
+&mdash; 6 angles (a1&ndash;a6) &times; N parts per fibre. Each angle is a different rotation of
+the same fibre segment. The six angles correspond to three projection directions: a1/a4 = 0&deg;,
+a2/a5 = 60&deg;, a3/a6 = 120&deg;.</p>
+
+<h3>Stage 1 &mdash; Per-image measurement</h3>
+<p>Each image is processed independently. For bright-on-dark fibres, the feature map uses
+<code>median(R, G, B)</code> instead of HSV desaturation &mdash; the median rejects single-channel
+chromatic aberration artefacts. Edge detection finds the top and bottom boundaries, producing a
+diameter profile (width vs x position) for each angle.</p>
+
+<h3>Stage 2 &mdash; Cross-correlation alignment</h3>
+<p>The 6 diameter profiles need to be aligned because the fibre appears at different x positions
+in each rotated image. The algorithm cross-correlates each profile against a reference (a1) to
+find the optimal shift. After alignment, the same x position corresponds to the same physical
+location on the fibre across all angles.</p>
+
+<h3>Stage 3 &mdash; Per-column ellipse fit</h3>
+<p>At each aligned x position, the measured widths from up to 6 angles are fitted to an ellipse
+model:</p>
+
+<p class="eq">w(&theta;)&sup2; = c&#8320; + c&#8321;&middot;cos(2&theta;) + c&#8322;&middot;sin(2&theta;)</p>
+
+<p>This is a 3-parameter linear least-squares problem (3 unknowns from up to 6 observations).
+From the fitted c&#8320;, c&#8321;, c&#8322;:</p>
+
+<ul>
+  <li>Semi-axes: <em>a</em>, <em>b</em> = &radic;((c&#8320; &plusmn; &radic;(c&#8321;&sup2; + c&#8322;&sup2;)) / 2)</li>
+  <li>Orientation: &phi; = atan2(c&#8322;, c&#8321;) / 2</li>
+  <li>Area: &pi;<em>ab</em></li>
+</ul>
+
+<p>The fit requires all 3 independent projection directions (0&deg;, 60&deg;, 120&deg;) at each
+column. Missing angles reduce coverage but the fit proceeds as long as all 3 directions have at
+least one representative.</p>
+
+<h3>Fit quality &mdash; RMS residual</h3>
+<p>For each column, the root-mean-square of (measured width &minus; ellipse-predicted width) across
+the participating angles. The median RMS over all valid columns summarises the overall fit quality.
+Values below 6 px indicate a good ellipse approximation; above 6 px the fibre is flagged as
+low-confidence.</p>
+
+<h3>Split-half uncertainty</h3>
+<p>When all 6 angles are present, the area is independently estimated from the two halves
+(a1&ndash;a3 and a4&ndash;a6). The difference gives a model-free uncertainty estimate:</p>
+
+<p class="eq">area_err = |A(a1, a2, a3) &minus; A(a4, a5, a6)| / 2</p>
+
+<p>This requires all 6 angles; with fewer, the main fit still runs but the uncertainty is
+unavailable.</p>
+
+<h3>Output</h3>
+<p>A cross-sectional area spectrum &mdash; area vs position along the fibre &mdash; plus summary
+statistics (median area, axis ratio <em>a</em>/<em>b</em>, orientation &phi;, RMS residual) and
+a per-fibre summary CSV for batch runs.</p>
+
+<!-- =========================================================== -->
+<h2>3. GUI walkthrough</h2>
+
+<h3>Sidebar</h3>
+<p>The sidebar (visible on the left in the screenshots below) contains the main controls.
+Analysis mode radio switches between <strong>Replicates</strong> and <strong>Multi-angle
+cross-section</strong>. Data source selects between local folder and drag-drop upload.
+Fibre, Part, and Condition selectors navigate the dataset. A manual &micro;m/px scale input
+(default 0.388924, the C1 microscope's calibration value) sets the physical scale; the ppu field
+is visible but unused in this mode. Detection parameters with bright-mode defaults are
+auto-applied on entry into multi-angle mode.</p>
+
+<h3>Card 01 &mdash; Angles</h3>
+<figure>
+  <img src="gui_angles.png" alt="Card 01: sidebar with analysis mode selector on the left; main
+    area shows one of six angle tabs (a1) with the fibre overlay image — cyan top boundary,
+    yellow bottom boundary, green perpendicular width markers, dashed centreline — and per-angle
+    metrics below." loading="lazy">
+  <figcaption><strong>Card 01 &mdash; Angles.</strong> Six tabs (a1&ndash;a6), one per rotation
+    angle. Each tab shows the fibre overlay image with detected boundaries (cyan = top, yellow =
+    bottom, green = perpendicular width markers, dashed centreline), per-angle metrics (median
+    width in &micro;m, width in px, coverage, tilt slope, flags), a diameter-vs-position profile
+    plot, and an optional boundary editor for manual corrections. The sidebar on the left shows
+    the analysis mode, data source, and detection parameters.</figcaption>
+</figure>
+
+<h3>Card 02 &mdash; Cross-section</h3>
+<figure>
+  <img src="gui_metrics_stack.png" alt="Top of Card 02: coverage chips showing which angles
+    participate in the fit (all green = in fit), followed by the aligned width stack plot showing
+    all 6 diameter profiles shifted to a common reference frame, with grey shading where the
+    3-direction rule is not met." loading="lazy">
+  <figcaption><strong>Card 02 top &mdash; Aligned width stack.</strong> Coverage chips (green = in
+    fit) show which angles participate. Below, the aligned width stack plot displays all 6 profiles
+    shifted to the same reference frame. Grey shading marks columns where the per-column
+    3-direction rule is not met.</figcaption>
+</figure>
+
+<figure>
+  <img src="gui_ellipse_qc.png" alt="Bottom of Card 02: metrics row with median area, axis ratio,
+    orientation, semi-axes, and fit RMS; a median cross-section ellipse drawn to scale with an
+    equal-area circle reference; the area-vs-position plot; and the per-angle QC table with shift,
+    correlation peak, flags, and residual columns." loading="lazy">
+  <figcaption><strong>Card 02 bottom &mdash; Ellipse fit results.</strong> Metrics row: median area
+    (&micro;m&sup2; &plusmn; split-half error), axis ratio, orientation, semi-axes <em>a</em> and
+    <em>b</em>, fit RMS (colour-coded: purple = good, orange = above 6 px threshold). Below: the
+    median cross-section ellipse drawn to scale with an equal-area circle reference and orientation
+    arrow; the area-vs-position plot with &plusmn;split-half uncertainty band; the per-angle QC
+    table (shift in px, correlation peak, uncertain/saturated flags, median signed residual, column
+    count); and secondary metrics (pair &Delta;w/w, valid column %, uncertain shift count, scale
+    provenance).</figcaption>
+</figure>
+
+<h3>Card 03 &mdash; Batch &amp; export</h3>
+<p>A one-click batch button measures every image for the selected condition and runs the
+cross-section fit across all fibres and parts. The result is a downloadable
+<code>xsection_summary.csv</code> with per-fibre statistics including median area, axis ratio,
+RMS residual, and low-confidence flags. This card is not shown in the screenshots above.</p>
+
+<!-- =========================================================== -->
+<h2>4. Example: Fibre 10 part 5</h2>
+
+<p>The screenshots above show Fibre 10 part 5 from the C1 dataset. All 6 angles are present and
+participate in the fit (all coverage chips green). The key metrics are:</p>
+
+<div class="cards">
+  <div class="card">
+    <p class="label">Median area</p>
+    <p class="value">1872.7</p>
+    <p class="detail">&micro;m&sup2;</p>
+  </div>
+  <div class="card">
+    <p class="label">Axis ratio</p>
+    <p class="value">1.116</p>
+    <p class="detail"><em>a</em> / <em>b</em></p>
+  </div>
+  <div class="card">
+    <p class="label">Orientation</p>
+    <p class="value">166.5&deg;</p>
+    <p class="detail">&phi;</p>
+  </div>
+  <div class="card">
+    <p class="label">Fit RMS</p>
+    <p class="value good">1.99</p>
+    <p class="detail">px (good)</p>
+  </div>
+</div>
+
+<p>The semi-axes are 26.07 &times; 23.24 &micro;m. The fit RMS of 1.99 px is well below the
+6 px threshold, shown in purple (good fit). The area display reads &ldquo;&plusmn;&mdash;&rdquo;
+for the split-half uncertainty, indicating that the split-half error was not computed for this
+particular view (this can occur in upload mode or when angle-pair conditions are not fully
+met).</p>
+
+<p>The aligned width stack shows all 6 profiles after alignment, with cross-correlation shifts
+ranging from &minus;1735 to +1743 px. The per-angle QC table reveals that angle a2 contributes
+relatively little: it has only 447 valid columns and a correlation peak of 0.310 (the lowest
+among the six). The other angles have correlation peaks ranging from 0.443 to 1.000 and column
+counts from 800 (a3) to 2191 (a6).</p>
+
+<p>Secondary metrics: pair &Delta;w/w = 0.037 (3.7% width disagreement between same-direction
+pairs), valid columns 100%.</p>
+
+<div class="caveat">
+<p>This fibre was flagged as low-confidence in the study 03 batch summary. The low correlation
+peak on a2 is a sign of registration difficulty &mdash; the a2/a5 angle pair locks to a
+suboptimal x-registration on some parts. However, the per-column fit quality remains good
+(RMS 1.99 px), indicating that where the angles do overlap, the ellipse model fits the data
+well. The issue is a stage-3 registration robustness problem, not an edge-detection failure.</p>
+</div>
+
+<!-- =========================================================== -->
+<h2>5. Feature list</h2>
+
+<h3>Pipeline features (CLI + core)</h3>
+<ul>
+  <li>Multi-angle name parser and file discovery (<code>&lt;cond&gt;_&lt;fiber&gt;_a&lt;angle&gt;_part&lt;part&gt;.tiff</code>)</li>
+  <li>Pillow fallback for LZW-compressed Zeiss TIFFs</li>
+  <li>Zeiss XML sidecar reader with dual &micro;m/px candidates (camera vs items) and resolver</li>
+  <li>Bright feature mode: <code>median(R, G, B)</code> z-map for bright-on-dark fibres</li>
+  <li>Clamped relative edge threshold for bright mode (<code>edge_frac</code> primary, <code>edge_z</code> floor, <code>edge_cap</code> ceiling)</li>
+  <li><code>k_band</code> recalibrated from 4.0 to 6.0 for bright mode (median z-map inflates z-scores)</li>
+  <li>Cross-angle correlation alignment (<code>build_part_stack</code>)</li>
+  <li>Per-column ellipse fit via w&sup2;-space linear least-squares (<code>fit_ellipse_projections</code>)</li>
+  <li>Split-half area uncertainty (independent fits from a1&ndash;a3 vs a4&ndash;a6)</li>
+  <li>Pair-difference width agreement metric (&Delta;w/w between same-direction angle pairs)</li>
+  <li>RMS residual with configurable low-confidence threshold (default 6.0 px)</li>
+  <li>Stage-3 CLI (<code>run_xsection</code>): per-part CSVs + plots, per-fibre summary, shifts JSON</li>
+  <li>Numeric <code>--scale-source</code> bypasses XML sidecars for manual calibration</li>
+  <li><code>--anomaly-exclude</code> flag for QC exclusion parity between CLI and GUI</li>
+  <li>Per-image <code>y_top_px</code> / <code>y_bot_px</code> columns persisted in measurement CSVs</li>
+</ul>
+
+<h3>GUI features</h3>
+<ul>
+  <li>Analysis mode switch (Replicates / Multi-angle cross-section)</li>
+  <li>Bright-mode defaults auto-applied on mode entry (transition-only, not every rerun)</li>
+  <li>Mode-aware parameter Reset (resets to bright base in multi-angle mode)</li>
+  <li>Multi-angle file loader: local folder and drag-drop upload with name classification</li>
+  <li>Manual &micro;m/px scale input (default 0.388924; persists across mode switches)</li>
+  <li>Condition selector (shown only when multiple conditions detected)</li>
+  <li>Card 01 &mdash; Angles: six tabs with overlay image, per-angle metrics, diameter profile plot</li>
+  <li>Card 01 &mdash; Per-tab manual boundary editor gated behind checkbox (performance optimisation)</li>
+  <li>Card 02 &mdash; Cross-section: coverage chips, aligned width stack, ellipse metrics row</li>
+  <li>Card 02 &mdash; Median ellipse drawing (equal-aspect, with equal-area circle reference and &phi; arrow)</li>
+  <li>Card 02 &mdash; Area-vs-position plot with &plusmn;split-half uncertainty band</li>
+  <li>Card 02 &mdash; Per-angle QC table (shift, correlation peak, uncertain/saturated flags, residual)</li>
+  <li>Card 03 &mdash; One-click condition-scoped batch (stage 1 + stage 3, ~20 min for 450 images)</li>
+  <li>Card 03 &mdash; Summary dataframe with low-confidence flagging + CSV download</li>
+  <li>Missing-angle warnings (names which are missing, fits if &ge;3 directions available)</li>
+  <li>&ldquo;Cannot fit&rdquo; error when fewer than 3 projection directions covered</li>
+  <li>Jump menu navigation between the three cards</li>
+  <li>Tensile card hidden in multi-angle mode (no tensile linkage yet)</li>
+</ul>
+
+<!-- =========================================================== -->
+<h2>6. Challenging cases</h2>
+
+<p>The figure below shows edge detection on four representative C1 images, comparing the old
+pipeline (red, <code>max(R,G,B)</code> z-map with fixed threshold <code>edge_z = 4</code>) against
+the current pipeline (cyan, <code>median(R,G,B)</code> z-map with relative threshold
+<code>edge_frac = 0.30</code>). These illustrate the range of image quality the pipeline handles.</p>
+
+<figure>
+  <img src="spot_check_overlay.png" alt="Four C1 fibre images with old (red) and new (cyan) edge
+    boundaries overlaid, showing defocused, dim, sharp, and registration-lock cases." loading="lazy">
+  <figcaption><strong>Old boundary (red) vs new boundary (cyan) on four C1 images.</strong>
+    <br><strong>Defocused</strong> (fibre 01, a5, part 4) &mdash; the most common challenge.
+    Defocus produces a soft halo around the fibre edge. The old pipeline&rsquo;s fixed threshold
+    sat in the middle of this halo, detecting an edge 12 px/side too wide. The relative threshold
+    tracks the steeper part of the wall ramp, reducing the width by 24 px total.
+    <br><strong>Dim</strong> (fibre 08, a3, part 1) &mdash; low wall amplitude (&sim;40 z). Previously
+    the worst-fitting part in the dataset (RMS 11.84 px). The relative threshold places the
+    boundary closer to the true fibre edge; improvement &minus;2.0 px/side.
+    <br><strong>Sharp</strong> (fibre 03, a1, part 1) &mdash; a well-focused image with clear edges.
+    The new boundary (cyan) tracks visibly closer to the bright-to-dark transition. No regression
+    &mdash; the &minus;6.7 px/side shift is a systematic improvement, not a new artefact. The fibre
+    had a good fit before and after.
+    <br><strong>Registration lock</strong> (fibre 10, a2, part 1) &mdash; the one new
+    low-confidence fibre in the dataset. Edge detection itself is clean (cyan tracks the visible
+    edge correctly), but the a2/a5 angle pair locks to a suboptimal x-registration in the
+    cross-correlation step, inflating the per-part RMS. This is a stage-3 alignment issue, not an
+    edge detection problem.</figcaption>
+</figure>
+
+<!-- =========================================================== -->
+
+<div class="footnote">
+<p><strong>Data.</strong> Fibre 10 part 5 from the C1 dataset. Screenshots taken from the
+fibrecv GUI on branch <code>worktree-edge-criteria</code>.</p>
+</div>
+
+</div>

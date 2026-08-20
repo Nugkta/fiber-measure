@@ -1,69 +1,251 @@
 Hypothesis: Replacing max(R,G,B) with median(R,G,B) in bright mode and switching from a fixed to a clamped relative edge threshold will reduce defocus-induced width errors on C1 images without introducing inward bite.
-Status: done
+Status: active
 Started: 2026-08-19
 
-## 2026-08-19 (re-run with k_band fix — final numbers, study closed)
-**What I did** — Re-ran stage 1 (450 primary images, excluding the redundant `s.tiff` scale-bar variants this time) with `--feature-mode bright --edge-frac 0.30 --k-band 6.0` → `fibrecv_output/multiangle_c1_s03b/`, then stage 3 with `--scale-source items --validation`. Added `BRIGHT_DEFAULTS = {"edge_frac": 0.30, "k_band": 6.0}` to `run_measure.build_config` so `--feature-mode bright` picks the calibrated knobs up automatically (explicit flags still override) + 3 tests. Generated the old-vs-new boundary overlay figure (`scripts/spot_check_overlay.py` → `docs/report/03_edge_criteria/spot_check_overlay.png`). Rewrote the report with corrected numbers, the k_band section, the figure, and a caveats section.
-
-**What I observed** — Stage 1: 450 ok, 0 errors, **0 low_confidence** (the 6 false `band_mismatch` are gone). Fiber 01 part 4 restored: **0 → 2195 valid columns**; fiber 01 n_positions 8676 → 11172 (old 11215). Final per-fiber: low_confidence **6 → 1**, `part_rms_med_max_px` p50 4.97 → 4.10, axis ratio grand median 1.127 → 1.139, total positions 162223 → 161634 (−0.4%). Per-part rms across all 75 parts: p50 3.70 → **2.78**, p90 6.64 → 4.39, p95 7.76 → 4.89, max 11.84 → **6.27**, parts >6.0 px **11 → 1**. Crucially the rms distribution is essentially unchanged from the buggy k_band=4 run (p50 2.84 → 2.78, max 6.29 → 6.27), so the improvement was never an artifact of the lost part. Visual spot-check on 4 images (1 defocused, 2 sharp, 1 dim): in every panel the old boundary sits outside the visible bright-to-dark edge in the dark surround and the new one lands on it; no inward bite anywhere. Per-side shift −12.2 px (defocused), −6.7 / −5.6 px (sharp), −7.6 px (dim). Suite: **216 passed**.
-
-**What I think it means** — Study closed, hypothesis confirmed. The improvement is real and now verified three independent ways: synthetic (δ 3.90 → −0.51 px/side), statistical (rms distribution tightened throughout, parts >6.0 px 11 → 1), and visual (boundary lands on the edge in all four spot-checks). The one remaining flag, fiber 10, is a genuine stage-3 registration lock failure, not an edge defect. MasP2 is provably bit-identical. Confidence: high. What would change this: a collaborator-confirmed different angle spacing, or evidence that the visible bright-to-dark transition is not the physical wall (the spot-check assumes it is).
-
-**Next (follow-ups for the owner, none blocking)** — (i) stage-3 cross-angle registration peak validation (fiber 10, and the same fragility on fiber 04 part 5); (ii) re-check the other absolute-z thresholds (`amin`, `rise_min`, `slope_min`/`slope_cap`) as a group if the z-map is ever changed again; (iii) study 02's anisotropy statistics should be recomputed on the s03b run before being restated, since axis ratio shifts partly for geometric reasons; (iv) `xsec_rms_flag_px` is now stricter in relative terms than when calibrated.
-
-## 2026-08-19 (post-close verification — two defects found, one fixed)
-**What I did** — Ran the verification items skipped at first close: (a) MasP2 desat regression check, (b) fiber 10 rms diagnosis, (c) `k_band`/`amin` band-finding spot-check on the dimmest C1 quartile (the check the plan asked for and I skipped), (d) per-part rms distribution recalibration. Found two defects; fixed one, scoped the other out.
-
-**What I observed** —
-1. **MasP2 desat: PASS, bit-identical.** 3 images run on both branches: median diameters 80.52685546875 / 62.23075866699219 / 42.61311340332031 µm, deltas exactly 0.0. `diameter_raw` arrays and the float32 `D` z-map both match by SHA-256. The desat path is provably untouched.
-2. **`k_band` coupling bug (my defect, now fixed).** The median z-map has a smaller background MAD than `max(R,G,B)`, so z-scores inflate and more of the defocus halo crosses the absolute `k_band=4` threshold. On the 6 most defocused C1 images the coarse band ballooned (`band_half` 97.5→159.0, 89.0→141.5, 97.5→222.5 px) while the measured widths stayed correct (140.1/136.7/145.2 px vs their sharp siblings' 138.0/142.1/139.9 px). `band_ratio = width/band_thickness` collapsed to 0.326–0.483, below `band_ratio_min=0.5` → false `band_mismatch` → excluded from stage 3. Not systemic: `band_half` p50 86.5→87.5, p90 102.0→102.6; only the tail blew up (max 133→222).
-   **Consequence:** fiber 01 part 4 lost angles a2/a3/a5. The 6 angles are 60°-spaced (0/60/120/180/240/300), forming 3 direction pairs mod 180°; the survivors a1/a4/a6 give directions 0°/0°/120° — only **2 distinct directions**, rank-deficient for a 3-parameter ellipse → **0 valid fits out of 3495 columns**. Fiber 01 silently lost a whole part (n_positions 11215→8676) *and* its `low_confidence` flipped True→False because the rms gate only saw the surviving parts. So the headline "6→1" was partly an artifact of data loss.
-   **Fix:** `k_band` recalibrated for bright mode. Sweep over [4,5,6,7,8] on the 6 problem images + 11 controls: mismatches 6→0 at k≥5; problem `band_ratio` min 0.326→0.646 (k=5)→0.705 (k=6)→0.761 (k=7); **measured widths identical at every k** (problem 144.2 px, control 147.6 px throughout) — `k_band` moves only the coarse mask, not the boundary. On the 12 hardest/dimmest images coverage *improves* slightly (min 0.732→0.753 at k=6) with widths drifting 139.5→139.7 px (0.1%). **Selected `k_band=6.0`** (0.205 headroom above the 0.5 gate).
-3. **Fiber 10 is a real defect, not a threshold artifact — I was wrong at first close.** Per-part rms old→new: p1 2.65→**6.29**, p2 2.84→2.27, p3 2.07→4.12, p4 2.89→3.73, p5 3.38→2.13. Because the 6 angles form 3 pairs, `rms_resid_px` is purely pair disagreement. Part 1 pair |Δ|: a1−a4 1.91→6.76, **a2−a5 2.73→20.44**, a3−a6 7.14→5.01. The a2/a5 pair locked ~500 px off in x-registration (rms 20.37 at lag 0 vs 4.92 at lag +508; true lag ≈+710 by independent search); part 3 shows the same on a3/a6 (+512). Coverage is fine on all 30 images (0.97–1.00 valid-column ratio vs old), so edge extraction is not at fault. Cause: the ~10.6% global width shrink altered the cross-correlation landscape enough to flip the peak choice. **This is a stage-3 registration robustness issue, out of scope for the edge-criteria study** — recorded for follow-up.
-4. **Per-part rms distribution** (75 parts): OLD p50=3.70 p90=6.64 p95=7.76 max=11.84 → NEW p50=2.84 p90=4.38 p95=4.93 max=6.29. The distribution tightened substantially; `xsec_rms_flag_px=6.0` now sits above p95, flagging exactly 1 part.
-
-**What I think it means** — The core hypothesis still holds and the improvement is real, but my first close overstated it and missed a defect I introduced. The `k_band` coupling is exactly the risk the plan named ("these knobs were calibrated under max-V; median-V has slightly different MAD") and skipping that check let a silent data-loss bug ship. Fiber 10's registration failure is genuine and unrelated to the edge criteria. Confidence: high on the mechanism for both (each traced to concrete numbers and reproduced by sweep). Re-running stage 1+3 with `k_band=6.0` for honest final numbers.
-
-**Next** — Re-run with `k_band=6.0`, redo the old-vs-new comparison, correct the report. Follow-ups for the owner: (i) stage-3 registration peak validation (fiber 10), (ii) bright mode now needs three non-default flags (`--edge-frac 0.30 --k-band 6.0 --feature-mode bright`) — a mode-preset would remove that footgun.
-
-## 2026-08-19 (full C1 run + xsection comparison)
-**What I did** — Completed full 450-image C1 run at edge_frac=0.30, feature_mode=bright → `fibrecv_output/multiangle_c1_s03/`. Ran stage 3 (xsection) with `--validation --scale-source items`. Compared xsection_summary against study 02 results.
-
-**What I observed** — Low-confidence fibers: **6 → 1** (fibers 01/07/08/09/13/15 all cleared; fiber 10 newly flagged with rms=6.29, barely above the 6.0 threshold). RMS residuals dramatically improved on formerly-bad fibers: 08 (11.84→4.61), 01 (9.11→4.98), 07 (8.53→3.98). Median rms across all 15 fibers: 4.97→4.07 px. Axis ratio largely stable (grand median 1.131→1.145); biggest ratio shifts on formerly-bad fibers (01: 1.189→1.151, 07: 1.240→1.197, 15: 1.230→1.166) — these are likely now more accurate since the old readings had systematic wide bias from chromatic fringes. Two fibers with rms regressions: fiber 10 (3.38→6.29, now flagged) and fiber 04 (3.92→5.56, still passes). Stage 1 LOWCONF: 6 unique images, all on fiber 01 (angles a2/a3/a5/a6, parts 2–4) — the tighter threshold exposes genuine defocus issues earlier.
-
-**What I think it means** — The hypothesis is confirmed: median z-map + clamped relative threshold substantially reduced defocus-induced errors (low-confidence 6→1, rms p50 −18%). The one new regression (fiber 10, rms barely over threshold at 6.29 px) is borderline — the xsec_rms_flag_px=6.0 was calibrated on the old distribution (p50=3.7, p90=6.6); the new distribution is tighter (p50≈3.7→≈3.3 estimated) so the threshold may want recalibration, but that's optional. Confidence: high.
-
-**Next** — Recalibrate `xsec_rms_flag_px` on the new rms distribution (optional — fiber 10 is borderline, not a real problem). Run full test suite in worktree. Clean up investigation files. Documentation: feature doc + report when study closes.
-
-## 2026-08-19 (calibration + full run)
-**What I did** — Ran edge_frac calibration sweep [0.15..0.45] with edge_cap=0.50 on synthetic circle + 30-sample C1 subset (`scripts/calibrate_edge_frac.py`). Results:
-
-| edge_frac | delta (px) | in band | med_w (px) | std_w | iqr_w | cov | lowconf |
-|-----------|-----------|---------|-----------|-------|-------|-----|---------|
-| 0.15 | 4.39 | NO | 159.0 | 16.4 | 23.7 | 99.8% | 0 |
-| 0.20 | 3.55 | YES | 155.0 | 16.1 | 22.4 | 99.8% | 0 |
-| 0.25 | 2.82 | YES | 152.0 | 16.0 | 20.4 | 99.8% | 0 |
-| **0.30** | **2.19** | **YES** | **149.5** | **16.0** | **19.6** | **99.7%** | **0** |
-| 0.35 | 1.61 | YES | 147.1 | 15.8 | 18.9 | 99.7% | 0 |
-| 0.40 | 1.05 | YES | 144.9 | 15.7 | 18.4 | 99.7% | 0 |
-| 0.45 | 0.52 | YES | 142.8 | 15.6 | 17.8 | 99.7% | 0 |
-
-Selected edge_frac=0.30 (delta=2.19 px, in band, IQR past elbow of diminishing returns). **0 low-confidence at every frac value** — the median z-map change alone fixed the defocus issue (old pipeline had 11/450 low-confidence). Updated config.py comment with calibration result. Launched full 450-image C1 run at edge_frac=0.30 → `fibrecv_output/multiangle_c1_s03/`.
-
-**What I observed** — Calibration is clean: delta monotonically decreases 4.39→0.52 as frac increases; std/IQR also decrease monotonically; coverage stable >99.7% everywhere; no low-confidence images at any sweep point. The selection is not a boundary value — frac=0.30 sits in the middle of the valid range with margin on both sides.
-
-**What I think it means** — The median z-map was the dominant fix: it eliminated the chromatic-fringe bias that was causing defocus sensitivity. The clamped threshold gives additional control but the delta=2.19 px at frac=0.30 is a good compromise between accuracy and stability. Confidence: high (clean monotonic trends, 0 lowconf, not a boundary selection). Full C1 run in progress.
-
-**Next** — When stage 1 completes: run stage 3 (xsection), compare with study 02 results (number of low-confidence fibers, rms residuals, anisotropy, axis ratio).
-
 ## 2026-08-19
-**What I did** — Created study branch `worktree-edge-criteria` off `worktree-multiangle-xsection`. Implemented two code changes:
-1. `src/fibrecv/features.py:81`: bright-mode z-map changed from `rgb.max(axis=2)` to `np.median(rgb, axis=2)` — rejects single-channel chromatic-aberration fringes.
-2. `src/fibrecv/edges.py:260`: bright-mode threshold changed from `min(edge_z, edge_frac*A)` to `max(edge_z, min(edge_frac*A, edge_cap*A))` — edge_frac is now the primary relative knob, edge_z is the absolute floor, edge_cap (0.50) prevents study-01 inward bite. Desat path unchanged.
-3. Added `edge_cap` field to `config.py`, `--edge-cap` CLI flag to `run_measure.py`, updated GUI slider tooltip and header chip.
 
-**What I observed** — All 213 tests pass. Synthetic circle control delta dropped from 3.90 px/side to −0.51 px/side (well within the −1 to +4 acceptance band). The median z-map alone removed most of the systematic wide bias before any threshold recalibration.
+**What I did**
 
-**What I think it means** — The median z-map change is a clear win: it eliminates the chromatic fringe riding that was adding 1–4 px of systematic bias. The clamped threshold infrastructure is in place but edge_frac still at 0.65 (legacy default) — calibration sweep needed to find the optimal value for bright mode. Confidence: high that the code is correct, medium that the default edge_frac will need tuning.
+1. **Implementation** (branch `worktree-edge-criteria`, off `worktree-multiangle-xsection`).
+   - `src/fibrecv/features.py:83` — bright-mode z-map `rgb.max(axis=2)` → `np.median(rgb, axis=2)`.
+   - `src/fibrecv/edges.py:263-273` — bright-mode boundary level made relative and clamped.
+     Shipped form: `level = base_val + min(edge_cap*A, max(edge_z, edge_frac*A))`.
+     Desat path left byte-for-byte as `base_val + min(edge_z, edge_frac*A)`.
+   - `config.py` gained `edge_cap: float = 0.50`; `run_measure.py` gained `--edge-cap` and
+     `BRIGHT_DEFAULTS = {"edge_frac": 0.30, "k_band": 6.0}` applied only when
+     `--feature-mode bright` is given.
+2. **Calibration** — `scripts/calibrate_edge_frac.py`, sweep `edge_frac` 0.15…0.45 at
+   `edge_cap=0.50`, selected 0.30. Full 450-image stage 1 → `fibrecv_output/multiangle_c1_s03`,
+   then stage 3 with `--scale-source items --validation`.
+3. **Post-close verification** — the checks skipped at first close: MasP2 desat regression,
+   fiber 10 rms diagnosis, `k_band`/`amin` band-finding on the dimmest C1 quartile, per-part
+   rms distribution.
+4. **k_band re-run** — after finding the `k_band` coupling bug, re-ran stage 1+3 with
+   `--edge-frac 0.30 --k-band 6.0` on 450 primary images (excluding the `s.tiff` scale-bar
+   duplicates) → `fibrecv_output/multiangle_c1_s03b`. Generated the old-vs-new boundary
+   overlay (`scripts/spot_check_overlay.py`).
+5. **Multi-agent code review** (2 Opus on algorithm/methodology, 2 Sonnet on wiring/docs,
+   1 agent rebuilding missing evidence). Wrote the reproducibility scripts the study lacked:
+   `verify_masp2_identical.py`, `synthetic_fringe_control.py`, `delta_seed_stability.py`,
+   `rms_statistics.py`, `dim_coverage_check.py`, `recalibrate_edge_frac.py`.
+6. **edge_frac re-decision (abandoned mid-run)** — the review invalidated both original
+   selection criteria, so I re-ran calibration correctly and launched a full 450-image run at
+   `edge_frac=0.40`. It died at 403/450 when the disk filled (460 GB volume down to 117 MB
+   free); the owner chose not to retry it, so **no 0.40 full-pipeline result exists**.
+   Freed ~9 GB by deleting the superseded `multiangle_c1_s03` (900-image buggy run) and the
+   partial 0.40 output.
+7. **Final audit** (independent agent) — found that the headline run predates the clamp fix
+   (below). Re-ran the shipped config on the fixed code → `fibrecv_output/multiangle_c1_s03d`.
+8. **GUI image-mode selector** (`src/fibrecv/gui_app.py`) — sidebar `Image mode` selectbox
+   (desat | bright) at the top of the parameter form. On Apply, bright mode starts from
+   `run_measure.BRIGHT_DEFAULTS` (so the hidden `k_band=6.0` rides along); a mode *switch*
+   additionally resets the visible `edge_frac` widget to the new mode's calibrated default
+   (bright 0.30 / desat 0.65) instead of keeping the stale value, while non-coupled knobs
+   (e.g. a tuned `edge_z`) survive. Header chip now shows the active mode. Updated the
+   `edge_z`/`edge_frac` tooltips to describe both modes. New AppTest
+   `test_mode_switch_applies_calibrated_defaults` drives the real widget path both ways.
+   Report gained an "Appendix — parameter comparison" table (desat vs bright settings + both
+   threshold formulas). Suite: **219 passed**.
+9. **GUI multi-angle cross-section mode** (separate feature, landed on this same branch,
+   commits `8c22790`/`0e3f9ea`/`aebe1e2`/`406ced7`) — wired the existing headless multi-angle
+   cross-section stage (`xsection.py`/`run_xsection.py`, study 02) into the Streamlit GUI as a
+   second sidebar-selected analysis mode: per-angle tabs, a cross-section panel (ellipse fit +
+   split-half uncertainty), and a condition-scoped batch card. `run_xsection.py` gained a
+   numeric `--scale-source` bypass (skips XML sidecars and their 0.1% inter-angle agreement
+   check) and `--anomaly-exclude`. Documented as `docs/features/06_gui_multiangle.md`; see
+   that file for the full design writeup — not repeated here since it is unrelated to the
+   edge-criteria threshold work above.
 
-**Next** — Run edge_frac calibration sweep [0.15..0.45] on C1 data with edge_cap=0.50, using defocus stability (criterion 1) and synthetic delta (criterion 2) as selection criteria. Then re-run full C1 pipeline.
+**What I observed**
+
+*Headline result (450 C1 images, s03d at edge_frac=0.30 on post-clamp-fix code vs the old baseline)*
+- Stage 1: 450 ok, 0 errors, 0 low_confidence. Suite: **218 passed**.
+- Low-confidence fibers **6 → 1** (old 01/07/08/09/13/15; new: fiber 10); total positions
+  162223 → 161696 (−0.33%).
+- Per-part rms over 75 parts: p50 3.697 → **2.739**, p90 6.638 → 4.264, p95 7.756 → 4.892,
+  max 11.841 → **6.273**, parts >6 px **11 → 1**.
+- Paired statistics (`scripts/rms_statistics_s03d.json`): 60/75 parts improved, median paired
+  change **−1.057 px**, Wilcoxon W=436 **p=1.77e−7**, bootstrap 95% CI [−1.577, −0.571] px;
+  per-fiber sign test 13/15 improved, p=0.0074.
+- s03d vs s03b (pre- vs post-clamp-fix): 54/75 parts exactly identical, max part difference
+  0.37 px, median 0.000 px. Headline statistics survive the fix.
+- Discarded-data confound tested and **not supported**: Spearman(Δvalid columns, Δrms)
+  = −0.139, p=0.235 — parts that *gained* columns improved most. (Failing to support the
+  confound is not the same as refuting it; p=0.235 is a null result.)
+- MasP2 desat **bit-identical**: 3 images (`masp2 10_10_1.jpg`, `masp2 7_2_1.jpg`,
+  `teste3.jpg`), `diameter_raw` and the float32 `D` z-map both match by SHA-256. Median
+  diameters 59.760 / 103.529 / 153.99 px = 43.68 / 75.68 / 112.57 µm at ppu 1.368
+  (`scripts/masp2_identical.json`).
+- Visual spot-check on 4 images (1 defocused, 2 sharp, 1 dim): old boundary sits outside the
+  visible bright-to-dark edge in every panel, new one lands on it; no inward bite. Per-side
+  shift −12.2 px (defocused), −6.7 / −5.6 px (sharp), −7.6 px (dim).
+
+*The headline run predates the clamp fix — found by the final audit*
+- s03b finished **10:19:04**; the clamp fix (`a558a09`) landed **10:42:21**. So every number
+  above was produced by the **pre-fix** ordering, not by the shipped code.
+- My earlier claim that the fix was "a no-op on real C1 (maxdiff 7.6e−06 px)" is **wrong** —
+  that check sampled images without faint walls. The two orderings diverge when
+  `A_side < edge_z/edge_cap = 8` (not `< edge_z = 4`, as I also wrote). Measured A/B on the
+  dimmest C1 images: 819–1527 of ~2530 columns differ per image, max per-column 5.65 px,
+  median-width shift up to **+0.83 px**; sharp images give exactly 0.
+- Consequence: `edge_cap` is **not inert on the shipped path** — it binds on faint walls, and
+  there it *overrides* the `edge_z` noise floor (level becomes `0.5·A < 4 z`). That is the
+  price of guaranteeing a crossing exists on the wall run, and it is live on real dim images.
+- Re-ran the shipped config on the fixed code → `multiangle_c1_s03d` (results pending).
+
+*k_band coupling bug (self-inflicted, found post-close, fixed)*
+- The median z-map has a smaller background MAD than `max(R,G,B)`, so z inflates and more of
+  the defocus halo crosses the absolute `k_band=4` gate. On the 6 most defocused images
+  `band_half` ballooned 97.5→159.0, 89.0→141.5, 97.5→222.5 px while the measured widths
+  stayed correct (140.1/136.7/145.2 px vs sharp siblings 138.0/142.1/139.9 px).
+  `band_ratio` fell to 0.326–0.485, below `band_ratio_min=0.5` → false `band_mismatch`.
+- Consequence: fiber 01 part 4 lost a2/a3/a5. The 6 angles are 60°-spaced, forming 3 direction
+  pairs mod 180°; survivors a1/a4/a6 give directions 0°/0°/120° — only 2 distinct, rank-deficient
+  for a 3-parameter ellipse → **0 valid fits**. Fiber 01's `low_confidence` silently flipped
+  True→False because the rms gate only saw surviving parts.
+- Sweep over k ∈ [4,5,6,7,8] on 6 problem + 11 control images: mismatches 6→0 at k≥5;
+  problem `band_ratio` min 0.326→0.646 (k=5)→0.705 (k=6)→0.761 (k=7). Selected **k_band=6.0**.
+  Widths move ≤0.13 px across the k range on these images (≤1.43 px on the dim set) — k_band
+  moves the coarse mask, not the boundary, but *not* "identical" as first written.
+- Non-circular support on a data-selected dim set (`dim_coverage.json`): min coverage 0.8762
+  at every k; three images turn `low_confidence` only at k=8.
+- **Untracked side effect**: raising `k_band` 4→6 also moved the `FLAG_NO_BG` guard from 2.0
+  to 3.0 z in bright mode (`edges.py:282` uses `cfg.k_band / 2.0`). Incidence change never
+  measured.
+
+*Code-review defects (all fixed)*
+- **Clamp ordering was wrong.** As first written, `max(edge_z, min(frac*A, cap*A))` puts the
+  cap *inside* the max, so it cannot cap: for `A_side < 8` the level exceeded the documented
+  50% ceiling, and for `A_side < edge_z` it landed *above the wall top* — `_outer_crossing`
+  then returns None and `_side_edge` silently falls back to the wall's outer base **with
+  FLAG_OK**. Corrected to `min(cap*A, max(edge_z, frac*A))`, which makes that fallback
+  (`edges.py:277-279`) effectively dead code, though it still carries FLAG_OK.
+- `gui_app.py` **fully reverted** (empty diff vs base) — its tooltip/chip changes described
+  bright-mode behaviour the GUI cannot reach, and its docstring claimed an `edge_cap` widget
+  that was never added.
+- Tests added: bright-gate specificity, explicit-desat preset isolation, `edge_cap == 0.50`
+  pin. 213 → **218 tests**.
+
+*Both original calibration criteria were invalid*
+- `calibrate_edge_frac._render_circle` declares `W_IMG=1200` but never broadcasts it — every
+  image was **500 rows × 1 column**. On one column δ is seed-unstable: old +4.357 **± 0.332**
+  (range 3.87–5.10) vs ± 0.006 at full width.
+- The other criterion, `low_confidence_count`, was **0 at every edge_frac** — zero
+  discriminating power — and its 30-image sample excluded all six defocused images and fiber 07
+  entirely. `main()` also implemented no selection rule; it printed and exited.
+- **The headline δ was attributed to the wrong config.** `test_xsection_synthetic` builds
+  `CONFIG(feature_mode="bright")`, inheriting `edge_frac=0.65` → capped to an effective 0.50.
+  That is where "δ 3.90 → −0.51" comes from. Per-side δ over 12 seeds:
+
+  | control | old | shipped 0.30 | effective 0.50 |
+  |---|---|---|---|
+  | 500×1 (as the study actually ran it) | +4.357 ± 0.332 | +2.103 ± 0.081 | −0.014 ± 0.053 |
+  | 500×1200 full width | +4.338 ± 0.006 | +2.124 ± 0.002 | +0.014 ± 0.002 |
+  | 6-angle stack (the test fixture) | +3.885 ± 0.006 | **+1.649 ± 0.003** | −0.514 ± 0.003 |
+
+  So roughly half the old bias survives in what ships; the quoted −0.51 is not the shipped path.
+
+*Mechanism attribution is the reverse of what I claimed*
+- Fringe-injection A/B (`synthetic_fringe.json`, old emulation verified bit-exact against the
+  base worktree): with **no** chromatic fringe the z-map change contributes **0.003 px** — the
+  threshold change accounts for the entire −2.22 px. The median z-map removes ≈0.9 px per px of
+  **single-channel** (R-only) displacement and ≈0.05 px for a two-channel (R+B) fringe.
+  "The median z-map was the dominant fix" was asserted, never tested, and is unsupported.
+
+*Corrected calibration — and why it still does not select a value*
+(`recalibrate_edge_frac.json`; full-width synthetic × 12 seeds, k_band=6.0, plus within-pair
+|Δwidth| on 3 defocused and 3 control parts, 9 pairs each)
+
+| edge_frac | δ px/side | defocus pair disagreement px | control pair disagreement px |
+|---|---|---|---|
+| 0.15 | +4.190 ± 0.004 | 7.322 | 7.687 |
+| 0.20 | +3.415 ± 0.003 | 7.512 | 7.129 |
+| 0.25 | +2.734 ± 0.002 | 7.726 | 7.296 |
+| **0.30 (shipped)** | **+2.124 ± 0.002** | **7.843** | **7.423** |
+| 0.35 | +1.570 ± 0.002 | 7.924 | 7.289 |
+| 0.40 | +1.031 ± 0.002 | 7.543 | 6.898 |
+| 0.45 | +0.521 ± 0.002 | 6.556 | 6.830 |
+| 0.50 | +0.014 ± 0.002 | 6.076 | 6.756 |
+
+Neither criterion is usable as written, which I did not see at first:
+- **δ is circular.** `_render_circle` builds a *linear* ramp with `t = clip((h+1−dist)/2, 0, 1)`,
+  so `t = 0.5` falls exactly at `dist = h`, the true radius. Measuring at 50% of amplitude
+  therefore recovers the truth **by construction**. δ→0 at frac=0.50 is a property of the
+  fixture, not evidence about real fibres — and study 01 showed real edges are *shouldered*
+  ramps, where the 50% midpoint bites inward.
+- **Pair disagreement is too weak to decide.** n=9 pairs, profiles compared without cross-angle
+  registration, and the ~7 px baseline is dominated by misregistration rather than edge error.
+  Controls move almost as much as the defocused parts: the defocus-minus-control excess is
+  +0.42 (0.30), +0.64 (0.35–0.40), −0.27 (0.45), −0.68 (0.50) — noise-level. It is also
+  **not monotone** (0.15 at 7.32 beats 0.30 at 7.84).
+
+So the corrected sweep does not select 0.30, but neither does it establish 0.45–0.50. No valid
+criterion in this repo picks any particular `edge_frac`.
+
+*Other open items*
+- Fiber 10 is a **genuine stage-3 registration lock**, not an edge defect — I was wrong at first
+  close. Per-part rms old→new: p1 2.64→6.27, p3 2.07→4.11. Since the 6 angles form 3 pairs,
+  `rms_resid_px` is purely pair disagreement; part 1's a2−a5 pair reaches rms 20.376
+  (`xsection_validation.csv`). Coverage is 0.97–1.00 on all 30 images, so edge extraction is
+  not at fault. (The lag-0 / +508 / +710 diagnostics quoted earlier have **no persisted
+  artifact** and are unverified.)
+- Axis-ratio shift is **~100% geometric**: predicted 1.1385–1.1398 from a uniform width shrink,
+  observed 1.1387. A null result my "not separated" hedge obscured.
+- `band_ratio` never comes within 0.2 of the `band_ratio_min=0.5` gate across all 450 images,
+  so gate sensitivity remains undemonstrated; the k_band problem set was the observed failures,
+  which is circular (the dim-image check above is the non-circular part).
+- Global width shrink is **9.7%** (median over 450 paired images), not the 10.6% quoted earlier.
+- Unverifiable for want of an artifact: the 3495-column count (s03 deleted), the fiber-10 lag
+  diagnostics, the old-side `band_half` values.
+
+*GUI multi-angle mode (feature 06, unrelated to the edge_frac work above)*
+- Full suite after the feature landed: **241 passed** (219 → 233 after the pure helpers,
+  240 after the GUI wiring, 241 after the round-trip-persistence fix), no regressions.
+  `tests/test_gui_multiangle.py` holds 19 tests (pure helpers + AppTest cases).
+  Docs written: `docs/features/06_gui_multiangle.md`, `README.md`/`GUI_README.md` updates,
+  `src/fibrecv/README.md` rows (already current from the implementing commits), this labbook
+  entry, `docs/metalabbook.md` refresh.
+- Review found and fixed one real bug before this landed: the manual µm/px scale field was
+  dropped by Streamlit on a round trip through Replicates mode (session-state key deleted
+  whenever a keyed widget isn't rendered), reverting a hand-calibrated scale to the
+  `0.388924` default silently. Fixed by mirroring the widget value into a separate
+  session-state key, the same pattern `st.session_state.folder` already used.
+
+**What I think it means** — The empirical improvement on real C1 data is large, statistically
+solid, robust to the column-churn confound, and visually confirmed; MasP2 is provably untouched.
+Confidence: **high** on the direction and rough magnitude of the gain.
+
+Two things I got wrong and have now corrected. First, the headline run predates the clamp fix,
+so until `s03d` lands the quoted numbers describe code that is not what ships. The divergence is
+confined to faint walls on dim images (≤0.83 px on any image median), so I expect the headline
+statistics to survive — but "expect" is not "verified", which is why I re-ran rather than
+patched the wording. Second, I claimed the corrected calibration favours 0.45–0.50; it does not
+establish that, because its δ criterion is circular by construction of the synthetic ramp and
+its pair criterion is at noise level. The honest position is that **`edge_frac=0.30` ships on
+empirical grounds and no valid criterion selects any value**, 0.30 included.
+
+I also over-claimed the mechanism: on synthetic data the threshold change does essentially all
+the work and the z-map does ~nothing absent a single-channel fringe; the real-data split was
+never measured. Confidence: **high** that the original attribution was wrong, **low** on the
+true real-data split.
+
+Evidence that would change this reading: an `s03d` that moves the headline materially would mean
+the pre-fix numbers were load-bearing; a *registered* pair-disagreement comparison at 0.30 /
+0.40 / 0.45 on the known defocused parts would give the first non-circular handle on `edge_frac`
+without a 450-image run.
+
+On the GUI multi-angle mode (item 9, unrelated feature work): straightforward wiring of an
+already-validated headless pipeline (study 02) into the existing GUI, exercised by 19 new
+tests and one real bug caught and fixed by review before landing. Confidence: **high** that the
+mode is correct and documented; it carries no bearing on the `edge_frac`/`k_band` findings above.
+
+**Next** — Fold the `s03d` numbers into the report, then rewrite `docs/report/03_edge_criteria/`
+and `docs/features/05_edge_criteria.md`, both of which still carry the retracted −0.51 figure,
+the broken clamp formula, and the invalidated calibration narrative. Follow-ups for the owner,
+none blocking: (i) stage-3 cross-angle registration peak validation (fiber 10, and the same
+fragility on fiber 04 part 5); (ii) measure the `FLAG_NO_BG` incidence change from `k_band` 4→6
+and re-check the other absolute-z thresholds (`amin`, `rise_min`, `slope_min`/`slope_cap`) as a
+group; (iii) add an end-to-end faint-wall test — `test_bright_level_never_leaves_the_wall`
+re-implements the formula inline and never calls `edges.py`, so reverting the clamp fix still
+passes all 218 tests; (iv) pin end-to-end bright accuracy at the *shipped* presets, which no
+test currently does; (v) study 02's anisotropy statistics should be recomputed on the final run.

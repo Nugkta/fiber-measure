@@ -5,7 +5,7 @@ Fibre diameter measurement from optical microscopy images.
 `fibrecv` detects the two walls of a fibre lying roughly horizontally in a
 micrograph, measures its diameter column by column, applies quality control,
 and registers repeated images of the same sample into a mean ± std diameter
-profile. It ships as a two-stage command-line pipeline plus a local
+profile. It ships as a three-stage command-line pipeline plus a local
 [Streamlit](https://streamlit.io) GUI for interactive tuning, preview, and
 batch processing.
 
@@ -25,6 +25,10 @@ the GUI, the meta JSONs and `summary/per_image_summary.csv`; see
 Bright-mode images (C1) use a median-RGB z-map and a clamped relative edge
 threshold that eliminates chromatic-fringe bias and scales with wall amplitude;
 see [docs/features/05_edge_criteria.md](docs/features/05_edge_criteria.md).
+Multi-angle image sets (`C1_01_a1_part1.tiff`-style, six rotation angles per
+fiber) get a third stage that fits per-position elliptical cross-sections
+instead of assuming circularity — see
+[docs/features/03_multiangle_xsection.md](docs/features/03_multiangle_xsection.md).
 
 ## Install
 
@@ -64,8 +68,13 @@ number of files), pick a group, and tune the three boundary knobs — `edge_z`
 smoothing) — then export results or batch-process the whole folder. The app
 is a violet-accented "clean lab" light theme with numbered card sections and
 a jump menu (see
-[docs/features/02_gui-redesign.md](docs/features/02_gui-redesign.md)). See
-[GUI_README.md](GUI_README.md) for the full guide.
+[docs/features/02_gui-redesign.md](docs/features/02_gui-redesign.md)). A
+sidebar mode switch swaps the whole main area to a multi-angle cross-section
+view — six angle tabs, the fitted ellipse cross-section, and a batch card —
+for C1-style `<condition>_<fibre>_a<angle>_part<part>` image sets, driven by
+a manual µm/px scale instead of the calibration field (see
+[docs/features/06_gui_multiangle.md](docs/features/06_gui_multiangle.md)).
+See [GUI_README.md](GUI_README.md) for the full guide.
 
 ## CLI pipeline
 
@@ -82,7 +91,15 @@ summary table:
 uv run python -m fibrecv.run_aggregate --all
 ```
 
-Both stages write to `./fibrecv_output` by default (`--out` to change).
+Stage 3 — multi-angle sets only (measure with `--feature-mode bright` first):
+per-position elliptical cross-sections in µm from the Zeiss XML sidecar scale:
+
+```bash
+uv run python -m fibrecv.run_xsection --out fibrecv_output/run \
+  --data-root "path/to/images" --scale-source items --validation
+```
+
+All stages write to `./fibrecv_output` by default (`--out` to change).
 Select a subset with `--groups 3_1 10_5` or `--glob "*_1_*.jpg"`; parallelise
 stage 1 with `--jobs N`. Every detection parameter can be overridden by flag
 (`--edge-z`, `--wcol`, ...) — see `--help` and the documented defaults in

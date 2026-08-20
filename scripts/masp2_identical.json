@@ -1,0 +1,96 @@
+{
+  "kind": "comparison",
+  "question": "Is the desat (MasP2) path bit-identical between base and HEAD?",
+  "base": {
+    "git_branch": "worktree-multiangle-xsection",
+    "git_rev": "4bdd799a2b8404eb0a92e4609f68bac6187b2fc3",
+    "fibrecv_path": "/Users/stan/Documents/UOM/spins/fiber-measure/.claude/worktrees/multiangle-xsection/src/fibrecv",
+    "cwd": "/Users/stan/Documents/UOM/spins/fiber-measure/.claude/worktrees/multiangle-xsection"
+  },
+  "head": {
+    "git_branch": "worktree-edge-criteria",
+    "git_rev": "a558a09d2ec228a5f321a6d1dca6bdd5f12d8fc7",
+    "fibrecv_path": "/Users/stan/Documents/UOM/spins/fiber-measure/.claude/worktrees/edge-criteria/src/fibrecv",
+    "cwd": "/Users/stan/Documents/UOM/spins/fiber-measure/.claude/worktrees/edge-criteria"
+  },
+  "masp2_root": "/Users/stan/Documents/UOM/spins/Images MasP2",
+  "n_jpg_total": 144,
+  "picked_indices": [
+    0,
+    72,
+    143
+  ],
+  "picked_files": [
+    "masp2 10_10_1.jpg",
+    "masp2 7_2_1.jpg",
+    "teste3.jpg"
+  ],
+  "config": "CONFIG()  (dataclass defaults, feature_mode='desat')",
+  "per_image": [
+    {
+      "index": 0,
+      "file": "masp2 10_10_1.jpg",
+      "sha256_diameter_raw_match": true,
+      "sha256_D_zmap_match": true,
+      "median_repr_match": true,
+      "coverage_match": true,
+      "bit_identical": true,
+      "base": {
+        "median_diameter_raw_px_repr": "59.76010513305664",
+        "coverage": 0.9716088328075709,
+        "sha256_diameter_raw": "e63a66f1a296d091e62a5188ba807482e40039cec7be70f8fbc530d4e40340ea",
+        "sha256_D_zmap": "b2100234c5ed89fd8baf1adc7c43b234a612578155f26a8cdc93faae82b58ea6"
+      },
+      "head": {
+        "median_diameter_raw_px_repr": "59.76010513305664",
+        "coverage": 0.9716088328075709,
+        "sha256_diameter_raw": "e63a66f1a296d091e62a5188ba807482e40039cec7be70f8fbc530d4e40340ea",
+        "sha256_D_zmap": "b2100234c5ed89fd8baf1adc7c43b234a612578155f26a8cdc93faae82b58ea6"
+      }
+    },
+    {
+      "index": 72,
+      "file": "masp2 7_2_1.jpg",
+      "sha256_diameter_raw_match": true,
+      "sha256_D_zmap_match": true,
+      "median_repr_match": true,
+      "coverage_match": true,
+      "bit_identical": true,
+      "base": {
+        "median_diameter_raw_px_repr": "103.52931213378906",
+        "coverage": 0.9313880126182965,
+        "sha256_diameter_raw": "d642ed697f990075a1624c52d3ef93df83a4ec28a5fca38a7c905c47df434100",
+        "sha256_D_zmap": "c4a237f3ad0ff0dcda842c28490e03961d0316ecb13c8f9427562e9c738b5df4"
+      },
+      "head": {
+        "median_diameter_raw_px_repr": "103.52931213378906",
+        "coverage": 0.9313880126182965,
+        "sha256_diameter_raw": "d642ed697f990075a1624c52d3ef93df83a4ec28a5fca38a7c905c47df434100",
+        "sha256_D_zmap": "c4a237f3ad0ff0dcda842c28490e03961d0316ecb13c8f9427562e9c738b5df4"
+      }
+    },
+    {
+      "index": 143,
+      "file": "teste3.jpg",
+      "sha256_diameter_raw_match": true,
+      "sha256_D_zmap_match": true,
+      "median_repr_match": true,
+      "coverage_match": true,
+      "bit_identical": true,
+      "base": {
+        "median_diameter_raw_px_repr": "153.99069213867188",
+        "coverage": 0.9940851735015773,
+        "sha256_diameter_raw": "6e6fcd94351579cd097adabce7701579d3be1f54dc67fa18f12fa7c22f6e910d",
+        "sha256_D_zmap": "d2e7fb9bc95b6a49f236e0ec9bb8ede4b42a954fb0255fbe4c49a483cb5dd65a"
+      },
+      "head": {
+        "median_diameter_raw_px_repr": "153.99069213867188",
+        "coverage": 0.9940851735015773,
+        "sha256_diameter_raw": "6e6fcd94351579cd097adabce7701579d3be1f54dc67fa18f12fa7c22f6e910d",
+        "sha256_D_zmap": "d2e7fb9bc95b6a49f236e0ec9bb8ede4b42a954fb0255fbe4c49a483cb5dd65a"
+      }
+    }
+  ],
+  "bit_identical_all": true,
+  "verdict": "MasP2/desat path is BIT-IDENTICAL between base and HEAD"
+}

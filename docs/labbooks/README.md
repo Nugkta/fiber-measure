@@ -8,6 +8,12 @@ two-digit number here). Each file: hypothesis/status/started header, then one
 
 ## Files
 
+- `03_edge_criteria.md` — active — bright-mode edge criteria study: median
+  RGB z-map + clamped relative threshold (`edge_frac`/`edge_cap`) + coupled
+  `k_band` recalibration; 450-image C1 result (low-confidence 6→1, per-part
+  rms p50 3.70→2.78 px), reopened after code review found a clamp-ordering
+  bug and invalid `edge_frac` selection criteria; feature doc
+  `docs/features/05_edge_criteria.md`.
 - `02_multiangle_xsection.md` — done — multi-angle cross-section study (C1):
   survey + angle-structure identification, scale adjudication (scale-bar →
   `Scaling/Items` 0.3889 µm/px), full implementation log of pipeline stage 3

@@ -15,7 +15,7 @@ Output
 ------
 Writes four artifacts per image and returns a small summary dict:
   - ``overlays/<name>_overlay.png``        boundary check image
-  - ``per_image/csv/<name>_profile.csv``   x_px, diameter_px_raw/smooth, diameter_um, valid, interpolated
+  - ``per_image/csv/<name>_profile.csv``   x_px, diameter_px_raw/smooth, diameter_um, valid, interpolated, y_top_px, y_bot_px (per-column edges, NaN-invalid — the contract run_xsection builds cross-sections from)
   - ``per_image/plots/<name>_profile.png`` diameter-vs-position plot
   - ``per_image/diagnostics/<name>_meta.json`` bg_S, MAD, params, coverage, tilt, flags
 
@@ -91,6 +91,11 @@ def write_measurement(rgb, mr, cfg: CONFIG, out_root: str | Path) -> dict:
             "diameter_um": mr.diameter_um[span],
             "valid": res.valid[span].astype(int),
             "interpolated": res.interpolated[span].astype(int),
+            # additive columns (2026-08-15): per-column edge positions, NaN
+            # where the column is invalid; used by the xsection stage for
+            # focus/asymmetry diagnostics
+            "y_top_px": np.where(res.valid[span], edg.y_top[span], np.nan),
+            "y_bot_px": np.where(res.valid[span], edg.y_bot[span], np.nan),
         }
     )
     df.to_csv(paths["csv"], index=False)

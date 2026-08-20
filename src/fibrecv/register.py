@@ -17,6 +17,11 @@ Output
   ``table`` is the aligned pointwise mean+/-std curve in microns, ``shifts`` are
   per-replicate lag/corr/flags, and ``summary`` is the scalar row for
   master_summary.csv.
+- ``estimate_shift(ref, other, cfg)`` and ``resample_to_grid(aligned,
+  max_gap=None)`` are also imported by ``xsection.py`` (cross-angle
+  alignment); xsection passes ``max_gap`` so interior NaN gaps stay missing
+  instead of being linearly bridged (the ``None`` default keeps the legacy
+  bridging used here).
 
 Method
 ------
@@ -91,6 +96,48 @@ def estimate_shift(ref: np.ndarray, other: np.ndarray, cfg: CONFIG) -> tuple[flo
     return float(shift), peak, bool(uncertain)
 
 
+def resample_to_grid(aligned: list[tuple[np.ndarray, np.ndarray]],
+                     max_gap: float | None = None) -> tuple[np.ndarray, np.ndarray]:
+    """Resample shifted profiles onto a common integer grid.
+
+    ``aligned`` is a list of ``(shifted_x, values)`` pairs. Returns
+    ``(grid, stack)`` where ``grid`` is the integer x-range spanning the union
+    of finite samples and ``stack[i]`` is profile ``i`` linearly interpolated
+    onto it (NaN outside its own finite range). If NO profile has any finite
+    value the result degrades to an empty grid and an ``(n, 0)`` stack.
+
+    With ``max_gap`` set, grid points strictly inside a gap between
+    consecutive finite samples wider than ``max_gap`` stay NaN instead of
+    being linearly bridged — interior measurement dropouts are then honest
+    missing data, not fabricated values. ``None`` (default) keeps the legacy
+    bridging behaviour that ``register_sample`` (stage 2) relies on.
+    """
+    spans = [(ax[np.isfinite(d)].min(), ax[np.isfinite(d)].max())
+             for ax, d in aligned if np.isfinite(d).any()]
+    if not spans:
+        return np.arange(0), np.full((len(aligned), 0), np.nan)
+    lo = int(np.floor(min(s[0] for s in spans)))
+    hi = int(np.ceil(max(s[1] for s in spans)))
+    grid = np.arange(lo, hi + 1)
+
+    # resample each profile onto the grid (NaN outside its own valid range)
+    stack = np.full((len(aligned), grid.size), np.nan)
+    for i, (ax, d) in enumerate(aligned):
+        finite = np.isfinite(d)
+        if finite.sum() < 2:
+            continue
+        axf, df = ax[finite], d[finite]
+        order = np.argsort(axf)
+        axf, df = axf[order], df[order]
+        inside = (grid >= axf[0]) & (grid <= axf[-1])
+        stack[i, inside] = np.interp(grid[inside], axf, df)
+        if max_gap is not None:
+            for j in np.where(np.diff(axf) > max_gap)[0]:
+                interior = (grid > axf[j]) & (grid < axf[j + 1])
+                stack[i, interior] = np.nan
+    return grid, stack
+
+
 def register_sample(profiles: list[dict], cfg: CONFIG) -> tuple[dict, list[dict], dict]:
     """Align replicates and compute pointwise + scalar statistics.
 
@@ -120,22 +167,7 @@ def register_sample(profiles: list[dict], cfg: CONFIG) -> tuple[dict, list[dict]
         )
         aligned.append((p["x"].astype(np.float64) + shift, p["diameter_px_raw"].astype(np.float64)))
 
-    # common integer grid spanning the union of shifted, valid x
-    lo = int(np.floor(min(ax[np.isfinite(d)].min() for ax, d in aligned if np.isfinite(d).any())))
-    hi = int(np.ceil(max(ax[np.isfinite(d)].max() for ax, d in aligned if np.isfinite(d).any())))
-    grid = np.arange(lo, hi + 1)
-
-    # resample each replicate onto the grid (NaN outside its own valid range)
-    stack = np.full((len(aligned), grid.size), np.nan)
-    for i, (ax, d) in enumerate(aligned):
-        finite = np.isfinite(d)
-        if finite.sum() < 2:
-            continue
-        axf, df = ax[finite], d[finite]
-        order = np.argsort(axf)
-        axf, df = axf[order], df[order]
-        inside = (grid >= axf[0]) & (grid <= axf[-1])
-        stack[i, inside] = np.interp(grid[inside], axf, df)
+    grid, stack = resample_to_grid(aligned)
 
     n = np.sum(np.isfinite(stack), axis=0)
     import warnings

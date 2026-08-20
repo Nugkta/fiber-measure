@@ -11,8 +11,8 @@ Code: `src/fibrecv/xsection.py`, `src/fibrecv/run_xsection.py`, `src/fibrecv/sca
 Turns the six-rotation-angle image sets of the C1 protocol (15 fibers × 6 angles × 5 parts)
 into per-position cross-sections instead of assuming circularity. For every (fiber, part) it
 aligns the six per-angle width profiles onto a common axis, fits a per-column ellipse to the
-projection widths, bounds it with the circumscribed hexagon, converts to µm via the Zeiss XML
-sidecar scale, and exports per-fiber area statistics (`A_mean`/`A_harm`/`A_min`) that a tensile
+projection widths, converts to µm via the Zeiss XML sidecar scale, and exports per-fiber area
+statistics (`A_mean`/`A_harm`/`A_min`) that a tensile
 join can consume in place of `π(d/2)²`. Run as
 `uv run python -m fibrecv.run_xsection --out <run> --data-root <C1 dir> --scale-source items
 [--validation]` after a `run_measure --feature-mode bright` pass.
@@ -26,12 +26,6 @@ join can consume in place of `π(d/2)²`. Run as
 - **Column validity, never interpolation** — a column is fitted only if all 3 projection
   directions have ≥1 finite width AND the implied b² is strictly positive; negative b² marks
   the column invalid rather than clamping, so impossible width triples are counted, not hidden.
-- **Hexagon NaN-on-degeneracy is an upper-bound requirement** — the closed-form circumscribed
-  hexagon area is valid only while every slab binds (`h_d < h_e + h_f`); beyond that the
-  formula UNDER-states the true 3-slab intersection and would silently break the upper-bound
-  property, so degenerate columns are NaN + flagged. QC compares measured `hex_ratio` against
-  `hexagon_area_expected(a, b, φ)` for the fitted ellipse, not against the circle anchor
-  π/(2√3)=0.9069, which is exact for circles only.
 - **Split-half uncertainty** — `area_err = |A₁₂₃ − A₄₅₆|/2` from two complete 3-direction
   exact fits; conservative by construction because it absorbs the 180° focus asymmetry (the
   dominant real error, ~8–17 px RMSE vs 4.6 px pair noise floor on C1).
@@ -42,7 +36,7 @@ join can consume in place of `π(d/2)²`. Run as
   leave-one-repeat-out the LSQ passes exactly through any single-observation direction, so the
   "ellipse prediction" of a dropped width is identically its 180° partner. The honest primary
   criterion is therefore the leak-free anisotropy test (partner width vs mean-of-other-five),
-  with the ellipse form judged separately by hexagon consistency and a φ-transfer test. The
+  with the ellipse form judged separately by the RMS residual and a φ-transfer test. The
   φ-transfer two-direction solve is rank 2 only when the kept directions differ in
   `z = cos 2(θ−φ̂)` — when φ̂ (near-)bisects the kept pair both z values coincide, so such
   columns are skipped under `_MIN_Z_SPREAD = 0.2` (~±3.3° band per bisector) instead of
@@ -88,10 +82,10 @@ join can consume in place of `π(d/2)²`. Run as
    grouping columns on their 2⁶ finite-mask patterns; residuals and per-column validity as
    above. Angles are `NOMINAL_ANGLES_DEG = 0..300°` in 60° steps — a parameter everywhere, so
    a corrected spacing only requires re-running.
-4. **Outputs** (`run_xsection`): per-part CSV (aligned widths + a/b/φ/area/hex columns), plot,
+4. **Outputs** (`run_xsection`): per-part CSV (aligned widths + a/b/φ/area columns), plot,
    shifts JSON (incl. per-link `saturated` flags + `n_saturated`); per-fiber
    `xsection_summary.csv` (A_mean/A_harm/A_min(+part,+x), axis-ratio stats, φ circular mean,
-   hex ratio, pair Δw fraction, A_circle=π(d̄/2)² comparison, `n_uncertain_shifts`,
+   pair Δw fraction, A_circle=π(d̄/2)² comparison, `n_uncertain_shifts`,
    `n_saturated_shifts`, `part_rms_med_max_px`, `low_confidence`);
    `xsection_angle_residuals.csv` (v2-gate evidence); `xsection_validation.csv` with
    `--validation` (anisotropy + φ-transfer RMSEs). Garbled per-image CSVs/meta JSONs are
@@ -99,11 +93,11 @@ join can consume in place of `π(d/2)²`. Run as
 
 ## Caveats
 - **Silhouettes see the convex hull only** — a concave (e.g. kidney-shaped) section is
-  invisible to any projection method; the hexagon bound and ellipse both assume convexity.
+  invisible to any projection method; the ellipse fit assumes convexity.
 - **Nominal 60° spacing is a working assumption** (180° pairing is proven; collaborator
   confirmation pending). If the true step differs, re-run with corrected `theta_deg`.
 - **Ellipse form is unverifiable from 3 directions** — the fit is saturated, so held-out
-  widths cannot test ellipticity directly; the hexagon consistency and φ-transfer are the
+  widths cannot test ellipticity directly; the RMS residual and φ-transfer are the
   model-form evidence. On C1 the φ-transfer fails because φ genuinely varies along fibers
   (twist), so per-part fixed-φ predictions are poor — a protocol limit, not a fit bug.
 - **Focus bias entangles with ellipticity** — per-image focus states shift widths by ~2–10 px;
