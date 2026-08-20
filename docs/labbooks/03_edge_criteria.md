@@ -1,6 +1,13 @@
 Hypothesis: Replacing max(R,G,B) with median(R,G,B) in bright mode and switching from a fixed to a clamped relative edge threshold will reduce defocus-induced width errors on C1 images without introducing inward bite.
-Status: active
+Status: done
 Started: 2026-08-19
+
+## 2026-08-20
+**What I did** — Formally closed the study on `main` after PR #6 merged the branch code + corrected docs. Flipped `Status` active→done here and in `docs/metalabbook.md`. No new experiments; this entry records the closure decision and the accepted limitations.
+
+**What I observed** — Shipped bright-mode config: `edge_frac=0.30`, `edge_cap=0.50`, `k_band=6.0` (applied via `run_measure.BRIGHT_DEFAULTS` on `--feature-mode bright`). Numbers of record are the post-clamp-fix `_s03d` run (`fibrecv_output/multiangle_c1_s03d/`), not the superseded `_s03b`. Corrected report at `docs/report/03_edge_criteria/report.html`; corrected feature doc at `docs/features/05_edge_criteria.md`. Two limitations carried into closure, both accepted by the owner as not important enough to hold the study open: (1) no `edge_frac=0.40` full-pipeline comparison exists — that run died at 403/450 when the disk filled and was not retried; (2) `edge_frac=0.30` ships on empirical grounds only — the audit invalidated both original selection criteria and showed the corrected sweep cannot uniquely select any value (δ criterion circular, pair criterion at noise level).
+
+**What I think it means** — The bright-mode edge upgrade ships as the C1 default. The improvement is real and statistically solid on the full 450-image set (low-confidence 6→1, per-part rms p50 3.70→2.78, Wilcoxon p=2e−7, bootstrap CI [−1.56,−0.57] px), so closing is justified even though the specific value 0.30 is not pinned by a valid criterion. Confidence: high that the upgrade helps; medium that 0.30 is the optimum. What would reopen this: a completed `edge_frac=0.40` full-pipeline run showing 0.40 clearly better.
 
 ## 2026-08-19
 
