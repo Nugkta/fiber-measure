@@ -19,3 +19,5 @@ fibrecv_output/
 .DS_Store
 
 .superpowers/
+.claude/worktrees/
+.claude/skills/
